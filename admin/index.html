@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel — Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-card">
+      <h1>Damn<span style="color:#F59E0B">Deal</span></h1>
+      <p class="sub">Admin Panel Login</p>
+      <div class="login-error" id="login-error"></div>
+
+      <form id="login-form">
+        <div class="form-group">
+          <label>Phone Number</label>
+          <div style="display:flex;align-items:center;gap:0">
+            <span style="padding:8px 10px;background:#f0f0f0;border:1px solid #ddd;border-right:none;border-radius:8px 0 0 8px;font-size:14px;color:#333">+91</span>
+            <input class="form-control" type="tel" id="phone" placeholder="Enter 10-digit number" required maxlength="10" style="border-radius:0 8px 8px 0">
+          </div>
+        </div>
+
+        <div id="otp-section" style="display:none">
+          <div class="form-group">
+            <label>OTP Code</label>
+            <input class="form-control" type="text" id="otp" placeholder="Enter 6-digit OTP" maxlength="6">
+          </div>
+        </div>
+
+        <button class="btn btn-primary mt-1" type="submit" id="submit-btn">Send OTP</button>
+      </form>
+
+      <p class="text-muted text-sm mt-2">Only admin accounts can access this panel.</p>
+    </div>
+  </div>
+
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script>
+    // If already logged in, go to dashboard
+    const token = getToken();
+    const user = getUser();
+    if (token && user && (user.role === "admin" || user.role === "staff")) {
+      window.location.href = "pages/dashboard/dashboard.html";
+    }
+
+    const form = document.getElementById("login-form");
+    const phoneInput = document.getElementById("phone");
+    const otpInput = document.getElementById("otp");
+    const otpSection = document.getElementById("otp-section");
+    const submitBtn = document.getElementById("submit-btn");
+    const errorBox = document.getElementById("login-error");
+
+    let step = "phone"; // phone | otp
+
+    function showError(msg) {
+      errorBox.textContent = msg;
+      errorBox.style.display = "block";
+    }
+    function hideError() { errorBox.style.display = "none"; }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      hideError();
+      submitBtn.disabled = true;
+
+      try {
+        if (step === "phone") {
+          const phone = phoneInput.value.trim();
+          if (!/^\d{10}$/.test(phone)) { showError("Enter valid 10-digit phone"); submitBtn.disabled = false; return; }
+
+          const data = await api("/auth/send-otp", {
+            method: "POST",
+            headers: { "x-client-type": "admin" },
+            body: { phone: "+91" + phone },
+          });
+
+          if (data.success) {
+            step = "otp";
+            otpSection.style.display = "block";
+            phoneInput.disabled = true;
+            submitBtn.textContent = "Verify & Login";
+            otpInput.focus();
+          } else {
+            showError(data.message || "Failed to send OTP");
+          }
+        } else {
+          const phone = phoneInput.value.trim();
+          const otp = otpInput.value.trim();
+          if (!/^\d{4,6}$/.test(otp)) { showError("Enter valid OTP"); submitBtn.disabled = false; return; }
+
+          const data = await api("/auth/verify-otp", {
+            method: "POST",
+            headers: { "x-client-type": "admin" },
+            body: { phone: "+91" + phone, otp },
+          });
+
+          if (data.success) {
+            if (data.user.role !== "admin" && data.user.role !== "staff") {
+              showError("Access denied: Not an admin account");
+              submitBtn.disabled = false;
+              return;
+            }
+            localStorage.setItem(CONFIG.TOKEN_KEY, data.accessToken);
+            localStorage.setItem(CONFIG.REFRESH_KEY, data.refreshToken);
+            localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(data.user));
+            window.location.href = "pages/dashboard/dashboard.html";
+          } else {
+            showError(data.message || "Invalid OTP");
+          }
+        }
+      } catch (err) {
+        showError(err.message || "Something went wrong");
+      }
+      submitBtn.disabled = false;
+    });
+  </script>
+</body>
+</html>

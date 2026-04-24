@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payouts — Admin Panel</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/css/style.css">
+</head>
+<body>
+
+  <!-- Create Payout Modal -->
+  <div class="modal-overlay" id="create-payout-modal">
+    <div class="modal" style="max-width:520px;">
+      <div class="modal-header">
+        <h3>Create Payout</h3>
+        <button class="modal-close" onclick="closeModal('create-payout-modal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Partner <span class="text-danger">*</span></label>
+          <select id="cp-partner" class="form-control">
+            <option value="">Select partner…</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:12px;">
+          <div class="form-group" style="flex:1;">
+            <label>From Date <span class="text-danger">*</span></label>
+            <input type="date" id="cp-from" class="form-control">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label>To Date <span class="text-danger">*</span></label>
+            <input type="date" id="cp-to" class="form-control">
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;">
+          <div class="form-group" style="flex:1;">
+            <label>Commission %</label>
+            <input type="number" id="cp-commission" class="form-control" value="0" min="0" max="100" step="0.1">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label>TDS %</label>
+            <input type="number" id="cp-tds" class="form-control" value="0" min="0" max="100" step="0.1">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Payment Mode</label>
+          <select id="cp-paymentMode" class="form-control">
+            <option value="bank_transfer">Bank Transfer</option>
+            <option value="upi">UPI</option>
+            <option value="cheque">Cheque</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Note</label>
+          <textarea id="cp-note" class="form-control" rows="2" placeholder="Optional note…"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" onclick="closeModal('create-payout-modal')">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="cp-save-btn" onclick="saveCreatePayout()">Create Payout</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Process Payout Modal -->
+  <div class="modal-overlay" id="process-payout-modal">
+    <div class="modal" style="max-width:420px;">
+      <div class="modal-header">
+        <h3>Process Payout</h3>
+        <button class="modal-close" onclick="closeModal('process-payout-modal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Status <span class="text-danger">*</span></label>
+          <select id="pp-status" class="form-control">
+            <option value="processing">Processing</option>
+            <option value="completed">Completed</option>
+            <option value="failed">Failed</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Transaction ID / Reference</label>
+          <input type="text" id="pp-txnId" class="form-control" placeholder="e.g. UTR / NEFT Ref">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" onclick="closeModal('process-payout-modal')">Cancel</button>
+        <button class="btn btn-success btn-sm" id="pp-save-btn" onclick="saveProcessPayout()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../../assets/js/config.js"></script>
+  <script src="../../assets/js/api.js"></script>
+  <script src="../../assets/js/layout.js"></script>
+  <script src="payouts.js"></script>
+</body>
+</html>

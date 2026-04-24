@@ -1,0 +1,268 @@
+================================================================================
+                           DAMNDEAL — CONCEPT OVERVIEW
+================================================================================
+
+Platform Type : Hyperlocal Commerce & Delivery Platform
+Tagline       : "Apne Aas-Paas Ki Dukaan, Ab Phone Pe"
+Model         : B2B2C (Business to Business to Consumer)
+
+================================================================================
+1. IDEA IN SHORT
+================================================================================
+
+DamnDeal ek hyperlocal ecommerce platform hai jahan:
+- Local dukandar (kirana, medical, electronics, bakery etc.) apni shop onboard karte hain
+- Unke aas-paas ke log (20km radius) unki shop browse karte hain aur order karte hain
+- Delivery boy jake delivery karta hai — ya toh platform ka ya dukandar ka apna
+- Same-day delivery with real-time tracking
+
+================================================================================
+2. USER ROLES (5 Roles)
+================================================================================
+
++-------------------+----------------------------------------------------------+
+| Role              | Kya Karta Hai                                            |
++-------------------+----------------------------------------------------------+
+| USER (Customer)   | Shop browse, order place, payment, wallet, wishlist,     |
+|                   | returns, reviews, referral, support tickets              |
++-------------------+----------------------------------------------------------+
+| PARTNER (Dukan-   | KYC submit, products manage, orders accept/reject,       |
+| dar/Shop Owner)   | delivery boys (apne), POS billing, offers, payouts,      |
+|                   | subscription plans, support tickets                      |
++-------------------+----------------------------------------------------------+
+| ADMIN             | Full control — KYC approve, products review, coupons,    |
+|                   | offers, returns approve, subscriptions plans, reports,   |
+|                   | staff manage, delivery boys, wallets, settings, banners, |
+|                   | home sections, notifications, payouts, support tickets   |
++-------------------+----------------------------------------------------------+
+| DELIVERY BOY      | Profile manage, delivery assignments accept, earnings    |
+|                   | track, live location share                               |
++-------------------+----------------------------------------------------------+
+| STAFF             | Admin ke under limited access (permission-based)         |
++-------------------+----------------------------------------------------------+
+
+================================================================================
+3. CORE FLOW (User Journey)
+================================================================================
+
+[1] User opens app
+    |
+[2] Location detect hoti hai (lat/lng)
+    |
+[3] 20km radius ke andar approved shops dikhti hain (geo search)
+    |
+[4] User shop select karta hai → products browse karta hai
+    |
+[5] Cart mein add karta hai → Coupon apply (optional)
+    |
+[6] Order place karta hai:
+    - Delivery fee calculate hoti hai (distance based — Haversine formula)
+    - Platform fee lagti hai (configurable %)
+    - Free delivery agar order amount threshold cross kare
+    - Wallet balance use kar sakta hai (partial/full)
+    - GST auto-calculate per product
+    |
+[7] Payment: Razorpay (online) / COD / Wallet / Razorpay+Wallet combo
+    |
+[8] Partner ko notification aati hai (Socket.io real-time)
+    |
+[9] Partner 15 min ke andar accept/reject karta hai
+    (Auto-reject agar 15 min mein koi action nahi)
+    |
+[10] Partner order ready mark karta hai
+    |
+[11] Delivery boy assign hota hai:
+     - Platform delivery boy (admin/partner assign karta hai)
+     - Self-ship (partner ka apna delivery boy)
+    |
+[12] Delivery boy pickup → shipped → delivered
+     (Real-time location tracking via Socket.io)
+    |
+[13] Delivery OTP verify → Order delivered
+    |
+[14] User review de sakta hai (shop + delivery boy rating)
+    |
+[15] Return request bhi kar sakta hai (admin approve → wallet refund)
+
+================================================================================
+4. PARTNER FLOW
+================================================================================
+
+[1] Partner signup (phone OTP)
+[2] KYC submit: name, org, GST, PAN, photo, shop address, location (lat/lng)
+[3] Admin KYC approve karega
+[4] Approved hone ke baad:
+    - Products add karo (name, price, MRP, GST, stock, images)
+    - Admin product approve karega → phir live hoga
+    - Orders receive karo (app orders + POS billing apne counter se)
+    - Apne delivery boys add karo (self-ship option)
+    - Offers/deals create karo
+    - Subscription plan lo (extra features ke liye)
+    - Payouts track karo
+    - Customers list dekho
+    - Support tickets raise karo
+
+================================================================================
+5. REVENUE MODEL
+================================================================================
+
++---------------------------+--------------------------------------------------+
+| Revenue Source            | Details                                          |
++---------------------------+--------------------------------------------------+
+| Platform Fee (Commission) | Har order pe % commission (configurable)         |
+| Delivery Fee              | Base fee + per km charge (user pays)             |
+| Subscription Plans        | Partners monthly/yearly plans lete hain          |
+|                           | (featured listing, lower commission, analytics)  |
+| Featured Listings         | Subscription ke through partner ko priority      |
++---------------------------+--------------------------------------------------+
+
+================================================================================
+6. KEY FEATURES
+================================================================================
+
+USERS:
+  - Geo-based shop discovery (20km radius)
+  - Cross-shop product search
+  - Wishlist (products + shops save)
+  - Wallet system (refund, cashback, referral bonus)
+  - Coupon system (global, partner-specific, first-order, category-based)
+  - Referral system (refer & earn — both get wallet credit)
+  - Order tracking (real-time via Socket.io)
+  - Return/refund requests
+  - Invoice PDF download
+  - Support tickets
+  - Delivery time estimate
+  - Multiple payment methods (Razorpay, COD, Wallet, Hybrid)
+
+PARTNERS:
+  - KYC verification
+  - Product management (with GST, stock tracking, inventory logs)
+  - POS billing (counter pe direct bill)
+  - Order management (accept/reject/ready/assign delivery)
+  - Self-ship — apne delivery boys se deliver karo
+  - Own delivery fleet management
+  - Offers/deals create (flash deal, combo, BOGO, flat discount)
+  - Subscription plans
+  - Customer database
+  - Payout tracking
+  - Invoice generation
+  - Support tickets
+
+ADMIN:
+  - Full dashboard (orders, revenue, users, partners stats)
+  - KYC approve/reject
+  - Product approve/reject
+  - Coupon CRUD (global + scoped)
+  - Offer management
+  - Return approve/reject (wallet refund + stock restore)
+  - Reports (orders, revenue, users, payments — CSV export)
+  - Wallet management (view, credit to any user)
+  - Subscription plan management
+  - Staff management (permission-based)
+  - Delivery boy management (verify, toggle)
+  - Banner management
+  - Home page sections arrangement
+  - App settings (delivery fee, platform fee, free delivery threshold)
+  - Notification management
+  - Support ticket management (assign, reply, resolve, close)
+  - Payout management
+
+DELIVERY:
+  - Profile & documents
+  - Assignment management
+  - Earnings tracking
+  - Live location broadcast (Socket.io)
+
+SYSTEM:
+  - Cron Jobs:
+    * Auto-cancel unpaid orders (30 min)
+    * Auto-reject unaccepted orders (15 min)
+    * Expire subscriptions (daily)
+    * Deactivate expired coupons (daily)
+    * Deactivate expired offers (daily)
+  - Image optimization (Sharp — auto WebP conversion)
+  - Rate limiting (OTP: 10/15min, API: 200/15min)
+  - SMS/Email/Push notification templates (plug-and-play)
+
+================================================================================
+7. TECH STACK
+================================================================================
+
+Backend       : Node.js 20 + Express 4.21
+Database      : MongoDB 7 (Mongoose 8.7)
+Cache/OTP     : Redis 7
+Auth          : JWT (access 15min + refresh 30d) + Phone OTP
+Payment       : Razorpay SDK
+Real-time     : Socket.io (JWT authenticated)
+File Upload   : Multer + Sharp (image optimization → WebP)
+PDF           : PDFKit (invoices)
+Cron          : node-cron
+Containerized : Docker Compose (API + MongoDB + Redis)
+Security      : Helmet, CORS, Rate Limiting, bcryptjs
+
+================================================================================
+8. ARCHITECTURE
+================================================================================
+
+src/
+├── config/          → DB connection
+├── middleware/       → auth, upload, error, clientType
+├── models/          → 30+ Mongoose models
+├── services/        → otp, token, fee, wallet, coupon, payment,
+│                      socket, cron, invoice, notification
+├── modules/
+│   ├── auth/        → OTP login, profile, token refresh
+│   ├── admin/       → 19 controllers (full platform management)
+│   ├── partner/     → 11 controllers (shop operations)
+│   ├── user/        → 14 controllers (shopping experience)
+│   └── delivery/    → 3 controllers (delivery ops)
+└── routes/          → Central router → module routers
+
+================================================================================
+9. API STRUCTURE
+================================================================================
+
+Base URL: /api
+
+/api/auth/*           → Login, OTP, Profile, Token
+/api/admin/*          → Admin panel APIs (19 resource groups)
+/api/partner/*        → Partner portal APIs (11 resource groups)
+/api/user/*           → User app APIs (14 resource groups)
+/api/delivery/*       → Delivery boy app APIs (3 resource groups)
+/api/categories       → Public categories
+/api/health           → Health check
+
+================================================================================
+10. MODELS (30+)
+================================================================================
+
+Core      : User, Order, Product, Category, SubCategory
+Partner   : PartnerKyc, Customer, InventoryLog, Payout
+Delivery  : DeliveryBoy, Address
+Commerce  : Coupon, CouponUsage, Offer, Wishlist
+Finance   : Wallet, WalletTransaction, Payment
+Returns   : ReturnRequest
+Referral  : Referral
+Support   : SupportTicket
+Subscrip. : SubscriptionPlan, PartnerSubscription
+Admin     : Staff, Notification, Banner, AppSettings, HomeSection
+Review    : Review
+
+================================================================================
+11. UNIQUE SELLING POINTS (USPs)
+================================================================================
+
+1. Hyperlocal Focus — sirf 20km radius, same-day delivery
+2. Self-Ship Option — partner apne delivery boy se deliver kar sakta hai
+3. POS Billing — partner apne counter pe bhi bill bana sakta hai (app ke through)
+4. Wallet + Referral — customer engagement & retention
+5. Subscription for Partners — premium features, lower commission
+6. Multi-payment — Razorpay / COD / Wallet / Hybrid
+7. Real-time Tracking — Socket.io based live delivery tracking
+8. GST Compliant — per product GST, invoice with tax breakdown
+9. Configurable Everything — delivery fee, platform fee, free delivery
+                              threshold sab admin settings se control
+
+================================================================================
+                              END OF OVERVIEW
+================================================================================

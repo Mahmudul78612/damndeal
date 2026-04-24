@@ -1,0 +1,53 @@
+version: "3.8"
+
+services:
+  api:
+    build: .
+    container_name: damndeal-api
+    restart: unless-stopped
+    ports:
+      - "${PORT:-5000}:5000"
+    env_file:
+      - .env
+    depends_on:
+      - mongo
+      - redis
+    volumes:
+      - uploads-data:/app/uploads
+    networks:
+      - damndeal-net
+
+  mongo:
+    image: mongo:7
+    container_name: damndeal-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-damndeal}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASS:-damndeal_secret}
+    networks:
+      - damndeal-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: damndeal-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass ${REDIS_PASS:-redis_secret}
+    volumes:
+      - redis-data:/data
+    networks:
+      - damndeal-net
+
+volumes:
+  mongo-data:
+  redis-data:
+  uploads-data:
+
+networks:
+  damndeal-net:
+    driver: bridge

@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-primary: #7C3AED;
+  --color-primary-dark: #5B21B6;
+  --color-primary-light: #EDE9FE;
+  --color-accent: #F59E0B;
+  --color-success: #10B981;
+  --color-error: #EF4444;
+  --color-warning: #F59E0B;
+  --color-surface: #FFFFFF;
+  --color-background: #F9FAFB;
+  --font-sans: var(--font-geist-sans);
+}
+
+* { -webkit-tap-highlight-color: transparent; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--color-background);
+  color: #111827;
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Mobile app-like feel */
+@media (max-width: 767px) {
+  body { padding-bottom: 48px; overscroll-behavior-y: contain; }
+  .safe-top { padding-top: env(safe-area-inset-top, 0); }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
+}
+
+/* Product description rendered HTML */
+.prose-product { word-break: break-word; }
+.prose-product p { margin: 0 0 0.6em; }
+.prose-product br { display: block; content: ""; margin-bottom: 0.3em; }
+.prose-product b, .prose-product strong { font-weight: 600; color: #111827; }
+.prose-product img { max-width: 100%; height: auto; border-radius: 8px; margin: 0.5em 0; display: block; }
+.prose-product ul { list-style: disc; padding-left: 1.2em; margin: 0.4em 0; }
+.prose-product ol { list-style: decimal; padding-left: 1.2em; margin: 0.4em 0; }
+.prose-product a { color: #7c3aed; text-decoration: underline; }
+.prose-product table { border-collapse: collapse; width: 100%; margin: 0.5em 0; font-size: 12px; }
+.prose-product td, .prose-product th { border: 1px solid #e5e7eb; padding: 4px 6px; }
+
+/* Desktop max-width content centering */
+@media (min-width: 768px) {
+  .main-content { max-width: 1280px; margin: 0 auto; }
+}
+
+/* Hide scrollbar but keep scroll */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 8px;
+}

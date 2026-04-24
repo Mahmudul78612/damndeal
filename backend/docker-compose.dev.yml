@@ -1,0 +1,25 @@
+version: "3.8"
+
+# Dev-only: just MongoDB + Redis — backend runs on host via `node`
+services:
+  mongo:
+    image: mongo:7
+    container_name: damndeal-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    container_name: damndeal-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+volumes:
+  mongo-data:
+  redis-data:
