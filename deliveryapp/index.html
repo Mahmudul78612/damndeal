@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#3E1A6E">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>DamnDeal Delivery</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="assets/icons/icon.svg">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <div class="auth-page" id="loginPage">
+    <div class="auth-top">
+      <h1>Damn<span>Deal</span></h1>
+      <p>Delivery Partner App</p>
+    </div>
+    <div class="auth-card">
+      <!-- Step 1: Phone -->
+      <div id="stepPhone">
+        <h2>Login</h2>
+        <p class="sub">Enter your phone number to get started</p>
+        <div class="auth-error" id="phoneError"></div>
+        <div class="form-group">
+          <label>Phone Number</label>
+          <input type="tel" class="form-control" id="phoneInput" placeholder="10 digit mobile number" maxlength="10" inputmode="numeric" autocomplete="tel">
+        </div>
+        <button class="btn btn-primary" id="btnSendOtp" onclick="sendOtp()">Send OTP</button>
+      </div>
+
+      <!-- Step 2: OTP -->
+      <div id="stepOtp" style="display:none">
+        <h2>Verify OTP</h2>
+        <p class="sub">Enter the 6-digit code sent to <b id="otpPhone"></b></p>
+        <div class="auth-error" id="otpError"></div>
+        <div class="otp-inputs" id="otpInputs">
+          <input type="tel" maxlength="1" inputmode="numeric" autocomplete="one-time-code">
+          <input type="tel" maxlength="1" inputmode="numeric">
+          <input type="tel" maxlength="1" inputmode="numeric">
+          <input type="tel" maxlength="1" inputmode="numeric">
+          <input type="tel" maxlength="1" inputmode="numeric">
+          <input type="tel" maxlength="1" inputmode="numeric">
+        </div>
+        <button class="btn btn-primary" id="btnVerifyOtp" onclick="verifyOtp()">Verify &amp; Login</button>
+        <p class="text-center mt-2 text-sm text-muted">
+          Didn't receive? <a href="#" id="resendLink" onclick="sendOtp();return false;">Resend OTP</a>
+        </p>
+        <p class="text-center mt-1"><a href="#" onclick="document.getElementById('stepOtp').style.display='none';document.getElementById('stepPhone').style.display='';return false;" class="text-sm text-muted">← Change number</a></p>
+      </div>
+
+      <!-- Step 3: Onboarding (first-time) -->
+      <div id="stepOnboard" style="display:none">
+        <h2>Complete Profile</h2>
+        <p class="sub">Set up your delivery profile to start receiving orders</p>
+        <div class="auth-error" id="onboardError"></div>
+        <div class="text-center mb-2">
+          <label for="photoInput" style="cursor:pointer">
+            <div class="onboard-avatar" id="avatarPreview">📷</div>
+            <span class="text-sm text-muted">Tap to add photo</span>
+          </label>
+          <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="previewPhoto(this)">
+        </div>
+        <div class="form-group">
+          <label>Full Name *</label>
+          <input type="text" class="form-control" id="obName" placeholder="Your full name">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" class="form-control" id="obEmail" placeholder="your@email.com">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Vehicle Type</label>
+            <select class="form-control" id="obVehicle">
+              <option value="bike">Bike</option>
+              <option value="scooter">Scooter</option>
+              <option value="bicycle">Bicycle</option>
+              <option value="car">Car</option>
+              <option value="walk">Walk</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Vehicle Number</label>
+            <input type="text" class="form-control" id="obVehicleNo" placeholder="MH 01 AB 1234">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Aadhaar Number</label>
+          <input type="text" class="form-control" id="obAadhaar" placeholder="1234 5678 9012" maxlength="14" inputmode="numeric">
+        </div>
+        <button class="btn btn-primary mt-1" onclick="completeOnboarding()">Start Delivering →</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/app.js"></script>
+  <script>if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
+  <script>
+  (function(){
+    // if already logged in, redirect
+    const t=getToken(), u=getUser();
+    if(t && u && u.role==='delivery') { window.location.href='pages/home/home.html'; return; }
+
+    let _phone='';
+
+    // OTP input auto-advance
+    const otpBox = document.getElementById('otpInputs');
+    otpBox.querySelectorAll('input').forEach((inp,i,all)=>{
+      inp.addEventListener('input',()=>{ if(inp.value && i<all.length-1) all[i+1].focus(); });
+      inp.addEventListener('keydown',e=>{ if(e.key==='Backspace' && !inp.value && i>0) all[i-1].focus(); });
+    });
+
+    window.sendOtp = async function(){
+      const phone = document.getElementById('phoneInput').value.trim();
+      if(!/^\d{10}$/.test(phone)){ showErr('phoneError','Enter a valid 10-digit phone number'); return; }
+      _phone = phone;
+      const btn = document.getElementById('btnSendOtp');
+      btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
+      try{
+        await API.post('/auth/send-otp',{phone:'+91'+phone, role:'delivery'});
+        document.getElementById('stepPhone').style.display='none';
+        document.getElementById('stepOtp').style.display='';
+        document.getElementById('otpPhone').textContent='+91 '+phone;
+        otpBox.querySelector('input').focus();
+      }catch(e){ showErr('phoneError',e.message); }
+      finally{ btn.disabled=false; btn.textContent='Send OTP'; }
+    };
+
+    window.verifyOtp = async function(){
+      const inputs = otpBox.querySelectorAll('input');
+      const otp = Array.from(inputs).map(i=>i.value).join('');
+      if(otp.length<6){ showErr('otpError','Enter full 6-digit OTP'); return; }
+      const btn = document.getElementById('btnVerifyOtp');
+      btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
+      try{
+        const d = await API.post('/auth/verify-otp',{phone:'+91'+_phone, otp, role:'delivery'});
+        setAuth(d);
+        // check if profile exists
+        if(d.user && (!d.user.name || d.user.isNewUser)){
+          document.getElementById('stepOtp').style.display='none';
+          document.getElementById('stepOnboard').style.display='';
+        } else {
+          // check delivery profile
+          try{
+            await API.get('/delivery/profile');
+            window.location.href='pages/home/home.html';
+          }catch{
+            document.getElementById('stepOtp').style.display='none';
+            document.getElementById('stepOnboard').style.display='';
+          }
+        }
+      }catch(e){ showErr('otpError',e.message); }
+      finally{ btn.disabled=false; btn.textContent='Verify & Login'; }
+    };
+
+    window.previewPhoto = function(inp){
+      if(inp.files && inp.files[0]){
+        const r = new FileReader();
+        r.onload = e => {
+          const av = document.getElementById('avatarPreview');
+          av.innerHTML = `<img src="${e.target.result}" style="width:80px;height:80px;border-radius:50%;object-fit:cover">`;
+        };
+        r.readAsDataURL(inp.files[0]);
+      }
+    };
+
+    window.completeOnboarding = async function(){
+      const name = document.getElementById('obName').value.trim();
+      if(!name){ showErr('onboardError','Name is required'); return; }
+
+      try{
+        // 1. Complete user profile
+        await API.put('/auth/complete-profile',{ name, email: document.getElementById('obEmail').value.trim()||undefined });
+
+        // 2. Create delivery profile
+        const fd = new FormData();
+        fd.append('name', name);
+        fd.append('phone', '+91'+_phone);
+        const email = document.getElementById('obEmail').value.trim();
+        if(email) fd.append('email', email);
+        fd.append('vehicleType', document.getElementById('obVehicle').value);
+        const vn = document.getElementById('obVehicleNo').value.trim();
+        if(vn) fd.append('vehicleNumber', vn);
+        const aadhaar = document.getElementById('obAadhaar').value.replace(/\s/g,'');
+        if(aadhaar) fd.append('aadhaarNumber', aadhaar);
+        const photoFile = document.getElementById('photoInput').files[0];
+        if(photoFile) fd.append('photo', photoFile);
+
+        await API.upload('/delivery/profile', fd);
+
+        // update stored user
+        const me = await API.get('/auth/me');
+        if(me.user) localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(me.user));
+
+        window.location.href='pages/home/home.html';
+      }catch(e){ showErr('onboardError',e.message); }
+    };
+
+    function showErr(id,msg){ const el=document.getElementById(id); el.style.display='block'; el.textContent=msg; setTimeout(()=>el.style.display='none',4000); }
+
+    // enter key handling
+    document.getElementById('phoneInput').addEventListener('keydown',e=>{ if(e.key==='Enter') window.sendOtp(); });
+  })();
+  </script>
+</body>
+</html>

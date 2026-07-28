@@ -31,6 +31,8 @@
     content.innerHTML = '<div class="text-center" style="padding:40px"><div class="spinner"></div></div>';
     try {
       let ep = `/admin/products?page=${page}&limit=30&platform=${platform}`;
+      // Phase 2: scope products list to currently selected admin region (IN/US)
+      try { var _r = (typeof getRegion === 'function') ? getRegion() : (localStorage.getItem('dd_region') || 'IN'); if (_r) ep += '&region=' + _r; } catch (_) {}
       if (statusFilter) ep += "&approvalStatus=" + statusFilter;
       if (categoryFilter) ep += "&category=" + categoryFilter;
       if (searchQ) ep += "&search=" + encodeURIComponent(searchQ);
@@ -165,6 +167,26 @@
             </div>
             <div class="form-group"><label>Description</label><textarea class="form-control" id="fDesc" rows="3" placeholder="Detailed product description..."></textarea></div>
             <div class="form-row">
+              <div class="form-group">
+                <label>Storefront Regions *</label>
+                <div style="display:flex;gap:14px;align-items:center;padding-top:6px">
+                  <label style="display:flex;gap:6px;align-items:center;font-weight:500;cursor:pointer">
+                    <input type="checkbox" class="region-chk" value="IN" checked> 🇮🇳 India
+                  </label>
+                  <label style="display:flex;gap:6px;align-items:center;font-weight:500;cursor:pointer">
+                    <input type="checkbox" class="region-chk" value="US"> 🇺🇸 USA
+                  </label>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Source</label>
+                <select class="form-control" id="fSource">
+                  <option value="manual">Manual</option>
+                  <option value="cj">CJ Dropshipping</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
               <div class="form-group"><label>Category *</label><select class="form-control" id="fCat" required onchange="fillSubCats(this.value)"><option value="">Select category</option>${pCats.map(c => `<option value="${c._id}">${esc(c.name)}</option>`).join('')}</select></div>
               <div class="form-group"><label>Sub Category</label><select class="form-control" id="fSubCat"><option value="">None</option></select></div>
               <div class="form-group"><label>Partner</label><select class="form-control" id="fPartner"><option value="">Admin (self)</option>${partners.map(p => `<option value="${p._id}">${esc(p.name || p.phone)}</option>`).join('')}</select></div>
@@ -180,10 +202,19 @@
               </div>
             </div>
             <div class="form-row-3" id="basePricingRow">
-              <div class="form-group"><label>Cost Price</label><input class="form-control" id="fCost" type="number" min="0" step="0.01" placeholder="&#8377;"></div>
-              <div class="form-group"><label>Selling Price</label><input class="form-control" id="fSell" type="number" min="0" step="0.01" placeholder="&#8377;"></div>
-              <div class="form-group"><label>MRP</label><input class="form-control" id="fMrp" type="number" min="0" step="0.01" placeholder="&#8377;"></div>
+              <div class="form-group"><label id="fCostLabel">Cost Price</label><input class="form-control" id="fCost" type="number" min="0" step="0.01" placeholder="&#8377;"></div>
+              <div class="form-group" id="baseSellGroup"><label>Selling Price</label><input class="form-control" id="fSell" type="number" min="0" step="0.01" placeholder="&#8377;"></div>
+              <div class="form-group" id="baseMrpGroup"><label>MRP</label><input class="form-control" id="fMrp" type="number" min="0" step="0.01" placeholder="&#8377;"></div>
             </div>
+            <div id="usdPricingBlock" style="display:none;margin-top:8px;padding:12px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px">
+              <h4 class="section-h" style="margin:0 0 10px 0;color:#92400E">🇺🇸 USA Pricing (USD)</h4>
+              <div class="form-row">
+                <div class="form-group"><label>USD Selling Price</label><input class="form-control" id="fUsdSell" type="number" min="0" step="0.01" placeholder="$"></div>
+                <div class="form-group"><label>USD MRP</label><input class="form-control" id="fUsdMrp" type="number" min="0" step="0.01" placeholder="$"></div>
+              </div>
+              <small id="usdPricingNote" style="color:#92400E">Shown to customers on damndeal.com. If left blank, base ₹ price will be used as fallback.</small>
+            </div>
+            <div id="taxInfoSection">
             <h4 class="section-h">Tax Information</h4>
             <div class="form-row-3">
               <div class="form-group"><label>GST %</label>
@@ -201,6 +232,10 @@
               <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:8px">
                 <label class="cb-label"><input type="checkbox" id="fGstInc" checked> <span>GST Inclusive</span></label>
               </div>
+            </div>
+            </div>
+            <div id="usSalesTaxNote" style="display:none;font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:10px 12px;margin-top:8px">
+              🇺🇸 Sales tax is handled automatically at checkout (set the US rate in Settings). No per-product tax needed.
             </div>
           </div>
 
@@ -317,6 +352,36 @@
     </div></div>
     ${buildStyles()}`;
   }
+
+  // Show a clean USD-only pricing UI when the product sells in the US.
+  // (Hides the ₹ base Selling/MRP + India GST to avoid the dual-price confusion.)
+  window.toggleUsdBlock = function () {
+    var blk = document.getElementById('usdPricingBlock');
+    if (!blk) return;
+    var us = document.querySelector('.region-chk[value="US"]');
+    var isUS = !!(us && us.checked);
+    blk.style.display = isUS ? '' : 'none';
+
+    var show = function (id, on) { var el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
+    show('baseSellGroup', !isUS);   // ₹ selling price — India only
+    show('baseMrpGroup', !isUS);    // ₹ MRP — India only
+    show('taxInfoSection', !isUS);  // GST — India only
+    show('usSalesTaxNote', isUS);   // US sales-tax note
+
+    var costL = document.getElementById('fCostLabel');
+    var costI = document.getElementById('fCost');
+    if (costL) costL.textContent = isUS ? 'Cost Price ($)' : 'Cost Price';
+    if (costI) costI.placeholder = isUS ? '$' : '₹';
+    var note = document.getElementById('usdPricingNote');
+    if (note) note.textContent = isUS
+      ? 'These USD prices are shown to customers on damndeal.com.'
+      : 'Shown to customers on damndeal.com. If left blank, base ₹ price will be used as fallback.';
+  };
+  document.body.addEventListener('change', function (e) {
+    if (e.target && e.target.classList && e.target.classList.contains('region-chk')) {
+      window.toggleUsdBlock();
+    }
+  });
 
   window.toggleVariants = function (on) {
     document.getElementById('variantSection').style.display = on ? 'block' : 'none';
@@ -498,6 +563,15 @@
       document.getElementById('existingImages').innerHTML = '';
       selectedFiles = [];
       imagesToRemove = [];
+      // Phase 2: reset region/source/USD price fields. Default region follows
+      // the admin's active region switcher (US mode → new product is US).
+      var _adminRegion = (typeof getRegion === 'function') ? getRegion() : (localStorage.getItem('dd_region') || 'IN');
+      var _defReg = _adminRegion === 'US' ? 'US' : 'IN';
+      document.querySelectorAll('.region-chk').forEach(function (c) { c.checked = c.value === _defReg; });
+      var srcEl = document.getElementById('fSource'); if (srcEl) srcEl.value = 'manual';
+      var us1 = document.getElementById('fUsdSell'); if (us1) us1.value = '';
+      var us2 = document.getElementById('fUsdMrp'); if (us2) us2.value = '';
+      toggleUsdBlock();
       document.querySelectorAll('.ftab').forEach(function(t, i) { t.classList.toggle('active', i === 0); });
       document.querySelectorAll('.tab-panel').forEach(function(p, i) { p.classList.toggle('active', i === 0); });
       openModal('prod-modal');
@@ -545,6 +619,14 @@
       imagesToRemove = [];
       showExistingImages(p.images || []);
 
+      // Phase 2: regions / source / USD prices
+      var regs = (p.regions && p.regions.length) ? p.regions : ['IN'];
+      document.querySelectorAll('.region-chk').forEach(function (c) { c.checked = regs.indexOf(c.value) >= 0; });
+      var srcEl2 = document.getElementById('fSource'); if (srcEl2) srcEl2.value = p.source || 'manual';
+      var usdSell = document.getElementById('fUsdSell'); if (usdSell) usdSell.value = (p.prices && p.prices.US && p.prices.US.sellingPrice) || '';
+      var usdMrp = document.getElementById('fUsdMrp'); if (usdMrp) usdMrp.value = (p.prices && p.prices.US && p.prices.US.mrp) || '';
+      toggleUsdBlock();
+
       if (platform === 'damndeal') {
         var f = function(i, v) { var el = document.getElementById(i); if (el) el.value = v || ''; };
         var c = function(i, v) { var el = document.getElementById(i); if (el) el.checked = !!v; };
@@ -580,10 +662,23 @@
     var subCat = document.getElementById('fSubCat').value; if (subCat) fd.append('subCategory', subCat);
     var ptr = document.getElementById('fPartner').value; if (ptr) fd.append('partner', ptr);
 
+    // US-only product: the visible pricing is USD. Mirror it into the base
+    // price fields (which are hidden) so the record stays valid, and skip GST.
+    var _us = document.querySelector('.region-chk[value="US"]');
+    var _in = document.querySelector('.region-chk[value="IN"]');
+    var usOnly = !!(_us && _us.checked) && !(_in && _in.checked);
+    var _uSell = parseFloat((document.getElementById('fUsdSell') || {}).value) || 0;
+    var _uMrp = parseFloat((document.getElementById('fUsdMrp') || {}).value) || 0;
+    var baseSell = document.getElementById('fSell').value;
+    var baseMrp = document.getElementById('fMrp').value;
+    if (usOnly) {
+      if (!parseFloat(baseSell)) baseSell = _uSell || baseSell;
+      if (!parseFloat(baseMrp)) baseMrp = _uMrp || baseMrp;
+    }
     fd.append('costPrice', document.getElementById('fCost').value);
-    fd.append('sellingPrice', document.getElementById('fSell').value);
-    fd.append('mrp', document.getElementById('fMrp').value);
-    fd.append('gstPercent', document.getElementById('fGst').value);
+    fd.append('sellingPrice', baseSell);
+    fd.append('mrp', baseMrp);
+    fd.append('gstPercent', usOnly ? '0' : document.getElementById('fGst').value);
     fd.append('gstInclusive', document.getElementById('fGstInc').checked);
     var hsn = document.getElementById('fHsn').value.trim(); if (hsn) fd.append('hsnCode', hsn);
 
@@ -607,6 +702,20 @@
     }
 
     if (imagesToRemove.length > 0) fd.append('removeImages', JSON.stringify(imagesToRemove));
+
+    // Phase 2: regions + source + per-region prices
+    var regions = Array.from(document.querySelectorAll('.region-chk'))
+      .filter(function (c) { return c.checked; })
+      .map(function (c) { return c.value; });
+    if (regions.length === 0) regions = ['IN'];
+    fd.append('regions', JSON.stringify(regions));
+    var srcSel = document.getElementById('fSource');
+    if (srcSel) fd.append('source', srcSel.value);
+    var usdSellV = parseFloat((document.getElementById('fUsdSell') || {}).value) || 0;
+    var usdMrpV = parseFloat((document.getElementById('fUsdMrp') || {}).value) || 0;
+    if (regions.indexOf('US') >= 0 && (usdSellV > 0 || usdMrpV > 0)) {
+      fd.append('prices', JSON.stringify({ US: { sellingPrice: usdSellV || null, mrp: usdMrpV || null } }));
+    }
 
     if (platform === 'damndeal') {
       var a = function(k, i) { var el = document.getElementById(i); if (el && el.value.trim()) fd.append(k, el.value.trim()); };

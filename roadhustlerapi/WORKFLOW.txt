@@ -1,0 +1,642 @@
+═══════════════════════════════════════════════════════════════════════════════
+  ROAD HUSTLERS — GARAGE BUSINESS MANAGEMENT SYSTEM
+  Complete Backend API Workflow & Specification
+  Region: USA   ·   Currency: USD ($)   ·   Tax: US Sales Tax (%)
+═══════════════════════════════════════════════════════════════════════════════
+
+PURPOSE OF THIS DOCUMENT
+------------------------
+This is the single source of truth for the Road Hustlers backend. It describes
+EVERY entity, role, workflow and API endpoint so that frontend developers can
+build the Customer Website AND the ERP/Admin portal WITHOUT designing anything
+on the backend side. If it is in this document, the API will provide it.
+
+The system is ONE backend serving TWO frontends:
+  1. CUSTOMER WEBSITE  — public marketing site + logged-in customer area
+  2. ERP / ADMIN PORTAL — internal garage management (staff + owner)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  1. SYSTEM ARCHITECTURE
+═══════════════════════════════════════════════════════════════════════════════
+
+  ┌──────────────────────┐        ┌──────────────────────┐
+  │  CUSTOMER WEBSITE     │        │   ERP / ADMIN PORTAL  │
+  │  (public + customer)  │        │   (staff + owner)     │
+  └──────────┬───────────┘        └───────────┬──────────┘
+             │                                 │
+             │      HTTPS / REST JSON          │
+             └──────────────┬──────────────────┘
+                            │
+                  ┌─────────▼──────────┐
+                  │   ROAD HUSTLERS     │
+                  │   BACKEND API       │   Node.js + Express
+                  │   /api/...          │   JWT auth (access+refresh)
+                  └─────────┬──────────┘
+                            │
+                  ┌─────────▼──────────┐
+                  │   MongoDB           │   primary data store
+                  │   (+ file uploads)  │   /uploads for images/PDF
+                  └────────────────────┘
+
+  Auth model:
+    - JWT access token (15 min) + refresh token (30 days)
+    - Role baked into token: "customer" | "staff" | "manager" | "admin"
+    - Header on every request:  Authorization: Bearer <token>
+    - x-client-type: "website" | "erp"   (lets backend scope behavior)
+
+  Base URL:    https://road-hustlers.com/api
+  Money:       all amounts are USD, stored in cents OR 2-decimal numbers (cents
+               recommended to avoid float errors). Display as $1,234.56.
+  Dates:       ISO-8601 UTC strings.
+  IDs:         Mongo ObjectId strings.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  2. USER ROLES & PERMISSIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+  ROLE        WHO                     CAN DO
+  ─────────── ─────────────────────── ────────────────────────────────────────
+  customer    Website user            Own profile, own vehicles, own invoices,
+                                       book appointments, view estimates,
+                                       approve/decline estimates, pay invoices.
+
+  staff       Mechanic / Technician   Assigned work orders, log labor hours,
+                                       add parts to a job, update job status.
+                                       Cannot see finances/reports.
+
+  manager     Service Advisor / Lead  Everything staff can + create work orders,
+                                       create estimates/invoices, manage leads,
+                                       manage appointments, manage customers,
+                                       adjust inventory, view reports.
+
+  admin       Owner                   Full access incl. staff management, pricing,
+                                       tax/settings, all analytics, refunds,
+                                       delete operations, system settings.
+
+  SEED ADMIN (owner):
+    email:    info@road-hustlers.com
+    password: Daljinder@0987654321        (hash with bcrypt; change after setup)
+
+  Permission enforcement is server-side (middleware), never trust the frontend.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  3. CORE MODULES (DATA MODELS)
+═══════════════════════════════════════════════════════════════════════════════
+
+Each module lists its fields. "ref" = relation to another collection.
+
+───────────────────────────────────────────────────────────────────────────────
+3.1  USER  (staff/manager/admin accounts — ERP logins)
+───────────────────────────────────────────────────────────────────────────────
+  _id
+  name
+  email                 (unique, login)
+  passwordHash          (bcrypt)
+  phone
+  role                  customer | staff | manager | admin
+  avatar                (image url)
+  hourlyRate            (for technicians — used in labor cost/payroll, USD)
+  specialties           [String]  e.g. ["brakes","engine","electrical"]
+  isActive              boolean
+  lastLogin
+  createdAt, updatedAt
+
+───────────────────────────────────────────────────────────────────────────────
+3.2  CUSTOMER  (the garage's clients — also website logins)
+───────────────────────────────────────────────────────────────────────────────
+  _id
+  name
+  email                 (unique, login for website)
+  passwordHash
+  phone
+  address { street, city, state, zip }
+  company               (optional — for fleet/business customers)
+  notes                 (internal advisor notes)
+  tags                  [String]  e.g. ["fleet","VIP","warranty"]
+  totalSpent            (lifetime, USD — computed)
+  vehicleCount          (computed)
+  source                how they found us: website | walk-in | referral | google
+  isActive
+  createdAt, updatedAt
+
+───────────────────────────────────────────────────────────────────────────────
+3.3  VEHICLE  (a customer's car/truck)
+───────────────────────────────────────────────────────────────────────────────
+  _id
+  customer              ref Customer
+  year                  e.g. 2019
+  make                  e.g. Ford
+  model                 e.g. F-150
+  trim                  e.g. XLT
+  vin                   (17-char Vehicle Identification Number)
+  licensePlate
+  color
+  mileage               current odometer (miles)
+  engine                e.g. "3.5L V6 EcoBoost"
+  transmission          automatic | manual
+  notes
+  serviceHistory        [ ref WorkOrder ]  (computed/linked)
+  createdAt, updatedAt
+
+───────────────────────────────────────────────────────────────────────────────
+3.4  LEAD  (inbound enquiry from the website — NOT yet a customer)
+───────────────────────────────────────────────────────────────────────────────
+  _id
+  name
+  email
+  phone
+  vehicle               free text e.g. "2018 Toyota Camry"
+  service               what they want e.g. "Brake inspection"
+  message               free text
+  source                website | phone | walk-in | google_ads | facebook
+  status                new | contacted | quoted | converted | lost
+  assignedTo            ref User (advisor handling it)
+  estimatedValue        (USD, advisor's guess)
+  followUpDate
+  convertedCustomer     ref Customer (set when converted)
+  createdAt, updatedAt
+
+───────────────────────────────────────────────────────────────────────────────
+3.5  APPOINTMENT  (booked slot — from website or phone)
+───────────────────────────────────────────────────────────────────────────────
+  _id
+  customer              ref Customer (nullable for new/lead)
+  leadName, leadPhone   (if not yet a customer)
+  vehicle               ref Vehicle (nullable)
+  vehicleText           free text fallback
+  serviceRequested      [String]  e.g. ["Oil change","Tire rotation"]
+  preferredDate
+  timeSlot              e.g. "09:00-10:00"
+  status                requested | confirmed | in_progress | completed | cancelled | no_show
+  assignedTo            ref User (technician)
+  bay                   service bay number
+  notes
+  workOrder             ref WorkOrder (created when work starts)
+  createdAt, updatedAt
+
+───────────────────────────────────────────────────────────────────────────────
+3.6  SERVICE / LABOR CATALOG  (priced services the shop offers)
+───────────────────────────────────────────────────────────────────────────────
+  _id
+  name                  e.g. "Front Brake Pad Replacement"
+  category              e.g. "Brakes" | "Engine" | "Maintenance"
+  description
+  laborHours            standard book hours e.g. 1.5
+  laborRate             USD/hour (default from settings, override per service)
+  flatPrice             optional fixed price (overrides hours*rate)
+  isActive
+  createdAt, updatedAt
+
+───────────────────────────────────────────────────────────────────────────────
+3.7  PART  (inventory item)
+───────────────────────────────────────────────────────────────────────────────
+  _id
+  name                  e.g. "Brake Pad Set — Ceramic"
+  partNumber            (SKU / manufacturer number)
+  category              e.g. "Brakes"
+  brand
+  supplier              ref Supplier
+  costPrice             what shop pays (USD)
+  sellPrice             what customer pays (USD)
+  quantityInStock
+  reorderLevel          low-stock threshold (alert when below)
+  location              shelf/bin location
+  barcode
+  fitsVehicles          free text or tags (compatibility)
+  isActive
+  createdAt, updatedAt
+  -- Stock is decremented when a part is added to a work order and the order is
+     invoiced/completed; incremented via Purchase Orders.
+
+───────────────────────────────────────────────────────────────────────────────
+3.8  SUPPLIER  (parts vendors)
+───────────────────────────────────────────────────────────────────────────────
+  _id
+  name
+  contactName, phone, email
+  address
+  accountNumber         (your account with them)
+  notes
+  isActive
+
+───────────────────────────────────────────────────────────────────────────────
+3.9  PURCHASE ORDER  (restocking parts)
+───────────────────────────────────────────────────────────────────────────────
+  _id
+  poNumber              auto e.g. PO-1001
+  supplier              ref Supplier
+  items                 [{ part ref, partName, quantity, costPrice, lineTotal }]
+  subtotal, tax, shipping, total   (USD)
+  status                draft | ordered | received | cancelled
+  orderedAt, receivedAt
+  createdBy             ref User
+  -- On "received": part.quantityInStock += received quantities.
+
+───────────────────────────────────────────────────────────────────────────────
+3.10  WORK ORDER  (the JOB CARD — heart of the system)
+───────────────────────────────────────────────────────────────────────────────
+  _id
+  orderNumber           auto e.g. WO-2001
+  customer              ref Customer
+  vehicle               ref Vehicle
+  mileageIn             odometer at drop-off
+  status                estimate | approved | in_progress | on_hold | completed | invoiced | cancelled
+  priority              low | normal | high | urgent
+  assignedTechs         [ ref User ]
+  bay                   service bay
+  complaint             customer's reported problem
+  diagnosis             technician's findings
+  recommendation        advisor notes / future work
+
+  laborItems            [{ service ref (optional), description, hours,
+                           rate, techId, lineTotal }]
+  partItems             [{ part ref, partNumber, description, quantity,
+                           costPrice, sellPrice, lineTotal }]
+
+  laborSubtotal         (USD, computed)
+  partsSubtotal         (USD, computed)
+  discount              (USD or %)
+  taxRate               (% from settings, e.g. 8.25)
+  taxAmount             (USD, computed on taxable items)
+  shopSuppliesFee       (USD, optional flat/percent fee)
+  total                 (USD, computed)
+
+  estimateApproved      boolean
+  approvedAt
+  approvalMethod        in_person | email | sms | portal
+
+  timeLog               [{ techId, startedAt, stoppedAt, minutes }]  (clock in/out)
+  photos                [url]  (before/after, damage docs)
+  invoice               ref Invoice (when invoiced)
+  appointment           ref Appointment (origin, if any)
+
+  createdBy, createdAt, updatedAt, completedAt
+
+───────────────────────────────────────────────────────────────────────────────
+3.11  INVOICE  (billing document generated from a Work Order)
+───────────────────────────────────────────────────────────────────────────────
+  _id
+  invoiceNumber         auto e.g. INV-3001
+  workOrder             ref WorkOrder
+  customer              ref Customer
+  vehicle               ref Vehicle
+  lineItems             snapshot of labor + parts at time of invoicing
+  subtotal, discount, taxRate, taxAmount, shopSuppliesFee, total   (USD)
+  amountPaid            (USD)
+  amountDue             (USD, = total - amountPaid)
+  status                draft | sent | partial | paid | overdue | void
+  dueDate
+  payments              [ ref Payment ]
+  pdfUrl                generated invoice PDF
+  sentAt                (emailed to customer)
+  createdAt, updatedAt
+
+───────────────────────────────────────────────────────────────────────────────
+3.12  PAYMENT  (money received against an invoice)
+───────────────────────────────────────────────────────────────────────────────
+  _id
+  invoice               ref Invoice
+  customer              ref Customer
+  amount                (USD)
+  method                cash | card | check | ach | online (Stripe) | other
+  reference             txn id / check number
+  stripePaymentIntent   (if online)
+  receivedBy            ref User
+  receivedAt
+  note
+
+───────────────────────────────────────────────────────────────────────────────
+3.13  ESTIMATE / QUOTE
+───────────────────────────────────────────────────────────────────────────────
+  An Estimate is simply a Work Order with status="estimate". When the customer
+  approves it (in person, by email link, or in the customer portal), it becomes
+  status="approved" and work can begin. No separate collection needed, but the
+  API exposes estimate-specific actions (send, approve, decline).
+
+───────────────────────────────────────────────────────────────────────────────
+3.14  SETTINGS  (single config document — admin editable)
+───────────────────────────────────────────────────────────────────────────────
+  shopName, logo, address, phone, email, website
+  taxRate                 default sales tax %  e.g. 8.25
+  defaultLaborRate        USD/hour e.g. 120
+  shopSuppliesFeePercent  e.g. 5 (% of labor, capped)
+  currency                "USD"
+  invoicePrefix, woPrefix, poPrefix
+  invoiceTerms            footer text / payment terms
+  businessHours           [{ day, open, close }]
+  bays                    number of service bays
+  stripePublicKey, stripeSecretKey (encrypted)
+  smtp / email settings   (for sending invoices)
+  twilio / sms settings   (for reminders) — optional
+
+───────────────────────────────────────────────────────────────────────────────
+3.15  NOTIFICATION  (in-app + email/sms triggers)
+───────────────────────────────────────────────────────────────────────────────
+  _id, recipient (User/Customer), type, title, body, link, isRead, createdAt
+  Triggers: new lead, appointment requested, estimate approved, low stock,
+            invoice paid, job completed, payment overdue.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  4. END-TO-END WORKFLOWS
+═══════════════════════════════════════════════════════════════════════════════
+
+───────────────────────────────────────────────────────────────────────────────
+WORKFLOW A — WEBSITE VISITOR BECOMES A PAYING CUSTOMER
+───────────────────────────────────────────────────────────────────────────────
+  1. Visitor lands on road-hustlers.com (public, no login).
+  2. Fills "Request a Quote / Book Service" form.
+       → POST /api/website/leads        creates LEAD (status=new)
+       → notification fires to advisors.
+  3. Advisor sees lead in ERP → Leads board → calls/emails customer.
+       → PATCH /api/erp/leads/:id  (status=contacted, notes)
+  4. Advisor books an appointment.
+       → POST /api/erp/appointments    (status=confirmed)
+       → optionally converts lead → Customer + Vehicle.
+  5. Customer arrives. Advisor opens a WORK ORDER (job card).
+       → POST /api/erp/work-orders     (status=estimate)
+  6. Technician inspects, adds diagnosis + labor + parts lines.
+       → PATCH /api/erp/work-orders/:id
+  7. System builds an ESTIMATE total. Advisor sends it.
+       → POST /api/erp/work-orders/:id/send-estimate  (email link to customer)
+  8. Customer approves (portal, email link, or verbally).
+       → POST /api/website/work-orders/:id/approve   (customer portal)
+         or POST /api/erp/work-orders/:id/approve     (advisor records approval)
+       → status = approved.
+  9. Tech clocks in, does the work, clocks out (time log).
+       → POST /api/erp/work-orders/:id/clock-in / clock-out
+       → status = in_progress → completed.
+ 10. Parts used are deducted from inventory automatically.
+ 11. Advisor generates INVOICE from the work order.
+       → POST /api/erp/work-orders/:id/invoice   creates INVOICE + PDF.
+ 12. Invoice emailed to customer.
+       → POST /api/erp/invoices/:id/send
+ 13. Customer pays (in shop or online via Stripe).
+       → POST /api/erp/invoices/:id/payments        (in-shop)
+       → POST /api/website/invoices/:id/pay          (online Stripe)
+       → status = paid. totalSpent updated. job closed.
+
+───────────────────────────────────────────────────────────────────────────────
+WORKFLOW B — INVENTORY / PARTS LIFECYCLE
+───────────────────────────────────────────────────────────────────────────────
+  1. Admin/manager adds parts to catalog with cost, sell price, stock, reorder level.
+  2. When stock < reorderLevel → low-stock notification + appears on dashboard.
+  3. Manager creates a PURCHASE ORDER to a supplier.
+       → POST /api/erp/purchase-orders (status=draft → ordered)
+  4. Parts arrive → mark received.
+       → POST /api/erp/purchase-orders/:id/receive
+       → stock auto-incremented.
+  5. Parts consumed by work orders auto-decrement stock on invoice.
+  6. Inventory valuation + low-stock report available in analytics.
+
+───────────────────────────────────────────────────────────────────────────────
+WORKFLOW C — CUSTOMER PORTAL (logged-in website area)
+───────────────────────────────────────────────────────────────────────────────
+  - Register / login with email + password.
+  - View profile + edit contact info.
+  - See "My Vehicles" with full service history.
+  - See estimates awaiting approval → approve/decline.
+  - See invoices → download PDF → pay online.
+  - Book a new appointment.
+  - Message/notes thread with the shop (optional phase 2).
+
+───────────────────────────────────────────────────────────────────────────────
+WORKFLOW D — STAFF / TECHNICIAN DAY
+───────────────────────────────────────────────────────────────────────────────
+  - Login to ERP (role=staff).
+  - See "My Jobs" (work orders assigned to me) for today.
+  - Open a job → add diagnosis, labor hours, parts used, photos.
+  - Clock in / clock out per job (time tracking → payroll + productivity).
+  - Mark job completed → advisor takes over for invoicing.
+
+───────────────────────────────────────────────────────────────────────────────
+WORKFLOW E — OWNER / ANALYTICS
+───────────────────────────────────────────────────────────────────────────────
+  Dashboard KPIs (all USD):
+    - Revenue today / week / month / YTD
+    - Open work orders by status
+    - Outstanding (unpaid) invoices total
+    - Jobs completed count + average ticket size
+    - Parts profit (sell - cost) & labor revenue split
+    - Technician productivity (billable hours, jobs done)
+    - Lead funnel (new → converted) & conversion rate
+    - Low-stock parts list
+    - Top services & top-spending customers
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  5. API ENDPOINT MAP  (what the frontend will call)
+═══════════════════════════════════════════════════════════════════════════════
+
+Convention:  /api/<area>/<resource>
+  area = auth | website | erp
+  All list endpoints support ?page, ?limit, ?search, ?sort, and relevant filters.
+  All responses: { success: true/false, data/message, ...pagination }
+
+────────────────────────── AUTH (shared) ──────────────────────────
+  POST   /api/auth/register            customer self-signup (website)
+  POST   /api/auth/login               email+password → {accessToken, refreshToken, user}
+  POST   /api/auth/refresh-token
+  POST   /api/auth/logout
+  POST   /api/auth/forgot-password
+  POST   /api/auth/reset-password
+  GET    /api/auth/me                  current user/customer profile
+
+────────────────────────── WEBSITE (public + customer) ──────────────────────────
+  Public:
+  POST   /api/website/leads            submit quote/contact form
+  POST   /api/website/appointments     request appointment (guest or customer)
+  GET    /api/website/services         public service list (for pricing page)
+  GET    /api/website/settings         shop name/hours/address/phone (public)
+
+  Customer (auth, role=customer):
+  GET    /api/website/profile
+  PUT    /api/website/profile
+  GET    /api/website/vehicles                 my vehicles
+  POST   /api/website/vehicles                 add my vehicle
+  GET    /api/website/vehicles/:id/history     service history
+  GET    /api/website/work-orders              my estimates/jobs
+  GET    /api/website/work-orders/:id
+  POST   /api/website/work-orders/:id/approve  approve estimate
+  POST   /api/website/work-orders/:id/decline
+  GET    /api/website/invoices                 my invoices
+  GET    /api/website/invoices/:id
+  GET    /api/website/invoices/:id/pdf
+  POST   /api/website/invoices/:id/pay         online payment (Stripe)
+  GET    /api/website/appointments             my appointments
+  POST   /api/website/appointments             book
+  POST   /api/website/appointments/:id/cancel
+
+────────────────────────── ERP (staff/manager/admin) ──────────────────────────
+  Dashboard:
+  GET    /api/erp/dashboard            KPI summary (role-scoped)
+
+  Leads:
+  GET    /api/erp/leads                ?status=&assignedTo=&search=
+  POST   /api/erp/leads
+  GET    /api/erp/leads/:id
+  PATCH  /api/erp/leads/:id            update status/notes/assign
+  POST   /api/erp/leads/:id/convert    → creates Customer (+Vehicle)
+
+  Customers (CRM):
+  GET    /api/erp/customers
+  POST   /api/erp/customers
+  GET    /api/erp/customers/:id        profile + vehicles + history + balance
+  PUT    /api/erp/customers/:id
+  DELETE /api/erp/customers/:id        (admin)
+
+  Vehicles:
+  GET    /api/erp/vehicles             ?customer=
+  POST   /api/erp/vehicles
+  GET    /api/erp/vehicles/:id
+  PUT    /api/erp/vehicles/:id
+  GET    /api/erp/vehicles/:id/history
+
+  Appointments / Scheduler:
+  GET    /api/erp/appointments         ?date=&status=&tech=  (calendar view)
+  POST   /api/erp/appointments
+  PATCH  /api/erp/appointments/:id     confirm/assign/reschedule/status
+  POST   /api/erp/appointments/:id/start-work  → creates Work Order
+
+  Work Orders (job cards):
+  GET    /api/erp/work-orders          ?status=&tech=&customer=&search=
+  POST   /api/erp/work-orders
+  GET    /api/erp/work-orders/:id
+  PATCH  /api/erp/work-orders/:id      edit labor/parts/diagnosis/status
+  POST   /api/erp/work-orders/:id/labor          add labor line
+  POST   /api/erp/work-orders/:id/parts          add part line (checks stock)
+  DELETE /api/erp/work-orders/:id/line/:lineId
+  POST   /api/erp/work-orders/:id/photos         upload before/after
+  POST   /api/erp/work-orders/:id/send-estimate  email estimate
+  POST   /api/erp/work-orders/:id/approve        record approval
+  POST   /api/erp/work-orders/:id/clock-in       tech time start
+  POST   /api/erp/work-orders/:id/clock-out      tech time stop
+  POST   /api/erp/work-orders/:id/invoice        generate Invoice + PDF
+
+  Services / Labor catalog:
+  GET    /api/erp/services
+  POST   /api/erp/services
+  PUT    /api/erp/services/:id
+  DELETE /api/erp/services/:id
+
+  Parts / Inventory:
+  GET    /api/erp/parts                ?lowStock=true&category=&search=
+  POST   /api/erp/parts
+  PUT    /api/erp/parts/:id
+  PATCH  /api/erp/parts/:id/adjust     manual stock adjust (+/-, reason)
+  DELETE /api/erp/parts/:id
+  GET    /api/erp/parts/low-stock      reorder list
+
+  Suppliers:
+  GET    /api/erp/suppliers
+  POST   /api/erp/suppliers
+  PUT    /api/erp/suppliers/:id
+
+  Purchase Orders:
+  GET    /api/erp/purchase-orders      ?status=&supplier=
+  POST   /api/erp/purchase-orders
+  GET    /api/erp/purchase-orders/:id
+  PATCH  /api/erp/purchase-orders/:id  (status: ordered)
+  POST   /api/erp/purchase-orders/:id/receive   → stock in
+
+  Invoices:
+  GET    /api/erp/invoices             ?status=&customer=&overdue=true
+  GET    /api/erp/invoices/:id
+  GET    /api/erp/invoices/:id/pdf
+  POST   /api/erp/invoices/:id/send    email to customer
+  POST   /api/erp/invoices/:id/payments  record a payment
+  POST   /api/erp/invoices/:id/void    (admin/manager)
+
+  Payments:
+  GET    /api/erp/payments             ?from=&to=&method=  (daybook)
+
+  Staff (admin/manager):
+  GET    /api/erp/staff
+  POST   /api/erp/staff                create technician/advisor
+  PUT    /api/erp/staff/:id            role/rate/specialties/active
+  GET    /api/erp/staff/:id/timesheet  ?from=&to=  hours + productivity
+
+  Analytics / Reports:
+  GET    /api/erp/reports/revenue      ?from=&to=&groupBy=day|week|month
+  GET    /api/erp/reports/inventory    valuation + low stock
+  GET    /api/erp/reports/technicians  productivity & billable hours
+  GET    /api/erp/reports/leads        funnel + conversion
+  GET    /api/erp/reports/customers    top spenders, retention
+  GET    /api/erp/reports/sales-tax    tax collected (for filing)
+
+  Settings (admin):
+  GET    /api/erp/settings
+  PUT    /api/erp/settings
+
+  Notifications:
+  GET    /api/erp/notifications
+  PATCH  /api/erp/notifications/:id/read
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  6. MONEY / CALCULATION RULES (USD)
+═══════════════════════════════════════════════════════════════════════════════
+  laborLineTotal   = hours × rate            (or flatPrice if set)
+  partLineTotal    = quantity × sellPrice
+  laborSubtotal    = Σ laborLineTotals
+  partsSubtotal    = Σ partLineTotals
+  subtotal         = laborSubtotal + partsSubtotal
+  discountAmount   = fixed $ or (subtotal × discount%)
+  taxableBase      = subtotal − discountAmount      (parts usually taxable;
+                                                     labor taxability varies by
+                                                     state — configurable)
+  taxAmount        = taxableBase × (taxRate/100)
+  shopSuppliesFee  = min(laborSubtotal × fee%, cap)
+  grandTotal       = subtotal − discountAmount + taxAmount + shopSuppliesFee
+  amountDue        = grandTotal − amountPaid
+
+  Store cents internally; round only at display.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  7. RECOMMENDED TECH STACK
+═══════════════════════════════════════════════════════════════════════════════
+  Runtime:    Node.js (Express)
+  DB:         MongoDB (Mongoose)
+  Auth:       JWT (access + refresh), bcrypt password hashing
+  Files:      Multer + local /uploads (or S3) for photos & invoice PDFs
+  PDF:        pdfkit for invoices/estimates
+  Payments:   Stripe (PaymentIntents) for online customer payments
+  Email:      SMTP / SendGrid for invoices, estimates, reminders
+  SMS:        Twilio (optional) for appointment reminders
+  Validation: Joi on every input
+  Security:   helmet, rate-limit on auth, role middleware, input sanitization
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  8. BUILD ORDER (suggested phases)
+═══════════════════════════════════════════════════════════════════════════════
+  PHASE 1 (foundation)
+    - Project skeleton, env, DB connect, error handler
+    - Auth (register/login/refresh/me) + role middleware
+    - Settings + seed admin (info@road-hustlers.com)
+    - Customers + Vehicles CRUD
+  PHASE 2 (operations)
+    - Leads + website lead intake
+    - Appointments + scheduler
+    - Services catalog + Parts inventory + Suppliers
+    - Work Orders (full job card with labor/parts/status/time log)
+  PHASE 3 (money)
+    - Invoices (generate from WO) + PDF
+    - Payments (in-shop) + Stripe online pay
+    - Purchase Orders + stock receive
+  PHASE 4 (intelligence)
+    - Dashboard KPIs + all reports
+    - Notifications + email sending
+    - Customer portal endpoints
+  PHASE 5 (polish)
+    - SMS reminders, exports (CSV), audit log, refunds/voids
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  END OF WORKFLOW — this document fully specifies the Road Hustlers backend.
+  Next step: scaffold the Express project and implement Phase 1.
+═══════════════════════════════════════════════════════════════════════════════

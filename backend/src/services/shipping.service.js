@@ -117,13 +117,19 @@ async function trackOrder(orderId) {
   }
 
   // Map courier status to order status
+  let _justDelivered = false;
   if (result.delivered && order.status !== "delivered") {
     order.status = "delivered";
     order.deliveryStatus = "delivered";
     order.deliveredAt = new Date();
+    _justDelivered = true;
   }
 
   await order.save();
+
+  if (_justDelivered) {
+    require("./magicclub.service").onOrderDelivered(order).catch(() => {});
+  }
   return { order, tracking: result };
 }
 
@@ -208,19 +214,29 @@ async function processWebhook(provider, payload) {
 
   // Map to order status
   const statusLower = status.toLowerCase();
+  let _justDelivered = false, _justReturned = false;
   if (delivered && order.status !== "delivered") {
     order.status = "delivered";
     order.deliveryStatus = "delivered";
     order.deliveredAt = new Date();
+    _justDelivered = true;
   } else if (statusLower.includes("in transit") || statusLower.includes("on the way") || statusLower.includes("out for delivery")) {
     if (order.deliveryStatus !== "delivered") {
       order.deliveryStatus = "on_the_way";
     }
   } else if (statusLower.includes("rto") || statusLower.includes("returned")) {
+    if (order.status !== "returned") _justReturned = true;
     order.status = "returned";
   }
 
   await order.save();
+
+  if (_justDelivered) {
+    require("./magicclub.service").onOrderDelivered(order).catch(() => {});
+  }
+  if (_justReturned) {
+    require("./magicclub.service").onOrderCancelled(order).catch(() => {});
+  }
 
   // Send push notification for shipping updates
   if (order.user) {

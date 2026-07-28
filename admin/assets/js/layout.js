@@ -63,6 +63,7 @@ function buildLayout(activePageId) {
       { id: "cj-products", label: "CJ Dropshipping", icon: "🌐", href: basePath + "/pages/cj-products/cj-products.html" },
       { id: "offers", label: "Offers", icon: "🏷️", href: basePath + "/pages/offers/offers.html" },
       { id: "coupons", label: "Coupons", icon: "🎟️", href: basePath + "/pages/coupons/coupons.html" },
+      { id: "coupon-market", label: "Coupon Marketplace", icon: "🎫", href: basePath + "/pages/coupon-market/coupon-market.html" },
       { id: "banners", label: "Banners", icon: "🖼️", href: basePath + "/pages/banners/banners.html" },
     ]},
     { group: "Business", items: [
@@ -82,13 +83,14 @@ function buildLayout(activePageId) {
       { id: "tickets", label: "Support Tickets", icon: "🎫", href: basePath + "/pages/tickets/tickets.html" },
       { id: "subscriptions", label: "Subscriptions", icon: "⭐", href: basePath + "/pages/subscriptions/subscriptions.html" },
       { id: "notifications", label: "Notifications", icon: "🔔", href: basePath + "/pages/notifications/notifications.html" },
+      { id: "magic-pools", label: "Magic Pools", icon: "🎡", href: basePath + "/pages/magic-pools/magic-pools.html" },
+      { id: "investors", label: "Investors", icon: "💼", href: basePath + "/pages/investors/investors.html" },
     ]},
     { group: "System", items: [
       { id: "reports", label: "Reports", icon: "📈", href: basePath + "/pages/reports/reports.html" },
       { id: "ddgo-settings", label: "Quick Commerce Settings", icon: "🟢", href: basePath + "/pages/ddgo-settings/ddgo-settings.html" },
       { id: "settings", label: "Settings", icon: "⚙️", href: basePath + "/pages/settings/settings.html" },
-      { id: "home-sections", label: "Home Sections", icon: "🏠", href: basePath + "/pages/home-sections/home-sections.html" },
-      { id: "desktop-home", label: "Desktop Home", icon: "🖥️", href: basePath + "/pages/desktop-home/desktop-home.html" },
+      { id: "home-sections", label: "Home Layouts", icon: "🏠", href: basePath + "/pages/home-sections/home-sections.html" },
       { id: "app-customization", label: "App Customization", icon: "🎨", href: basePath + "/pages/app-customization/app-customization.html" },
     ]},
   ];
@@ -121,8 +123,28 @@ function buildLayout(activePageId) {
   const logoutBtn = document.getElementById("btn-logout");
   if (logoutBtn) logoutBtn.addEventListener("click", logout);
 
+  // Region switcher (Phase 2 — IN / US storefront)
+  const regionSel = document.getElementById("region-switcher");
+  if (regionSel) {
+    regionSel.value = getRegion();
+    regionSel.addEventListener("change", function () {
+      setRegion(this.value);
+      // Reload to refresh region-scoped data on the current page
+      window.location.reload();
+    });
+  }
+
   // Apply admin sidebar branding (logo / brand name from settings)
   applyAdminBranding();
+}
+
+// ---- Region helpers (Phase 2) ----
+function getRegion() {
+  return localStorage.getItem("dd_region") || "IN";
+}
+function setRegion(r) {
+  if (r !== "IN" && r !== "US") r = "IN";
+  localStorage.setItem("dd_region", r);
 }
 
 // Fetch admin branding (admin_logo_url, admin_brand_name) once per session
@@ -206,8 +228,13 @@ function fmtDateTime(dateStr) {
 }
 
 // Currency format
-function fmtCurrency(n) {
-  if (n == null) return "₹0";
+// Currency-aware: pass an order's currency ("USD"/"INR") to format with $ or ₹.
+// Defaults to ₹ (INR) when not given, so existing callers stay unchanged.
+function fmtCurrency(n, currency) {
+  if (n == null) n = 0;
+  if (currency === "USD") {
+    return "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
   return "₹" + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 }
 
@@ -246,6 +273,10 @@ function pageShell(pageId) {
           <span class="topbar-title" id="topbar-title">${pageId}</span>
         </div>
         <div class="topbar-right">
+          <select id="region-switcher" class="region-switcher" title="Storefront region">
+            <option value="IN">🇮🇳 India (INR)</option>
+            <option value="US">🇺🇸 USA (USD)</option>
+          </select>
           <span class="admin-badge" id="admin-name">Admin</span>
           <button class="btn-logout" id="btn-logout">Logout</button>
         </div>

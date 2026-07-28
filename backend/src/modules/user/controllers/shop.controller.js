@@ -2,6 +2,7 @@ const PartnerKyc = require("../../../models/PartnerKyc");
 const Product = require("../../../models/Product");
 const Review = require("../../../models/Review");
 const { getSetting, calcDistanceKm } = require("../../../services/fee.service");
+const { regionFilter } = require("../../../utils/region");
 
 // GET /user/shops — nearby shops within radius (default 20km)
 // Query: lat, lng (required for geo), category, search, page, limit
@@ -187,7 +188,7 @@ async function getShop(req, res) {
 async function getShopProducts(req, res) {
   const { page = 1, limit = 20, category, subCategory, search } = req.query;
   const filter = {
-    partner: req.params.id, isActive: true, approvalStatus: "approved", stock: { $gt: 0 },
+    partner: req.params.id, isActive: true, approvalStatus: "approved", stock: { $gt: 0 }, ...regionFilter(req),
   };
   if (category) filter.category = category;
   if (subCategory) filter.subCategory = subCategory;

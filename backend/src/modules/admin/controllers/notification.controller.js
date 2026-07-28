@@ -1,6 +1,31 @@
 const Notification = require("../../../models/Notification");
 const User = require("../../../models/User");
 
+let _admin = null;
+function _getAdmin() {
+  if (_admin) return _admin;
+  try {
+    const admin = require("firebase-admin");
+    if (!admin.apps.length) {
+      const path = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+      const json = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+      if (path) {
+        admin.initializeApp({ credential: admin.credential.cert(require(path)) });
+      } else if (json) {
+        admin.initializeApp({ credential: admin.credential.cert(JSON.parse(json)) });
+      } else {
+        console.warn("[FCM] No service account configured — push disabled.");
+        return null;
+      }
+    }
+    _admin = admin;
+  } catch (e) {
+    console.error("[FCM] Init error:", e.message);
+    return null;
+  }
+  return _admin;
+}
+
 // POST /admin/notifications
 async function createNotification(req, res) {
   const { title, body, image, type, targetUser, data, scheduledAt } = req.body;
@@ -54,15 +79,35 @@ async function sendNotification(req, res) {
     tokens = users.map((u) => u.fcmToken);
   }
 
-  // TODO: Integrate Firebase Admin SDK to send push notifications
-  // const admin = require('firebase-admin');
-  // await admin.messaging().sendEachForMulticast({ tokens, notification: { title, body }, data });
+  let sent = 0;
+  if (tokens.length > 0) {
+    const admin = _getAdmin();
+    if (admin) {
+      try {
+        const msg = {
+          tokens,
+          notification: { title: notification.title, body: notification.body },
+          ...(notification.image && { android: { notification: { imageUrl: notification.image } } }),
+        };
+        const result = await admin.messaging().sendEachForMulticast(msg);
+        sent = result.successCount;
+        // Remove invalid tokens
+        result.responses.forEach((r, i) => {
+          if (!r.success && r.error?.code === "messaging/registration-token-not-registered") {
+            User.findOneAndUpdate({ fcmToken: tokens[i] }, { fcmToken: null }).catch(() => {});
+          }
+        });
+      } catch (e) {
+        console.error("[FCM] Send error:", e.message);
+      }
+    }
+  }
 
   notification.status = "sent";
   notification.sentAt = new Date();
   await notification.save();
 
-  return res.json({ success: true, message: `Notification queued for ${tokens.length} devices`, notification });
+  return res.json({ success: true, message: `Notification sent to ${sent}/${tokens.length} devices`, notification });
 }
 
 // DELETE /admin/notifications/:id

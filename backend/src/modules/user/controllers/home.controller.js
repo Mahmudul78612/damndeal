@@ -3,13 +3,16 @@ const Banner = require("../../../models/Banner");
 const Category = require("../../../models/Category");
 const SubCategory = require("../../../models/SubCategory");
 const Product = require("../../../models/Product");
+const { regionFilter } = require("../../../utils/region");
 
 // GET /user/home — app home page content
-async function getHomePage(_req, res) {
+async function getHomePage(req, res) {
+  const _req = req;
   const platform = _req.query.platform; // 'ddgo' or 'damndeal'
+  const regionF = regionFilter(req);
 
   // Filter sections by platform: show sections matching the requested platform, or sections without a platform set
-  const sectionFilter = { isActive: true };
+  const sectionFilter = { isActive: true, ...regionF };
   if (platform) {
     sectionFilter.$or = [{ platform }, { platform: { $exists: false } }, { platform: null }];
   }
@@ -33,6 +36,7 @@ async function getHomePage(_req, res) {
           const filter = {
             isActive: true,
             placement: section.data?.placement || "home_top",
+            ...regionF,
             $and: [
               { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
               { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
@@ -44,10 +48,10 @@ async function getHomePage(_req, res) {
         break;
       }
       case "category_grid":
-        out.items = await Category.find({ isActive: true }).sort({ sortOrder: 1 });
+        out.items = await Category.find({ isActive: true, ...regionF }).sort({ sortOrder: 1 });
         break;
       case "popular_products": {
-        const popFilter = { isActive: true, approvalStatus: "approved", stock: { $gt: 0 } };
+        const popFilter = { isActive: true, approvalStatus: "approved", stock: { $gt: 0 }, ...regionF };
         if (section.data?.categoryId) popFilter.category = section.data.categoryId;
         out.items = await Product.find(popFilter)
           .select("-costPrice -approvalStatus -approvedBy -approvedAt -approvalNote")
@@ -61,7 +65,7 @@ async function getHomePage(_req, res) {
         break;
       }
       case "deal_of_day": {
-        const dealFilter = { isActive: true, approvalStatus: "approved", stock: { $gt: 0 } };
+        const dealFilter = { isActive: true, approvalStatus: "approved", stock: { $gt: 0 }, ...regionF };
         if (section.data?.categoryId) dealFilter.category = section.data.categoryId;
         out.items = await Product.find(dealFilter)
           .select("-costPrice -approvalStatus -approvedBy -approvedAt -approvalNote")
@@ -79,7 +83,7 @@ async function getHomePage(_req, res) {
         if (customBanners.length) {
           out.items = customBanners;
         } else {
-          out.items = await Banner.find({ isActive: true, placement: section.data?.placement || "home_middle" })
+          out.items = await Banner.find({ isActive: true, placement: section.data?.placement || "home_middle", ...regionF })
             .sort({ sortOrder: 1 });
         }
         break;
@@ -87,7 +91,7 @@ async function getHomePage(_req, res) {
       case "product_grid": {
         const ids = section.data?.productIds || [];
         if (ids.length) {
-          const products = await Product.find({ _id: { $in: ids }, isActive: true, approvalStatus: "approved" })
+          const products = await Product.find({ _id: { $in: ids }, isActive: true, approvalStatus: "approved", ...regionF })
             .select("-costPrice -approvalStatus -approvedBy -approvedAt -approvalNote")
             .populate("category", "name")
             .populate("partner", "name");
@@ -104,7 +108,7 @@ async function getHomePage(_req, res) {
         const limit = section.data?.limit || 10;
         if (catId) {
           const cat = await Category.findById(catId).select("name slug icon platform");
-          out.items = await Product.find({ category: catId, isActive: true, approvalStatus: "approved", stock: { $gt: 0 } })
+          out.items = await Product.find({ category: catId, isActive: true, approvalStatus: "approved", stock: { $gt: 0 }, ...regionF })
             .select("-costPrice -approvalStatus -approvedBy -approvedAt -approvalNote")
             .populate("category", "name")
             .populate("partner", "name")
@@ -123,7 +127,7 @@ async function getHomePage(_req, res) {
         const limit = section.data?.limit || 10;
         const sortBy = section.data?.sortBy || "createdAt";
         const sortDir = section.data?.sortDir === "asc" ? 1 : -1;
-        const filter = { isActive: true, approvalStatus: "approved", stock: { $gt: 0 } };
+        const filter = { isActive: true, approvalStatus: "approved", stock: { $gt: 0 }, ...regionF };
         if (catId) filter.category = catId;
         out.items = await Product.find(filter)
           .select("-costPrice -approvalStatus -approvedBy -approvedAt -approvalNote")
@@ -158,7 +162,7 @@ async function getHomePage(_req, res) {
   }
 
   // Auto-inject square banners if any exist for this platform
-  const sqFilter = { isActive: true, placement: "home_square" };
+  const sqFilter = { isActive: true, placement: "home_square", ...regionF };
   if (platform) sqFilter.platform = platform;
   const squareBanners = await Banner.find(sqFilter).sort({ sortOrder: 1 }).limit(10);
   if (squareBanners.length) {
@@ -182,7 +186,7 @@ async function getBannerProducts(req, res) {
   const ids = banner.productIds || [];
   if (!ids.length) return res.json({ success: true, banner: { title: banner.title, image: banner.image }, products: [] });
 
-  const products = await Product.find({ _id: { $in: ids }, isActive: true, approvalStatus: "approved" })
+  const products = await Product.find({ _id: { $in: ids }, isActive: true, approvalStatus: "approved", ...regionFilter(req) })
     .select("-costPrice -approvalStatus -approvedBy -approvedAt -approvalNote")
     .populate("category", "name")
     .populate("partner", "name");

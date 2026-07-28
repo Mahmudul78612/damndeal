@@ -1,8 +1,12 @@
 const HomeSection = require("../../../models/HomeSection");
+const { parseRegionsInput, adminListRegionFilter } = require("../../../utils/region");
 
 // GET /admin/home-sections
-async function listSections(_req, res) {
-  const sections = await HomeSection.find().sort({ sortOrder: 1 });
+async function listSections(req, res) {
+  const filter = {};
+  const regionF = adminListRegionFilter(req);
+  if (regionF) Object.assign(filter, regionF);
+  const sections = await HomeSection.find(filter).sort({ sortOrder: 1 });
   return res.json({ success: true, sections });
 }
 
@@ -11,15 +15,19 @@ async function createSection(req, res) {
   const { title, type, data, sortOrder, platform } = req.body;
   if (!title || !type) return res.status(400).json({ success: false, message: "title and type required" });
 
+  const regions = parseRegionsInput(req.body.regions) || [(req.region || 'IN')];
   const section = await HomeSection.create({
-    title, type, data: data || {}, sortOrder: sortOrder || 0, platform: platform || "ddgo",
+    title, type, data: data || {}, sortOrder: sortOrder || 0, platform: platform || "ddgo", regions,
   });
   return res.status(201).json({ success: true, section });
 }
 
 // PUT /admin/home-sections/:id
 async function updateSection(req, res) {
-  const section = await HomeSection.findByIdAndUpdate(req.params.id, req.body, { new: true });
+  const updates = { ...req.body };
+  const regions = parseRegionsInput(req.body.regions);
+  if (regions) updates.regions = regions; else delete updates.regions;
+  const section = await HomeSection.findByIdAndUpdate(req.params.id, updates, { new: true });
   if (!section) return res.status(404).json({ success: false, message: "Section not found" });
   return res.json({ success: true, section });
 }
@@ -75,11 +83,13 @@ async function savePromoSection(req, res) {
     });
 
     const data = { bgImage, bgColor: bgColor || null, cards, cardPosition: cardPosition || "bottom" };
+    const regions = parseRegionsInput(req.body.regions) || [(req.region || 'IN')];
     const payload = {
       title, type: "promo_section", data,
       platform: platform || "damndeal",
       sortOrder: parseInt(sortOrder) || 0,
       isActive: isActive === "true" || isActive === true,
+      regions,
     };
 
     let section;
@@ -150,6 +160,7 @@ async function saveBannerSection(req, res) {
       platform: platform || "damndeal",
       sortOrder: parseInt(sortOrder, 10) || 0,
       isActive: isActive === "true" || isActive === true,
+      regions: parseRegionsInput(req.body.regions) || [(req.region || 'IN')],
     };
 
     let section;

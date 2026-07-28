@@ -13,6 +13,18 @@ async function createProduct(req, res) {
     if (typeof body.specifications === "string") try { body.specifications = JSON.parse(body.specifications); } catch (_) { body.specifications = []; }
     if (typeof body.variants === "string") try { body.variants = JSON.parse(body.variants); } catch (_) { body.variants = []; }
 
+    // Phase 2: regions + per-region prices
+    if (typeof body.regions === "string") {
+      try { body.regions = JSON.parse(body.regions); }
+      catch (_) { body.regions = body.regions.split(",").map((r) => r.trim()).filter(Boolean); }
+    }
+    if (!Array.isArray(body.regions) || body.regions.length === 0) body.regions = ["IN"];
+    body.regions = body.regions.filter((r) => r === "IN" || r === "US");
+    if (body.regions.length === 0) body.regions = ["IN"];
+    if (typeof body.prices === "string") {
+      try { body.prices = JSON.parse(body.prices); } catch (_) { delete body.prices; }
+    }
+
     // deliveryFee: empty string → null (use global rule). Otherwise coerce to number.
     if (body.deliveryFee === "" || body.deliveryFee === undefined) body.deliveryFee = null;
     else if (body.deliveryFee !== null) body.deliveryFee = Number(body.deliveryFee);
@@ -59,12 +71,15 @@ async function createProduct(req, res) {
 // GET /admin/products — list with platform filter
 async function listProducts(req, res) {
   try {
-    const { page = 1, limit = 20, approvalStatus, partner, category, platform, search } = req.query;
+    const { page = 1, limit = 20, approvalStatus, partner, category, platform, region, search } = req.query;
     const filter = {};
     if (approvalStatus) filter.approvalStatus = approvalStatus;
     if (partner) filter.partner = partner;
     if (category) filter.category = category;
     if (platform) filter.platform = platform;
+    // Phase 2: region filter. 'all' = no filter; otherwise match the array field.
+    const regionParam = (region || req.region || "IN").toString();
+    if (regionParam !== "all") filter.regions = regionParam;
     if (search) filter.$text = { $search: search };
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
@@ -137,6 +152,19 @@ async function updateProduct(req, res) {
     if (typeof updates.highlights === "string") updates.highlights = updates.highlights.split(",").map((t) => t.trim()).filter(Boolean);
     if (typeof updates.specifications === "string") try { updates.specifications = JSON.parse(updates.specifications); } catch (_) { updates.specifications = []; }
     if (typeof updates.variants === "string") try { updates.variants = JSON.parse(updates.variants); } catch (_) { updates.variants = []; }
+
+    // Phase 2: regions + per-region prices on update
+    if (typeof updates.regions === "string") {
+      try { updates.regions = JSON.parse(updates.regions); }
+      catch (_) { updates.regions = updates.regions.split(",").map((r) => r.trim()).filter(Boolean); }
+    }
+    if (Array.isArray(updates.regions)) {
+      updates.regions = updates.regions.filter((r) => r === "IN" || r === "US");
+      if (updates.regions.length === 0) updates.regions = ["IN"];
+    }
+    if (typeof updates.prices === "string") {
+      try { updates.prices = JSON.parse(updates.prices); } catch (_) { delete updates.prices; }
+    }
 
     // deliveryFee: empty string → null (use global rule). Otherwise coerce to number.
     if (updates.deliveryFee === "" || updates.deliveryFee === undefined) {

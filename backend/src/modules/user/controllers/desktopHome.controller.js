@@ -2,12 +2,14 @@ const DesktopHomeSection = require("../../../models/DesktopHomeSection");
 const Banner = require("../../../models/Banner");
 const Category = require("../../../models/Category");
 const Product = require("../../../models/Product");
+const { regionFilter } = require("../../../utils/region");
 
 // GET /user/desktop-home — desktop home page content
 async function getDesktopHome(req, res) {
   const platform = req.query.platform || "damndeal";
+  const regionF = regionFilter(req);
 
-  const sectionFilter = { isActive: true };
+  const sectionFilter = { isActive: true, ...regionF };
   sectionFilter.$or = [{ platform }, { platform: { $exists: false } }, { platform: null }];
 
   const sections = await DesktopHomeSection.find(sectionFilter).sort({ sortOrder: 1 });
@@ -29,7 +31,7 @@ async function getDesktopHome(req, res) {
           // Fallback to Banner model for legacy sections
           const now = new Date();
           const filter = {
-            isActive: true, placement: "home_top",
+            isActive: true, placement: "home_top", ...regionF,
             $and: [
               { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
               { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
@@ -55,7 +57,7 @@ async function getDesktopHome(req, res) {
         const limit = section.data?.limit || 12;
         const cols = section.data?.columns || 5;
         if (catId || subCatId) {
-          const filter = { isActive: true, approvalStatus: "approved", stock: { $gt: 0 } };
+          const filter = { isActive: true, approvalStatus: "approved", stock: { $gt: 0 }, ...regionF };
           if (catId) filter.category = catId;
           if (subCatId) filter.subCategory = subCatId;
           const cat = catId ? await Category.findById(catId).select("name slug icon") : null;
@@ -75,13 +77,13 @@ async function getDesktopHome(req, res) {
         const catId = section.data?.categoryId;
         const subCatId = section.data?.subCategoryId;
         const limit = section.data?.limit || 12;
-        const filter = { isActive: true, approvalStatus: "approved", stock: { $gt: 0 } };
+        const filter = { isActive: true, approvalStatus: "approved", stock: { $gt: 0 }, ...regionF };
         if (catId) filter.category = catId;
         if (subCatId) filter.subCategory = subCatId;
 
         if (section.data?.productIds?.length) {
           const products = await Product.find({
-            _id: { $in: section.data.productIds }, isActive: true, approvalStatus: "approved"
+            _id: { $in: section.data.productIds }, isActive: true, approvalStatus: "approved", ...regionF
           }).select(productSelect).populate("category", "name").populate("partner", "name");
           const map = Object.fromEntries(products.map(p => [p._id.toString(), p]));
           out.items = section.data.productIds.map(id => map[id]).filter(Boolean);
@@ -99,7 +101,7 @@ async function getDesktopHome(req, res) {
       }
 
       case "deal_strip": {
-        const filter = { isActive: true, approvalStatus: "approved", stock: { $gt: 0 } };
+        const filter = { isActive: true, approvalStatus: "approved", stock: { $gt: 0 }, ...regionF };
         if (section.data?.categoryId) filter.category = section.data.categoryId;
         if (section.data?.subCategoryId) filter.subCategory = section.data.subCategoryId;
         out.items = await Product.find(filter).select(productSelect)
@@ -116,10 +118,10 @@ async function getDesktopHome(req, res) {
       case "featured_categories": {
         const catIds = section.data?.categoryIds || [];
         if (catIds.length) {
-          out.items = await Category.find({ _id: { $in: catIds }, isActive: true })
+          out.items = await Category.find({ _id: { $in: catIds }, isActive: true, ...regionF })
             .select("name icon image slug");
         } else {
-          out.items = await Category.find({ isActive: true }).sort({ sortOrder: 1 }).limit(12);
+          out.items = await Category.find({ isActive: true, ...regionF }).sort({ sortOrder: 1 }).limit(12);
         }
         break;
       }

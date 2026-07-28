@@ -1,6 +1,6 @@
 const express = require("express");
 const { authenticate, authorize } = require("../../middleware/auth.middleware");
-const { uploadBanner, uploadCategoryImage, uploadCustomizationImage, uploadProductImages, uploadPromoImages, uploadSettingImage, uploadDesktopBanners, uploadHomeSectionBanners, uploadCsvFile } = require("../../middleware/upload.middleware");
+const { uploadBanner, uploadCategoryImage, uploadCustomizationImage, uploadProductImages, uploadPromoImages, uploadSettingImage, uploadDesktopBanners, uploadHomeSectionBanners, uploadMagicPoolImages, uploadCsvFile, optimizeImages } = require("../../middleware/upload.middleware");
 
 // Controllers
 const category = require("./controllers/category.controller");
@@ -135,8 +135,8 @@ router.delete("/app-customization/featured-card", settings.deleteFeaturedCard);
 // Home page arrangement
 router.get("/home-sections", homepage.listSections);
 router.post("/home-sections", homepage.createSection);
-router.post("/home-sections/promo", uploadPromoImages, homepage.savePromoSection);
-router.post("/home-sections/banner", uploadHomeSectionBanners, homepage.saveBannerSection);
+router.post("/home-sections/promo", uploadPromoImages, optimizeImages(1600), homepage.savePromoSection);
+router.post("/home-sections/banner", uploadHomeSectionBanners, optimizeImages(1600), homepage.saveBannerSection);
 router.put("/home-sections/reorder", homepage.reorderSections);
 router.put("/home-sections/:id", homepage.updateSection);
 router.delete("/home-sections/:id", homepage.deleteSection);
@@ -145,10 +145,10 @@ router.delete("/home-sections/:id", homepage.deleteSection);
 const desktopHome = require("./controllers/desktopHome.controller");
 router.get("/desktop-home-sections", desktopHome.listSections);
 router.post("/desktop-home-sections", desktopHome.createSection);
-router.post("/desktop-home-sections/with-images", uploadDesktopBanners, desktopHome.createSectionWithImages);
+router.post("/desktop-home-sections/with-images", uploadDesktopBanners, optimizeImages(1600), desktopHome.createSectionWithImages);
 router.put("/desktop-home-sections/reorder", desktopHome.reorderSections);
 router.put("/desktop-home-sections/:id", desktopHome.updateSection);
-router.put("/desktop-home-sections/:id/with-images", uploadDesktopBanners, desktopHome.updateSectionWithImages);
+router.put("/desktop-home-sections/:id/with-images", uploadDesktopBanners, optimizeImages(1600), desktopHome.updateSectionWithImages);
 router.delete("/desktop-home-sections/:id", desktopHome.deleteSection);
 
 // Coupons
@@ -209,5 +209,25 @@ router.delete("/cj/imported/:id", cj.deleteImportedProduct);
 router.post("/cj/sync/:id", cj.syncCJProduct);
 router.get("/cj/order/:cjOrderId", cj.getCJOrder);
 router.get("/cj/freight", cj.getCJFreight);
+
+// ── Magic Pool (raffle / wheel of fortune) ────────────────────────────────
+const magicPool = require("./controllers/magicPool.controller");
+router.get("/magic-pools", magicPool.listPools);
+router.post("/magic-pools", magicPool.createPool);
+router.post("/magic-pools/upload-images", uploadMagicPoolImages, magicPool.uploadImages);
+router.get("/magic-pools/:id", magicPool.getPool);
+router.put("/magic-pools/:id", magicPool.updatePool);
+router.delete("/magic-pools/:id", magicPool.deletePool);
+router.post("/magic-pools/:id/draw", magicPool.drawPool);
+
+// ── Investor Portal ───────────────────────────────────────────────────────
+const investor = require("./controllers/investor.controller");
+router.get("/investors/analytics", investor.analytics);
+router.get("/investors", investor.listInvestors);
+router.get("/investors/:id", investor.getInvestor);
+router.put("/investors/:id/kyc", investor.updateKyc);
+router.post("/investors/:id/credit-points", investor.creditPoints);
+router.put("/investors/purchases/:purchaseId", investor.updatePurchase);
+router.put("/investors/withdrawals/:withdrawalId", investor.updateWithdrawal);
 
 module.exports = router;

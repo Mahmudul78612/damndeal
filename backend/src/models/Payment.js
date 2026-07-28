@@ -20,8 +20,13 @@ const paymentSchema = new mongoose.Schema(
     },
     method: {
       type: String,
-      enum: ["razorpay", "cod", "wallet", "razorpay+wallet"],
+      enum: ["razorpay", "cod", "wallet", "razorpay+wallet", "stripe"],
       required: true,
+    },
+    // Stripe Checkout session id (US payments)
+    stripeIntentId: {
+      type: String,
+      default: null,
     },
     // Razorpay fields
     razorpayOrderId: {
@@ -43,7 +48,7 @@ const paymentSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["created", "paid", "failed", "refunded"],
+      enum: ["created", "pending", "paid", "failed", "refunded"],
       default: "created",
     },
     refundId: {

@@ -17,6 +17,8 @@ router.use("/admin", adminRoutes);
 router.use("/partner", partnerRoutes);
 router.use("/user", userRoutes);
 router.use("/delivery", deliveryRoutes);
+router.use("/investor", require("../modules/investor/investor.routes"));
+router.use("/coupons", require("../modules/coupons/coupons.routes"));
 
 // Public — categories (for app/web/partner signup)
 router.get("/categories", getCategories);

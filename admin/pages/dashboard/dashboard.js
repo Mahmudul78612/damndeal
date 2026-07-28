@@ -13,6 +13,7 @@
     const o = d.orders || {};
     const c = d.counts || {};
     const p = d.pending || {};
+    const CUR = d.currency || 'INR'; // region currency ($ for US, ₹ for IN)
     content.innerHTML = `
       <div class="stats-grid">
         <div class="stat-card">
@@ -22,27 +23,27 @@
         </div>
         <div class="stat-card">
           <div class="label">Total Revenue</div>
-          <div class="value">${fmtCurrency(o.totalRevenue)}</div>
+          <div class="value">${fmtCurrency(o.totalRevenue, CUR)}</div>
           <div class="sub">All orders received</div>
         </div>
         <div class="stat-card">
           <div class="label">Realized Revenue</div>
-          <div class="value">${fmtCurrency(o.deliveredRevenue)}</div>
+          <div class="value">${fmtCurrency(o.deliveredRevenue, CUR)}</div>
           <div class="sub">After delivery</div>
         </div>
         <div class="stat-card">
           <div class="label">Pending Revenue</div>
-          <div class="value">${fmtCurrency(o.pendingRevenue)}</div>
+          <div class="value">${fmtCurrency(o.pendingRevenue, CUR)}</div>
           <div class="sub">Not yet delivered</div>
         </div>
         <div class="stat-card">
           <div class="label">Profit</div>
-          <div class="value">${fmtCurrency(o.totalProfit)}</div>
+          <div class="value">${fmtCurrency(o.totalProfit, CUR)}</div>
           <div class="sub">From delivered orders only</div>
         </div>
         <div class="stat-card">
           <div class="label">Avg Order Value</div>
-          <div class="value">${fmtCurrency(o.avgOrderValue)}</div>
+          <div class="value">${fmtCurrency(o.avgOrderValue, CUR)}</div>
         </div>
         <div class="stat-card">
           <div class="label">Users</div>
@@ -68,7 +69,7 @@
         <div class="stat-card">
           <div class="label">Pending Payouts</div>
           <div class="value">${(p.payouts?.count||0).toLocaleString('en-IN')}</div>
-          <div class="sub">${fmtCurrency(p.payouts?.total)}</div>
+          <div class="sub">${fmtCurrency(p.payouts?.total, CUR)}</div>
         </div>
       </div>
 
@@ -83,7 +84,7 @@
                   <td>${o.orderNumber || o._id?.slice(-6)}</td>
                   <td>${o.user?.name || o.user?.phone || '-'}</td>
                   <td>${o.partner?.name || o.partner?.phone || '-'}</td>
-                  <td>${fmtCurrency(o.grandTotal)}</td>
+                  <td>${fmtCurrency(o.grandTotal, CUR)}</td>
                   <td>${statusBadge(o.status)}</td>
                   <td>${fmtDate(o.createdAt)}</td>
                 </tr>

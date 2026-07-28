@@ -1,5 +1,6 @@
 const Category = require("../../../models/Category");
 const SubCategory = require("../../../models/SubCategory");
+const { parseRegionsInput, adminListRegionFilter } = require("../../../utils/region");
 
 function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -9,6 +10,8 @@ async function createCategory(req, res) {
   const slug = slugify(req.body.name);
   const payload = { ...req.body, slug };
   if (!payload.platform) payload.platform = 'ddgo';
+  const regions = parseRegionsInput(req.body.regions);
+  payload.regions = regions || [(req.region || 'IN')];
   if (req.file) payload.icon = `/uploads/categories/${req.file.filename}`;
   const category = await Category.create(payload);
   return res.status(201).json({ success: true, category });
@@ -17,6 +20,8 @@ async function createCategory(req, res) {
 async function getCategories(req, res) {
   const filter = {};
   if (req.query.platform) filter.platform = req.query.platform;
+  const regionF = adminListRegionFilter(req);
+  if (regionF) Object.assign(filter, regionF);
   const categories = await Category.find(filter).sort({ sortOrder: 1, name: 1 });
   return res.json({ success: true, categories });
 }
@@ -25,6 +30,8 @@ async function updateCategory(req, res) {
   const updates = { ...req.body };
   if (updates.name) updates.slug = slugify(updates.name);
   if (req.file) updates.icon = `/uploads/categories/${req.file.filename}`;
+  const regions = parseRegionsInput(req.body.regions);
+  if (regions) updates.regions = regions; else delete updates.regions;
   const category = await Category.findByIdAndUpdate(req.params.id, updates, { new: true });
   if (!category) return res.status(404).json({ success: false, message: "Category not found" });
   return res.json({ success: true, category });

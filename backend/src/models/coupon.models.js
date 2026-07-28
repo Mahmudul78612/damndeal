@@ -1,0 +1,195 @@
+/**
+ * DamnDeal Coupons — marketplace models (region-aware: IN ₹ / US $).
+ * One cohesive file: Category, Vendor, Campaign, Claim, Section (admin homepage
+ * builder), PackOrder (vendor buys claim quota; admin sets pricing per category).
+ */
+const mongoose = require("mongoose");
+
+/* ── Category (admin-managed; holds pack pricing per region) ─────────────── */
+const couponCategorySchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    slug: { type: String, required: true, unique: true, lowercase: true },
+    icon: { type: String, default: "🏷️" }, // emoji or image path
+    image: { type: String, default: "" },
+    regions: { type: [String], enum: ["IN", "US"], default: ["IN", "US"], index: true },
+    sortOrder: { type: Number, default: 0 },
+    isActive: { type: Boolean, default: true },
+    // Pack pricing — admin sets what "100 coupons" costs in this category.
+    packs: [
+      {
+        _id: false,
+        claims: { type: Number, required: true }, // e.g. 100
+        priceINR: { type: Number, default: 0 },
+        priceUSD: { type: Number, default: 0 },
+        label: { type: String, default: "" }, // e.g. "Starter"
+      },
+    ],
+  },
+  { timestamps: true }
+);
+
+/* ── Vendor (brand / doctor / shop — linked to a DamnDeal user account) ───── */
+const couponVendorSchema = new mongoose.Schema(
+  {
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, unique: true },
+    businessName: { type: String, required: true, trim: true },
+    slug: { type: String, required: true, unique: true, lowercase: true },
+    logo: { type: String, default: "" },
+    description: { type: String, default: "" },
+    website: { type: String, default: "" },
+    phone: { type: String, default: "" },
+    email: { type: String, default: "" },
+    address: { type: String, default: "" },
+    state: { type: String, default: "" },
+    city: { type: String, default: "" },
+    lat: { type: Number, default: null },
+    lng: { type: Number, default: null },
+    categories: [{ type: mongoose.Schema.Types.ObjectId, ref: "CouponCategory" }],
+    regions: { type: [String], enum: ["IN", "US"], default: ["IN"], index: true },
+    status: { type: String, enum: ["pending", "approved", "suspended"], default: "approved", index: true },
+    isVerifiedBadge: { type: Boolean, default: false }, // ✔ shown on cards (admin grants)
+    // External verify API (for vendors with their own website/portal)
+    apiKey: { type: String, default: null, index: true }, // "dck_..." (shown once, stored as-is v1)
+    apiKeyCreatedAt: { type: Date, default: null },
+    // Claim quota credited from pack purchases (campaign creation consumes it)
+    claimCredits: { type: Number, default: 50 }, // free starter credits
+    totalCreditsPurchased: { type: Number, default: 0 },
+  },
+  { timestamps: true }
+);
+
+/* ── Campaign (a coupon listing) ──────────────────────────────────────────── */
+const couponCampaignSchema = new mongoose.Schema(
+  {
+    vendor: { type: mongoose.Schema.Types.ObjectId, ref: "CouponVendor", required: true, index: true },
+    title: { type: String, required: true, trim: true }, // "30% OFF annual membership"
+    slug: { type: String, required: true, unique: true, lowercase: true },
+    category: { type: mongoose.Schema.Types.ObjectId, ref: "CouponCategory", required: true, index: true },
+    offerType: { type: String, enum: ["percent", "flat", "bogo", "freebie", "custom"], default: "percent" },
+    offerValue: { type: Number, default: 0 }, // 30 (%) or 500 (flat)
+    offerText: { type: String, required: true }, // display: "30% OFF", "Buy 1 Get 1"
+    description: { type: String, default: "" },
+    instructions: { type: String, default: "" }, // how-to-redeem steps (one per line)
+    terms: { type: String, default: "" },
+    bannerImage: { type: String, default: "" },
+    // Online brands: customer clicks through with code; offline: show QR at counter.
+    isOnline: { type: Boolean, default: false },
+    redirectUrl: { type: String, default: "" },
+    totalQuota: { type: Number, default: 50 }, // claims allowed (consumes vendor credits)
+    claimedCount: { type: Number, default: 0 },
+    redeemedCount: { type: Number, default: 0 },
+    perUserLimit: { type: Number, default: 1 },
+    startAt: { type: Date, default: Date.now },
+    endAt: { type: Date, required: true },
+    status: {
+      type: String,
+      enum: ["draft", "pending", "active", "paused", "expired", "rejected"],
+      default: "pending",
+      index: true,
+    },
+    rejectReason: { type: String, default: "" },
+    // Sponsored/featured — paid top placement (admin toggles after payment)
+    featured: {
+      active: { type: Boolean, default: false },
+      until: { type: Date, default: null },
+    },
+    regions: { type: [String], enum: ["IN", "US"], default: ["IN"], index: true },
+    views: { type: Number, default: 0 },
+    inSpin: { type: Boolean, default: false, index: true }, // eligible for the Spin & Win wheel
+    // ── Location targeting (a doctor in Punjab shouldn't show in Kerala) ──
+    location: {
+      nationwide: { type: Boolean, default: true },   // online/brand offers show everywhere
+      states: { type: [String], default: [] },        // e.g. ["Punjab", "Delhi"]
+      city: { type: String, default: "" },
+      radiusKm: { type: Number, default: 0 },         // vendor's service radius (display)
+      point: {                                        // GeoJSON for "near me" filtering
+        type: { type: String, enum: ["Point"], default: undefined },
+        coordinates: { type: [Number], default: undefined }, // [lng, lat]
+      },
+    },
+  },
+  { timestamps: true }
+);
+couponCampaignSchema.index({ status: 1, regions: 1, "featured.active": 1 });
+couponCampaignSchema.index({ "location.states": 1 });
+couponCampaignSchema.index({ "location.point": "2dsphere" }, { sparse: true });
+
+/* ── Claim (unique code per customer per campaign) ────────────────────────── */
+const couponClaimSchema = new mongoose.Schema(
+  {
+    campaign: { type: mongoose.Schema.Types.ObjectId, ref: "CouponCampaign", required: true, index: true },
+    vendor: { type: mongoose.Schema.Types.ObjectId, ref: "CouponVendor", required: true, index: true },
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    code: { type: String, required: true, unique: true }, // DD-XXXX-XXXX
+    status: { type: String, enum: ["claimed", "redeemed", "expired", "cancelled"], default: "claimed", index: true },
+    claimedAt: { type: Date, default: Date.now },
+    redeemedAt: { type: Date, default: null },
+    redeemedVia: { type: String, enum: [null, "portal", "api"], default: null },
+    region: { type: String, enum: ["IN", "US"], default: "IN" },
+  },
+  { timestamps: true }
+);
+couponClaimSchema.index({ campaign: 1, user: 1 });
+
+/* ── Section (admin-customizable homepage, like home-sections) ────────────── */
+const couponSectionSchema = new mongoose.Schema(
+  {
+    type: {
+      type: String,
+      enum: [
+        "top_strip",     // announcement bar: { text, link, bgColor }
+        "hero_banner",   // banners: [{ image, link, title }]
+        "category_rail", // auto categories row
+        "sponsored",     // auto: featured campaigns { limit }
+        "coupon_grid",   // auto: all coupons { limit, categoryId? , title }
+        "brand_row",     // auto: vendors row { limit, title }
+        "banner_single", // { image, link }
+      ],
+      required: true,
+    },
+    title: { type: String, default: "" },
+    data: { type: mongoose.Schema.Types.Mixed, default: {} },
+    regions: { type: [String], enum: ["IN", "US"], default: ["IN", "US"], index: true },
+    sortOrder: { type: Number, default: 0 },
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+/* ── PackOrder (vendor buys claim quota; v1 admin-approves payment) ───────── */
+const couponPackOrderSchema = new mongoose.Schema(
+  {
+    vendor: { type: mongoose.Schema.Types.ObjectId, ref: "CouponVendor", required: true, index: true },
+    category: { type: mongoose.Schema.Types.ObjectId, ref: "CouponCategory", required: true },
+    claims: { type: Number, required: true },
+    price: { type: Number, required: true },
+    currency: { type: String, enum: ["INR", "USD"], default: "INR" },
+    region: { type: String, enum: ["IN", "US"], default: "IN" },
+    status: { type: String, enum: ["pending", "paid", "rejected"], default: "pending", index: true },
+    paymentRef: { type: String, default: "" },
+    approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  },
+  { timestamps: true }
+);
+
+/* ── SpinPlay (one spin per user per cooldown window) ── */
+const spinPlaySchema = new mongoose.Schema(
+  {
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    campaign: { type: mongoose.Schema.Types.ObjectId, ref: "CouponCampaign" },
+    claim: { type: mongoose.Schema.Types.ObjectId, ref: "CouponClaim" },
+    region: { type: String, enum: ["IN", "US"], default: "IN" },
+  },
+  { timestamps: true }
+);
+
+module.exports = {
+  CouponCategory: mongoose.model("CouponCategory", couponCategorySchema),
+  CouponVendor: mongoose.model("CouponVendor", couponVendorSchema),
+  CouponCampaign: mongoose.model("CouponCampaign", couponCampaignSchema),
+  CouponClaim: mongoose.model("CouponClaim", couponClaimSchema),
+  CouponSection: mongoose.model("CouponSection", couponSectionSchema),
+  CouponPackOrder: mongoose.model("CouponPackOrder", couponPackOrderSchema),
+  SpinPlay: mongoose.model("SpinPlay", spinPlaySchema),
+};

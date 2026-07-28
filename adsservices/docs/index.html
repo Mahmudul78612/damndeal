@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DamnDeal Ads — Integration Docs</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f4f5f9;--panel:#fff;--border:#e6e8ef;--ink:#1b1d29;--muted:#7a8194;--primary:#6C2FD9;--code:#2b2d3a}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.6}
+.wrap{display:grid;grid-template-columns:240px 1fr;max-width:1200px;margin:0 auto;min-height:100vh}
+aside{position:sticky;top:0;height:100vh;padding:1.6rem 1rem;border-right:1px solid var(--border);background:var(--panel);overflow:auto}
+.brand{font-weight:800;font-size:1.2rem;margin-bottom:.3rem}
+.brand b{color:var(--ink)} .brand span{color:var(--primary)} .brand .tag{font-size:.6rem;background:var(--primary);color:#fff;padding:.12rem .4rem;border-radius:6px;vertical-align:middle;margin-left:.3rem;text-transform:uppercase;letter-spacing:.06em}
+aside .sub{color:var(--muted);font-size:.78rem;margin-bottom:1.4rem}
+aside a{display:block;color:var(--muted);text-decoration:none;padding:.4rem .6rem;border-radius:8px;font-size:.86rem;font-weight:500}
+aside a:hover{background:#f2f0fb;color:var(--primary)}
+aside .grp{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:#aab;margin:1.1rem .6rem .3rem;font-weight:700}
+main{padding:2.4rem 3rem;max-width:860px}
+h1{font-size:2rem;font-weight:800;margin-bottom:.4rem}
+h2{font-size:1.4rem;font-weight:800;margin:2.6rem 0 .8rem;padding-top:.6rem;border-top:1px solid var(--border)}
+h3{font-size:1.05rem;font-weight:700;margin:1.6rem 0 .5rem}
+p{margin:.6rem 0;color:#3a3e4d}
+ul,ol{margin:.6rem 0 .6rem 1.3rem}
+li{margin:.3rem 0}
+a{color:var(--primary)}
+code{font-family:'JetBrains Mono',monospace;font-size:.82em;background:#efeefb;color:#5826b8;padding:.12rem .4rem;border-radius:5px}
+pre{background:var(--code);color:#e7e9ef;border-radius:12px;padding:1rem 1.2rem;overflow:auto;margin:.7rem 0;font-size:.82rem}
+pre code{background:none;color:inherit;padding:0;font-size:.86rem}
+table{width:100%;border-collapse:collapse;margin:.8rem 0;font-size:.86rem}
+th,td{text-align:left;padding:.55rem .7rem;border-bottom:1px solid var(--border)}
+th{font-size:.74rem;text-transform:uppercase;color:var(--muted);font-weight:700}
+.tag2{display:inline-block;font-size:.7rem;font-weight:700;padding:.15rem .5rem;border-radius:6px;background:#efeefb;color:var(--primary);margin-left:.4rem}
+.note{background:#fff;border:1px solid var(--border);border-left:3px solid var(--primary);border-radius:10px;padding:.8rem 1rem;margin:1rem 0;font-size:.88rem}
+.pill{display:inline-block;background:#e3f7f0;color:#0a9c6e;font-size:.72rem;font-weight:700;padding:.15rem .5rem;border-radius:20px}
+.hero{background:linear-gradient(120deg,#efe9ff,#fff);border:1px solid var(--border);border-radius:16px;padding:1.4rem 1.6rem;margin-bottom:1rem}
+.kv code{display:inline-block;margin:.15rem 0}
+@media(max-width:840px){.wrap{grid-template-columns:1fr}aside{display:none}main{padding:1.6rem}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<aside>
+  <div class="brand"><b>damn</b><span>deal</span><span class="tag">Ads</span></div>
+  <div class="sub">Integration Docs</div>
+  <a href="#intro">Overview</a>
+  <div class="grp">Show ads</div>
+  <a href="#sdk">Embed SDK (easy)</a>
+  <a href="#serve">Serve API (manual)</a>
+  <div class="grp">Track sales ⭐</div>
+  <a href="#how">How attribution works</a>
+  <a href="#pixel">Browser Pixel</a>
+  <a href="#capi">Server-side API</a>
+  <a href="#evref">Event reference</a>
+  <div class="grp">Portals</div>
+  <a href="#portal">Admin / Advertiser API</a>
+  <a href="#cheat">Advertiser cheat-sheet</a>
+</aside>
+
+<main>
+  <h1 id="intro">DamnDeal Ads — Integration</h1>
+  <p>Self-hosted ad network with geo-targeting, click tracking, and <b>conversion (sale) tracking</b> like Meta Pixel / Google Conversion Tracking.</p>
+  <div class="hero kv">
+    <div><b>API Base</b> &nbsp; <code>https://damndeal.in/ads/api</code></div>
+    <div><b>Admin portal</b> &nbsp; <code>https://damndeal.in/ads/admin/</code></div>
+    <div><b>Advertiser portal</b> &nbsp; <code>https://damndeal.in/ads/portal/</code></div>
+    <div><b>Embed SDK</b> &nbsp; <code>https://damndeal.in/ads/embed.js</code></div>
+    <div><b>Conversion pixel</b> &nbsp; <code>https://damndeal.in/ads/event.js</code></div>
+  </div>
+  <p>All responses are JSON: <code>{ success: true, ... }</code> or <code>{ success:false, message }</code>.</p>
+
+  <h2 id="sdk">1. Show ads — Embed SDK <span class="tag2">easiest</span></h2>
+  <p>Renders a full ad unit (creative + headline + CTA button) automatically — like Google AdSense.</p>
+  <pre><code>&lt;!-- where the ad should appear --&gt;
+&lt;div class="dd-ad" data-zone="YOUR_ZONE_KEY" data-app="damndeal"&gt;&lt;/div&gt;
+
+&lt;!-- once, near &lt;/body&gt; --&gt;
+&lt;script src="https://damndeal.in/ads/embed.js" async&gt;&lt;/script&gt;</code></pre>
+  <ul>
+    <li>Get <code>YOUR_ZONE_KEY</code> from Admin portal → <b>Zones</b>.</li>
+    <li>Viewer location auto-detected from IP (state-wise targeting).</li>
+    <li>No ad? The slot hides itself. SPA: call <code>DDAds.refresh()</code> after navigation.</li>
+  </ul>
+
+  <h2 id="serve">2. Show ads — Serve API <span class="tag2">custom design</span></h2>
+  <pre><code>GET https://damndeal.in/ads/api/serve?zone=ZONE_KEY&amp;app=damndeal</code></pre>
+  <p>Override geo for server-side calls: <code>&amp;ip=1.2.3.4</code> or <code>&amp;country=IN&amp;state=MH</code>.</p>
+  <pre><code>{
+  "success": true,
+  "ad": {
+    "id":"...", "type":"banner", "title":"Summer Sale 50% Off",
+    "creativeUrl":"https://damndeal.in/ads/uploads/ads/x.jpg",
+    "width":320, "height":50, "cta":"Shop Now",
+    "clickUrl":"https://damndeal.in/ads/api/click/<id>?zone=...&amp;app=..."
+  },
+  "location": { "country":"IN", "state":"MH", "city":"Mumbai" }
+}</code></pre>
+  <p><code>"ad": null</code> → no match, render nothing. Render with the tracked <code>clickUrl</code>:</p>
+  <pre><code>&lt;a href="${ad.clickUrl}" target="_blank"&gt;
+  &lt;img src="${ad.creativeUrl}" width="${ad.width}" height="${ad.height}"&gt;
+&lt;/a&gt;
+&lt;button onclick="location.href='${ad.clickUrl}'"&gt;${ad.cta}&lt;/button&gt;</code></pre>
+  <div class="note">Calling <code>/serve</code> logs one <b>impression</b>. Opening <code>clickUrl</code> logs one <b>click</b> and 302-redirects to the advertiser's site.</div>
+
+  <h2 id="how">3. Track sales — how attribution works <span class="pill">⭐ Event Manager</span></h2>
+  <ol>
+    <li>A user clicks an ad. Our <code>clickUrl</code> redirects to the advertiser site and <b>automatically appends <code>?dd_click=&lt;id&gt;</code></b>.</li>
+    <li>The advertiser site remembers that id (30 days).</li>
+    <li>On purchase/signup, the site fires a <b>conversion event</b> with that id → we attribute the sale to the exact ad.</li>
+  </ol>
+  <p>Two ways to send conversions — use either or both:</p>
+
+  <h3 id="pixel">3A. Browser Pixel (like Meta Pixel)</h3>
+  <p><b>Step 1</b> — on <b>every page</b>:</p>
+  <pre><code>&lt;script src="https://damndeal.in/ads/event.js"&gt;&lt;/script&gt;</code></pre>
+  <p><b>Step 2</b> — on the order-success / thank-you page:</p>
+  <pre><code>&lt;script&gt;
+  ddq('purchase', { value: 1299, currency: 'USD', orderId: 'ORD-12345' });
+&lt;/script&gt;</code></pre>
+  <p>More events:</p>
+  <pre><code>ddq('lead');                                  // form lead
+ddq('signup', { value: 0 });                  // registration
+ddq('add_to_cart', { value: 499 });
+ddq('purchase', { value: 2599, orderId: 'INV-9' });</code></pre>
+
+  <h3 id="capi">3B. Server-side Conversions API (like Meta CAPI)</h3>
+  <p>Reliable server-to-server. Each advertiser has a <b>Conversion API Key</b> (<code>ddc_...</code>) shown in their portal &amp; in the admin onboarding pack.</p>
+  <pre><code>POST https://damndeal.in/ads/api/event
+Content-Type: application/json
+x-api-key: ddc_your_advertiser_key
+
+{ "event":"purchase", "value":1299, "currency":"USD", "orderId":"ORD-12345" }</code></pre>
+  <pre><code>curl -X POST https://damndeal.in/ads/api/event \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: ddc_your_advertiser_key" \
+  -d '{"event":"purchase","value":1299,"orderId":"ORD-12345"}'</code></pre>
+
+  <h3 id="evref">Event API — reference</h3>
+  <table>
+    <tr><th>Field</th><th>Where</th><th>Notes</th></tr>
+    <tr><td><code>event</code></td><td>body/query</td><td>purchase · lead · signup · add_to_cart · custom. default <code>purchase</code></td></tr>
+    <tr><td><code>value</code></td><td>body/query</td><td>sale amount. default 0</td></tr>
+    <tr><td><code>currency</code></td><td>body/query</td><td>default USD</td></tr>
+    <tr><td><code>orderId</code></td><td>body/query</td><td>dedupe key per advertiser — recommended</td></tr>
+    <tr><td><code>clickId</code></td><td>body/query</td><td><code>dd_click</code> value — best attribution</td></tr>
+    <tr><td><code>x-api-key</code></td><td>header</td><td>advertiser key (server-side)</td></tr>
+    <tr><td><code>zone</code></td><td>body/query</td><td>fallback attribution</td></tr>
+  </table>
+  <p>Responses:</p>
+  <pre><code>{ "success": true,  "message": "Conversion recorded", "value": 1299 }
+{ "success": true,  "deduped": true, "message": "Duplicate order ignored" }
+{ "success": false, "message": "Could not attribute event (no matching click)" }</code></pre>
+  <div class="note">Attribution priority: <code>clickId</code> (exact) → <code>x-api-key</code> + same-IP recent click → <code>zone</code> + same-IP recent impression.</div>
+  <p>The advertiser then sees the full funnel in their portal: <b>Impressions → Clicks → CTR → Conversions → Sale Value</b>, state-wise.</p>
+
+  <h2 id="portal">4. Portal / Admin API</h2>
+  <p>Login returns a JWT. Send <code>Authorization: Bearer &lt;accessToken&gt;</code> on protected calls.</p>
+  <pre><code>POST /api/auth/login   { email, password }   // header x-client-type: admin | advertiser
+POST /api/auth/refresh-token  { refreshToken }
+GET  /api/auth/me</code></pre>
+  <h3>Admin <code>/api/admin</code></h3>
+  <table>
+    <tr><th>Method</th><th>Path</th><th>Purpose</th></tr>
+    <tr><td>GET/POST/PUT/DELETE</td><td><code>/admin/ads</code></td><td>manage ads (POST = multipart upload)</td></tr>
+    <tr><td>GET/POST/PUT/DELETE</td><td><code>/admin/advertisers</code></td><td>advertiser accounts</td></tr>
+    <tr><td>POST</td><td><code>/admin/advertisers/:id/regenerate-key</code></td><td>rotate API key</td></tr>
+    <tr><td>GET/POST/PUT/DELETE</td><td><code>/admin/zones</code></td><td>placements (each has apiKey)</td></tr>
+    <tr><td>GET</td><td><code>/admin/analytics/overview</code></td><td>KPIs incl. conversions</td></tr>
+  </table>
+  <h3>Advertiser <code>/api/advertiser</code></h3>
+  <pre><code>GET /advertiser/me                  // includes your apiKey
+GET /advertiser/ads
+GET /advertiser/analytics/overview  // impressions, clicks, conversions, sale value
+GET /advertiser/analytics/ads/:id   // trend + state-wise + conversions</code></pre>
+
+  <h2 id="cheat">5. Advertiser cheat-sheet</h2>
+  <p>Hand this to a company you onboard:</p>
+  <ol>
+    <li>We give you a <b>portal login</b> + your <b>Conversion API Key</b>.</li>
+    <li>Put <code>&lt;script src="https://damndeal.in/ads/event.js"&gt;&lt;/script&gt;</code> on every page.</li>
+    <li>On your success page: <code>ddq('purchase', { value: &lt;amount&gt;, orderId: '&lt;id&gt;' });</code></li>
+    <li>Log in at <code>https://damndeal.in/ads/portal/</code> → see impressions, clicks, <b>conversions &amp; sale value</b>, state-wise.</li>
+  </ol>
+  <p style="margin-top:2rem;color:var(--muted);font-size:.82rem">DamnDeal Ads · self-hosted ad network</p>
+</main>
+</div>
+</body>
+</html>

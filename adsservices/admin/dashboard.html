@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Ads Services — Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="logo"><span class="brand-logo"><b>damn</b><span>deal</span><span class="tag">Ads</span></span></div>
+      <div class="nav-item active" data-view="overview"><span class="ico">📊</span> Overview</div>
+      <div class="nav-item" data-view="ads"><span class="ico">🖼️</span> Ads</div>
+      <div class="nav-item" data-view="advertisers"><span class="ico">👤</span> Advertisers</div>
+      <div class="nav-item" data-view="apps"><span class="ico">📱</span> Apps / Publishers</div>
+      <div class="nav-item" data-view="zones"><span class="ico">📍</span> Zones</div>
+      <div class="nav-item" data-view="enquiries"><span class="ico">📨</span> Enquiries</div>
+      <div class="sidebar-foot">
+        <div class="nav-item" onclick="logout()"><span class="ico">↩️</span> Logout</div>
+      </div>
+    </aside>
+    <main class="main">
+      <div class="topbar">
+        <h2 id="title">Overview</h2>
+        <div style="display:flex;align-items:center;gap:1rem">
+          <span class="who" id="who"></span>
+          <button class="btn btn-sm" onclick="openUpload()">＋ Upload Ad</button>
+        </div>
+      </div>
+      <div id="content"></div>
+    </main>
+  </div>
+
+  <!-- Upload Ad modal (2-column, compact) -->
+  <div class="modal-bg" id="m-upload">
+    <div class="modal" style="max-width:860px">
+      <h3>Upload Ad</h3>
+      <div id="up-alert"></div>
+      <div class="up-grid">
+
+        <!-- LEFT: creative + basics -->
+        <div>
+          <label>Ad Title</label><input id="up-title" placeholder="Acme Summer Sale">
+          <div class="formgrid">
+            <div><label>Type</label><select id="up-type" onchange="onType()"><option value="banner">Banner (image)</option><option value="video">Video</option></select></div>
+            <div><label>Weight (1-10)</label><input id="up-weight" type="number" value="5"></div>
+          </div>
+          <label>Target URL (click destination)</label><input id="up-target" placeholder="https://...">
+          <label>CTA Button</label>
+          <select id="up-cta">
+            <option>Learn More</option><option>Shop Now</option><option>Sign Up</option>
+            <option>Download</option><option>Get Offer</option><option>Book Now</option>
+            <option>Order Now</option><option>Get Started</option><option>Subscribe</option>
+            <option>Contact Us</option><option>Apply Now</option><option>Install Now</option>
+            <option>Watch More</option><option>Get Quote</option><option>Buy Now</option>
+          </select>
+          <label>Creative file (image / video)</label>
+          <input id="up-file" type="file" accept="image/*,video/*" onchange="previewCreative(this)">
+          <div class="up-preview" id="up-preview"><span class="muted" style="font-size:.78rem">Preview appears here</span></div>
+          <div class="formgrid">
+            <div><label>Width (px)</label><input id="up-w" type="number" placeholder="320"></div>
+            <div><label>Height (px)</label><input id="up-h" type="number" placeholder="50"></div>
+          </div>
+        </div>
+
+        <!-- RIGHT: targeting + schedule + advertiser -->
+        <div>
+          <div class="up-sec" style="margin-top:0">
+            <h4>🎯 Targeting <span class="muted" style="font-weight:400">(blank = everywhere)</span></h4>
+            <div class="formgrid">
+              <div><label>Countries (ISO)</label><input id="up-countries" placeholder="IN, US"></div>
+              <div><label>States</label><input id="up-states" placeholder="MH, KA"></div>
+            </div>
+            <div class="formgrid">
+              <div><label>Cities</label><input id="up-cities" placeholder="Mumbai"></div>
+              <div><label>Zone</label><select id="up-zone"><option value="">Any zone</option></select></div>
+            </div>
+          </div>
+
+          <div class="up-sec">
+            <h4>📅 Schedule & limit <span class="muted" style="font-weight:400">(optional)</span></h4>
+            <div class="formgrid">
+              <div><label>Start</label><input id="up-start" type="date"></div>
+              <div><label>End</label><input id="up-end" type="date"></div>
+            </div>
+            <label>Impression cap (0 = unlimited)</label><input id="up-cap" type="number" value="0">
+          </div>
+
+          <div class="up-sec">
+            <h4>👤 Advertiser <span class="muted" style="font-weight:400">(gets a login)</span></h4>
+            <label>Existing advertiser</label>
+            <select id="up-adv" onchange="onAdvPick()"><option value="">— Create new below —</option></select>
+            <div id="up-newadv">
+              <div class="formgrid">
+                <div><label>Name</label><input id="up-aname" placeholder="Acme Corp"></div>
+                <div><label>Company</label><input id="up-acompany" placeholder="Acme Inc"></div>
+              </div>
+              <div class="formgrid">
+                <div><label>Login Email</label><input id="up-aemail" type="email" placeholder="acme@x.com"></div>
+                <div><label>Password</label><input id="up-apass" placeholder="set password"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="closeModal('m-upload')">Cancel</button>
+        <button class="btn" id="up-btn" onclick="submitAd()">Upload Ad</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Zone modal -->
+  <div class="modal-bg" id="m-zone">
+    <div class="modal" style="max-width:460px">
+      <h3>New Zone (placement)</h3>
+      <div id="z-alert"></div>
+      <label>Name</label><input id="z-name" placeholder="DamnDeal Home Banner">
+      <label>App / Publisher</label>
+      <select id="z-publisher"><option value="">— None —</option></select>
+      <div class="formgrid">
+        <div><label>App tag</label><input id="z-app" placeholder="damndeal"></div>
+        <div><label>Type</label><select id="z-type"><option value="banner">Banner</option><option value="video">Video</option></select></div>
+      </div>
+      <label>Size</label><input id="z-size" placeholder="320x50">
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="closeModal('m-zone')">Cancel</button>
+        <button class="btn" onclick="submitZone()">Create Zone</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Onboard Publisher modal -->
+  <div class="modal-bg" id="m-pub">
+    <div class="modal" style="max-width:480px">
+      <h3>Onboard App / Publisher</h3>
+      <div id="pub-alert"></div>
+      <div class="formgrid">
+        <div><label>App Name</label><input id="pub-name" placeholder="DamnPay"></div>
+        <div><label>App ID (short)</label><input id="pub-appid" placeholder="damnpay"></div>
+      </div>
+      <div class="formgrid">
+        <div><label>Login Email</label><input id="pub-email" type="email" placeholder="dev@damnpay.com"></div>
+        <div><label>Login Password</label><input id="pub-pass" placeholder="set a password"></div>
+      </div>
+      <p class="muted" style="font-size:.78rem;margin-top:.6rem">App in credentials se <code>damndeal.in/ads/publisher/</code> pe login karke apni placements ka performance dekhegi. Publisher key auto-generate hoga.</p>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="closeModal('m-pub')">Cancel</button>
+        <button class="btn" id="pub-btn" onclick="submitPublisher()">Create & Get Key</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Publisher detail modal -->
+  <div class="modal-bg" id="m-pubdetail">
+    <div class="modal" style="max-width:640px"><div id="pubd-body"></div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-pubdetail')">Close</button></div>
+    </div>
+  </div>
+
+  <!-- Onboard Advertiser modal -->
+  <div class="modal-bg" id="m-advertiser">
+    <div class="modal" style="max-width:480px">
+      <h3>Onboard Advertiser / Company</h3>
+      <div id="adv-alert"></div>
+      <div class="formgrid">
+        <div><label>Company / Name</label><input id="adv-name" placeholder="Acme Corp"></div>
+        <div><label>Company (optional)</label><input id="adv-company" placeholder="Acme Inc"></div>
+      </div>
+      <div class="formgrid">
+        <div><label>Login Email</label><input id="adv-email" type="email" placeholder="ads@acme.com"></div>
+        <div><label>Phone (optional)</label><input id="adv-phone" placeholder="+1..."></div>
+      </div>
+      <label>Login Password</label><input id="adv-pass" placeholder="set a password">
+      <p class="muted" style="font-size:.78rem;margin-top:.6rem">Yeh company in credentials se <code>damndeal.in/ads/portal/</code> pe login karke apna analytics dekhegi. API key auto-generate hoga.</p>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="closeModal('m-advertiser')">Cancel</button>
+        <button class="btn" id="adv-btn" onclick="submitAdvertiser()">Create & Get Key</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Advertiser detail / onboarding info modal -->
+  <div class="modal-bg" id="m-advdetail">
+    <div class="modal" style="max-width:620px"><div id="advd-body"></div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-advdetail')">Close</button></div>
+    </div>
+  </div>
+
+  <!-- Ad analytics modal -->
+  <div class="modal-bg" id="m-analytics">
+    <div class="modal" style="max-width:640px"><div id="an-body"></div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-analytics')">Close</button></div>
+    </div>
+  </div>
+
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/admin.js"></script>
+</body>
+</html>

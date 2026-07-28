@@ -2,10 +2,17 @@ const Order = require("../../../models/Order");
 const User = require("../../../models/User");
 const Payment = require("../../../models/Payment");
 
+// Region scope for order reports (so INR & USD never mix). ?region=all bypasses.
+function regionScope(req) {
+  const r = req.query.region ? String(req.query.region).toUpperCase() : (req.region || "IN");
+  if (r === "ALL") return {};
+  return { region: r === "IN" ? { $in: ["IN", null] } : r };
+}
+
 // GET /admin/reports/orders — order report with CSV export
 async function orderReport(req, res) {
   const { from, to, partner, status, format } = req.query;
-  const filter = {};
+  const filter = { ...regionScope(req) };
   if (partner) filter.partner = partner;
   if (status) filter.status = status;
   if (from || to) {
@@ -55,7 +62,7 @@ async function orderReport(req, res) {
 // GET /admin/reports/revenue — daily revenue chart
 async function revenueReport(req, res) {
   const { from, to } = req.query;
-  const match = { status: { $nin: ["cancelled", "returned"] } };
+  const match = { ...regionScope(req), status: { $nin: ["cancelled", "returned"] } };
   if (from || to) {
     match.createdAt = {};
     if (from) match.createdAt.$gte = new Date(from);

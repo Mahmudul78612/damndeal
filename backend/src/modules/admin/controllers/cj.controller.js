@@ -30,11 +30,13 @@ function toInrFromUsd(usd, usdRate) {
 }
 
 // ── GET /admin/cj/products/search ─────────────────────────────────────────
+// Defaults to USA-warehouse products (countryCode=US) — pass ?countryCode=all to disable.
 async function searchCJProducts(req, res) {
   try {
     const { keyword, page = 1, size = 20, categoryId, minPrice, maxPrice } = req.query;
-    const result = await cjService.searchProducts({ keyword, page: parseInt(page), size: parseInt(size), categoryId, minPrice, maxPrice });
-    return res.json({ success: true, ...result });
+    const countryCode = req.query.countryCode === "all" ? undefined : (req.query.countryCode || "US");
+    const result = await cjService.searchProducts({ keyword, page: parseInt(page), size: parseInt(size), categoryId, minPrice, maxPrice, countryCode });
+    return res.json({ success: true, countryCode: countryCode || "all", ...result });
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });
   }
@@ -85,9 +87,20 @@ async function importCJProduct(req, res) {
       return res.status(400).json({ success: false, message: "cjProductId, name, sellingPrice, mrp, categoryId required" });
     }
 
-    const usdRate = await getCjUsdInrRate();
-    const cjCostUsdNum = parseFloat(cjCostUsd);
-    const costPriceInr = toInrFromUsd(cjCostUsdNum, usdRate);
+    // Region from x-region header (damndeal.com => US). US keeps everything in
+    // USD (no INR conversion); India converts CJ USD cost to INR.
+    const region = req.region === "US" ? "US" : "IN";
+    const cjCostUsdNum = parseFloat(cjCostUsd) || 0;
+    const cjShipUsdNum = parseFloat(req.body.cjShippingUsd) || 0;
+    // Landed cost = product cost + CJ shipping (so profit reflects the real cost).
+    const landedUsd = cjCostUsdNum + cjShipUsdNum;
+    let costPrice;
+    if (region === "US") {
+      costPrice = landedUsd; // USD landed cost as-is
+    } else {
+      const usdRate = await getCjUsdInrRate();
+      costPrice = toInrFromUsd(landedUsd, usdRate);
+    }
 
     // Check if already imported
     const existing = await Product.findOne({ cjProductId });
@@ -124,12 +137,13 @@ async function importCJProduct(req, res) {
       cjLastSyncAt: new Date(),
 
       platform,
+      regions: [region],
       name,
       description: descriptionText,
       images: imageList,
       sellingPrice: parseFloat(sellingPrice),
       mrp: parseFloat(mrp),
-      costPrice: costPriceInr,
+      costPrice,
       gstPercent: parseInt(gstPercent),
       gstInclusive: true,
       category: categoryId,
@@ -258,10 +272,11 @@ async function getCJOrder(req, res) {
 async function getCJFreight(req, res) {
   try {
     const { vid, weight = 500, quantity = 1 } = req.query;
+    const endCountryCode = req.region === "US" ? "US" : "IN"; // ship-to country by region
 
     let estimate = await cjService.estimateFreightSummary({
       startCountryCode: "CN",
-      endCountryCode: "IN",
+      endCountryCode,
       quantity: parseInt(quantity) || 1,
       weight: parseFloat(weight) || 500,
       vid: vid || undefined,
@@ -272,7 +287,7 @@ async function getCJFreight(req, res) {
       console.warn(`[CJ Freight] vid ${vid} returned 0, retrying without vid`);
       estimate = await cjService.estimateFreightSummary({
         startCountryCode: "CN",
-        endCountryCode: "IN",
+        endCountryCode,
         quantity: parseInt(quantity) || 1,
         weight: parseFloat(weight) || 500,
       });

@@ -3,6 +3,7 @@ const Product = require("../../../models/Product");
 const Customer = require("../../../models/Customer");
 const InventoryLog = require("../../../models/InventoryLog");
 const DeliveryBoy = require("../../../models/DeliveryBoy");
+const magicClub = require("../../../services/magicclub.service");
 
 function generateOrderNumber() {
   const ts = Date.now().toString(36).toUpperCase();
@@ -198,6 +199,13 @@ async function rejectOrder(req, res) {
   order.cancelReason = reason || "Rejected by partner";
   await order.save();
 
+  // Magic Club: reverse redemption + cancel clubs (best-effort)
+  if (order.magicClub?.debit?.transactionId && !order.magicClub.debit.reversedAt) {
+    const rev = await magicClub.reverseDebit(order.magicClub.debit.transactionId);
+    if (rev.ok) { order.magicClub.debit.reversedAt = new Date(); await order.save(); }
+  }
+  magicClub.onOrderCancelled(order).catch(() => {});
+
   return res.json({ success: true, order });
 }
 
@@ -283,6 +291,9 @@ async function markSelfDelivered(req, res) {
       $inc: { totalDeliveries: 1, totalEarnings: 20 },
     });
   }
+
+  // Magic Club: create reward club (best-effort, never blocks)
+  magicClub.onOrderDelivered(order).catch(() => {});
 
   return res.json({ success: true, order });
 }

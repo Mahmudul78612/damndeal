@@ -2,7 +2,10 @@
 
 async function api(endpoint, options = {}) {
   const url = CONFIG.API_BASE + endpoint;
-  const headers = { "x-client-type": "admin", ...options.headers };
+  const region = (typeof getRegion === "function")
+    ? getRegion()
+    : (localStorage.getItem("dd_region") || "IN");
+  const headers = { "x-client-type": "admin", "x-region": region, ...options.headers };
   const token = getToken();
   if (token) headers["Authorization"] = "Bearer " + token;
 

@@ -1,3 +1,7 @@
+# ─── Firebase service account (NEVER COMMIT) ───
+*-firebase-adminsdk-*.json
+firebase-service-account.json
+
 # ─── OS / IDE ───
 .DS_Store
 Thumbs.db
@@ -17,8 +21,12 @@ pnpm-debug.log*
 .env
 .env.local
 .env.*.local
+.env.production
 *.pem
 *.key
+*.jks
+*.keystore
+key.properties
 
 # ─── Build output ───
 .next/

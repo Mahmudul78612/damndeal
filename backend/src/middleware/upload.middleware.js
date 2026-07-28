@@ -158,6 +158,18 @@ const uploadHomeSectionBanners = multer({
   fileFilter: imageFilter,
 }).array("bannerImages", 20);
 
+const uploadCouponImages = multer({
+  storage: makeStorage("coupons"),
+  limits: { fileSize: 200 * 1024 }, // 200 KB max (logos + banners stay light)
+  fileFilter: imageFilter,
+}).array("images", 5);
+
+const uploadMagicPoolImages = multer({
+  storage: makeStorage("magic-pools"),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: imageFilter,
+}).array("images", 8);
+
 // CSV import (in-memory; small file)
 const uploadCsvFile = multer({
   storage: multer.memoryStorage(),
@@ -168,4 +180,23 @@ const uploadCsvFile = multer({
   },
 }).single("file");
 
-module.exports = { uploadKycPhoto, uploadKycDocuments, uploadProductImages, uploadBanner, uploadDeliveryPhoto, uploadCategoryImage, uploadCustomizationImage, uploadPromoImages, uploadSettingImage, uploadDesktopBanners, uploadHomeSectionBanners, uploadCsvFile, optimizeImages, UPLOAD_DIR };
+// Investor KYC + receipt uploads
+const uploadInvestorDoc = multer({
+  storage: makeStorage("investor_kyc"),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (/image\/(jpeg|png|webp|jpg)|application\/pdf/i.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only images and PDF allowed"));
+  },
+}).single("document");
+
+const uploadInvestorReceipt = multer({
+  storage: makeStorage("investor_receipts"),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (/image\/(jpeg|png|webp|jpg)|application\/pdf/i.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only images and PDF allowed"));
+  },
+}).single("receipt");
+
+module.exports = { uploadKycPhoto, uploadKycDocuments, uploadProductImages, uploadBanner, uploadDeliveryPhoto, uploadCategoryImage, uploadCustomizationImage, uploadPromoImages, uploadSettingImage, uploadDesktopBanners, uploadHomeSectionBanners, uploadMagicPoolImages, uploadCouponImages, uploadCsvFile, uploadInvestorDoc, uploadInvestorReceipt, optimizeImages, UPLOAD_DIR };

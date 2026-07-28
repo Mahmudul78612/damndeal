@@ -71,7 +71,7 @@ export default function AddressesPage() {
                 )}
               </div>
               <p className="text-sm text-gray-700">{addr.houseNo ? `${addr.houseNo}, ` : ''}{addr.address}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{addr.city}, {addr.state} - {addr.pincode}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{addr.city}, {addr.state} {addr.pincode || addr.zip || ''}</p>
 
               <div className="flex items-center gap-2 mt-3 pt-2 border-t border-gray-100">
                 {!addr.isDefault && (

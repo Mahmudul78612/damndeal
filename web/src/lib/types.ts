@@ -81,7 +81,9 @@ export interface Address {
   houseNo?: string;
   city: string;
   state: string;
-  pincode: string;
+  pincode?: string;
+  zip?: string;          // US ZIP code
+  country?: 'IN' | 'US';
   landmark?: string;
   lat?: number;
   lng?: number;

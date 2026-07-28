@@ -38,13 +38,15 @@ function cooldownKey(phone) {
 async function sendOtp(phone) {
   const redis = await getRedisClient();
 
-  // --- Test phone bypass for local dev ---
+  // --- Whitelisted test phone bypass (dev + Play/App Store review accounts) ---
+  // Only the exact numbers in TEST_PHONES with the fixed TEST_OTP are affected;
+  // no real SMS is sent for them. Safe in production because it's a fixed allow-list.
   const testPhones = (process.env.TEST_PHONES || "").split(",").map((p) => p.trim()).filter(Boolean);
   const testOtp = process.env.TEST_OTP;
-  if (process.env.NODE_ENV !== "production" && testOtp && testPhones.includes(phone)) {
+  if (testOtp && testPhones.includes(phone)) {
     await redis.setEx(otpKey(phone), OTP_EXPIRY, testOtp);
     await redis.del(attemptKey(phone));
-    console.log(`[DEV-TEST] OTP for ${phone}: ${testOtp} (test bypass)`);
+    console.log(`[TEST] OTP bypass for whitelisted ${phone}`);
     return { success: true, message: "OTP sent successfully" };
   }
 
@@ -88,14 +90,14 @@ async function sendOtp(phone) {
 async function verifyOtp(phone, otp) {
   const redis = await getRedisClient();
 
-  // --- Test phone bypass for local dev ---
+  // --- Whitelisted test phone bypass (dev + Play/App Store review accounts) ---
   const testPhones = (process.env.TEST_PHONES || "").split(",").map((p) => p.trim()).filter(Boolean);
   const testOtp = process.env.TEST_OTP;
-  if (process.env.NODE_ENV !== "production" && testOtp && testPhones.includes(phone) && otp === testOtp) {
+  if (testOtp && testPhones.includes(phone) && otp === testOtp) {
     await redis.del(otpKey(phone));
     await redis.del(attemptKey(phone));
     await redis.del(cooldownKey(phone));
-    console.log(`[DEV-TEST] OTP verified for ${phone} (test bypass)`);
+    console.log(`[TEST] OTP verified for whitelisted ${phone}`);
     return { success: true };
   }
 

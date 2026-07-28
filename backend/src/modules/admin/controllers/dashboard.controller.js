@@ -14,6 +14,16 @@ async function getDashboard(req, res) {
   const orderMatch = {};
   if (Object.keys(dateFilter).length) orderMatch.createdAt = dateFilter;
 
+  // Region scope so INR & USD revenue never get summed together.
+  // ?region=all bypasses; otherwise the admin's current region (x-region).
+  const regionQ = req.query.region ? String(req.query.region).toUpperCase() : (req.region || "IN");
+  if (regionQ !== "ALL") {
+    orderMatch.region = regionQ === "IN" ? { $in: ["IN", null] } : regionQ;
+  }
+  const dashRegion = regionQ === "ALL" ? "ALL" : regionQ;
+  const dashCurrency = dashRegion === "US" ? "USD" : "INR";
+  const regionOnly = orderMatch.region ? { region: orderMatch.region } : {};
+
   const [orderStats] = await Order.aggregate([
     { $match: { ...orderMatch, status: { $nin: ["cancelled", "returned"] } } },
     {
@@ -61,7 +71,7 @@ async function getDashboard(req, res) {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const dailyRevenue = await Order.aggregate([
-    { $match: { createdAt: { $gte: thirtyDaysAgo }, status: { $nin: ["cancelled", "returned"] } } },
+    { $match: { ...regionOnly, createdAt: { $gte: thirtyDaysAgo }, status: { $nin: ["cancelled", "returned"] } } },
     {
       $group: {
         _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
@@ -74,7 +84,7 @@ async function getDashboard(req, res) {
 
   // Top partners
   const topPartners = await Order.aggregate([
-    { $match: { status: { $nin: ["cancelled", "returned"] } } },
+    { $match: { ...regionOnly, status: { $nin: ["cancelled", "returned"] } } },
     { $group: { _id: "$partner", totalRevenue: { $sum: "$grandTotal" }, totalOrders: { $sum: 1 } } },
     { $sort: { totalRevenue: -1 } },
     { $limit: 10 },
@@ -84,7 +94,7 @@ async function getDashboard(req, res) {
   ]);
 
   // Recent orders
-  const recentOrders = await Order.find()
+  const recentOrders = await Order.find(regionOnly)
     .populate("partner", "name phone")
     .populate("user", "name phone")
     .sort({ createdAt: -1 }).limit(15);
@@ -92,6 +102,8 @@ async function getDashboard(req, res) {
   return res.json({
     success: true,
     dashboard: {
+      region: dashRegion,
+      currency: dashCurrency,
       orders: orderStats || {
         totalOrders: 0,
         totalRevenue: 0,

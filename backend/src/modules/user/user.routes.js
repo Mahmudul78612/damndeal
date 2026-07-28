@@ -16,6 +16,8 @@ const ticket = require("./controllers/ticket.controller");
 const payment = require("./controllers/payment.controller");
 const referral = require("./controllers/referral.controller");
 const offer = require("./controllers/offer.controller");
+const magicClubCtrl = require("./controllers/magicClub.controller");
+const magicPoolCtrl = require("./controllers/magicPool.controller");
 const invoiceService = require("../../services/invoice.service");
 const cjService = require("../../services/cj.service");
 const Product = require("../../models/Product");
@@ -182,12 +184,42 @@ router.get("/tickets", ticket.getMyTickets);
 router.get("/tickets/:id", ticket.getTicket);
 router.post("/tickets/:id/reply", ticket.replyTicket);
 
-// Payments (Razorpay)
+// Payments (Razorpay — India)
 router.post("/payments/create", payment.createPayment);
 router.post("/payments/verify", payment.verifyPayment);
+
+// Payments (Stripe — US / damndeal.com)
+router.post("/payments/stripe/checkout", payment.createStripeCheckout);
+router.post("/payments/stripe/verify-checkout", payment.verifyStripeCheckout);
+router.post("/payments/stripe/create-intent", payment.createStripeIntent);
+router.post("/payments/stripe/confirm", payment.confirmStripePayment);
 
 // Referral
 router.get("/referral", referral.getMyReferral);
 router.post("/referral/apply", referral.applyReferralCode);
+
+// Magic Club (rewards + redeemable wallet)
+router.get("/magic-club", magicClubCtrl.getClubs);
+router.get("/magic-club/wallet", magicClubCtrl.getWallet);
+router.post("/magic-club/redeem/initiate", magicClubCtrl.initiateRedeem);
+
+// Magic Pool (raffle / wheel of fortune)
+router.get("/magic-pools", magicPoolCtrl.listOpen);
+router.get("/magic-pools/mine", magicPoolCtrl.listMine);
+router.get("/magic-pools/:id", magicPoolCtrl.getOne);
+router.post("/magic-pools/:id/join", magicPoolCtrl.join);
+
+// FCM token (save device push token)
+const User = require("../../models/User");
+router.post("/fcm-token", async (req, res) => {
+  try {
+    const { fcmToken } = req.body;
+    if (!fcmToken) return res.status(400).json({ success: false, message: "fcmToken required" });
+    await User.findByIdAndUpdate(req.user.userId, { fcmToken });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
 
 module.exports = router;

@@ -1,6 +1,7 @@
 const Product = require("../../../models/Product");
 const PartnerKyc = require("../../../models/PartnerKyc");
 const { getSetting } = require("../../../services/fee.service");
+const { regionFilter } = require("../../../utils/region");
 
 // GET /user/search?q=doodh&lat=28.6&lng=77.2
 // Cross-shop search — search products across all nearby shops
@@ -37,6 +38,7 @@ async function searchProducts(req, res) {
     isActive: true,
     approvalStatus: "approved",
     stock: { $gt: 0 },
+    ...regionFilter(req),
     $or: [
       { name: { $regex: q, $options: "i" } },
       { description: { $regex: q, $options: "i" } },
@@ -91,7 +93,7 @@ async function browseProducts(req, res) {
   const limitNum = parseInt(limit, 10);
   const skip = (pageNum - 1) * limitNum;
 
-  const filter = { isActive: true, approvalStatus: "approved", stock: { $gt: 0 } };
+  const filter = { isActive: true, approvalStatus: "approved", stock: { $gt: 0 }, ...regionFilter(req) };
   if (_id) filter._id = _id;
   if (category) filter.category = category;
   if (subCategory) filter.subCategory = subCategory;

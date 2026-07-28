@@ -1,6 +1,26 @@
 const SERVER_API = process.env.NEXT_PUBLIC_API_URL || 'https://damndeal.in/api';
 const API_BASE = typeof window !== 'undefined' ? '/proxy-api' : SERVER_API;
 
+// Detect region: env var wins, then browser hostname, then default IN
+function detectRegion(): string {
+  const env = process.env.NEXT_PUBLIC_REGION;
+  if (env) return env.toUpperCase() === 'US' ? 'US' : 'IN';
+  if (typeof window !== 'undefined') {
+    const h = window.location.hostname;
+    if (h === 'damndeal.com' || h.endsWith('.damndeal.com')) return 'US';
+  }
+  return 'IN';
+}
+
+const REGION = detectRegion();
+
+// Exposed for UI (currency symbol, payment gateway choice).
+export function getRegion(): string {
+  return REGION;
+}
+export const IS_US = REGION === 'US';
+export const CURRENCY_SYMBOL = REGION === 'US' ? '$' : '₹';
+
 interface FetchOptions extends RequestInit {
   token?: string;
 }
@@ -11,6 +31,7 @@ async function request<T = any>(endpoint: string, options: FetchOptions = {}): P
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'x-client-type': 'web',
+    'x-region': REGION,
     ...(customHeaders as Record<string, string>),
   };
 

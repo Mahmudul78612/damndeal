@@ -167,6 +167,18 @@
         { key: 'fship_api_mode',            label: 'FShip Mode',                     type: 'select', icon: '⚙️', desc: 'Sandbox for testing, Production for live', options: ['sandbox', 'production'] },
       ]
     },
+    {
+      group: '🎁 Magic Club (Rewards)',
+      desc: 'Reward distribution + redeemable wallet powered by magicclub.damndeal.com. When an order is delivered, a club is auto-created with rewardAmount = (order.profit × Reward %). Customers earn points (100 points = ₹1 by default) which they can redeem on the next order.',
+      fields: [
+        { key: 'magicclub_enabled',          label: 'Magic Club Enabled',          type: 'toggle', icon: '🎁', desc: 'Master switch. Off = no clubs created, no redemption allowed.' },
+        { key: 'magicclub_base_url',         label: 'Magic Club API Base URL',     type: 'text',   icon: '🌐', desc: 'Default: https://magicclub.damndeal.com (no trailing slash).' },
+        { key: 'magicclub_api_key',          label: 'Magic Club API Key',          type: 'text',   icon: '🔑', desc: 'Sent as x-api-key header (encrypted at rest). Get this from your Magic Club dashboard.' },
+        { key: 'magicclub_reward_percent',   label: 'Reward % (of profit)',        type: 'text',   icon: '📊', desc: 'What % of order.profit becomes the customer reward when an order is delivered. Default: 70.' },
+        { key: 'magicclub_points_per_rupee', label: 'Points per ₹1',               type: 'text',   icon: '💎', desc: 'Conversion rate for redemption. Default: 100 (i.e. 100 points = ₹1).' },
+        { key: 'magicclub_default_user',     label: 'Default User Handle',         type: 'text',   icon: '🏷️', desc: 'Username that owns clubs after an order is cancelled. Default: damndeal.' },
+      ]
+    },
   ];
 
   var settings = {};

@@ -1,4 +1,5 @@
 const paymentService = require("../../../services/payment.service");
+const stripeService = require("../../../services/stripe.service");
 const Order = require("../../../models/Order");
 const Payment = require("../../../models/Payment");
 const User = require("../../../models/User");
@@ -98,13 +99,14 @@ async function verifyPayment(req, res) {
     order.walletDeducted = payment.walletDeducted;
     await order.save();
 
-    // Send WhatsApp order-confirmation only after online payment is verified
+    // Send order-confirmation + forward CJ only after online payment is verified
     if (wasUnpaid) {
       setImmediate(async () => {
         try {
-          const u = await User.findById(payment.user).select("name phone").lean();
+          const u = await User.findById(payment.user).select("name phone email").lean();
           if (u) notifyOrderPlaced(order, u);
         } catch (e) { console.error("notifyOrderPlaced(verify) err:", e.message); }
+        try { await require("./order.controller").forwardCJForOrder(order._id); } catch (e) { console.error("CJ forward(verify) err:", e.message); }
       });
     }
   }
@@ -112,4 +114,119 @@ async function verifyPayment(req, res) {
   return res.json({ success: true, message: "Payment verified", payment });
 }
 
-module.exports = { createPayment, verifyPayment };
+// POST /user/payments/stripe/create-intent — create Stripe PaymentIntent (US)
+async function createStripeIntent(req, res) {
+  const { orderId } = req.body;
+  if (!orderId) return res.status(400).json({ success: false, message: "orderId required" });
+
+  const order = await Order.findOne({ _id: orderId, user: req.user.userId });
+  if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+  if (order.paymentStatus === "paid") return res.status(400).json({ success: false, message: "Order already paid" });
+
+  const { clientSecret, intentId } = await stripeService.createPaymentIntent(order._id, order.grandTotal, "usd");
+
+  await Payment.create({
+    order: order._id, user: req.user.userId,
+    amount: order.grandTotal, method: "stripe",
+    stripeIntentId: intentId, status: "pending",
+  });
+
+  return res.json({ success: true, clientSecret });
+}
+
+// POST /user/payments/stripe/confirm — mark order paid after Stripe confirms (US)
+async function confirmStripePayment(req, res) {
+  const { orderId, intentId } = req.body;
+  if (!orderId || !intentId) return res.status(400).json({ success: false, message: "orderId and intentId required" });
+
+  const order = await Order.findOne({ _id: orderId, user: req.user.userId });
+  if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+
+  const payment = await Payment.findOneAndUpdate(
+    { order: order._id, stripeIntentId: intentId },
+    { status: "paid" },
+    { new: true }
+  );
+  if (!payment) return res.status(404).json({ success: false, message: "Payment record not found" });
+
+  const wasUnpaid = order.paymentStatus !== "paid";
+  order.paymentStatus = "paid";
+  order.paymentMethod = "stripe";
+  await order.save();
+
+  if (wasUnpaid) {
+    setImmediate(async () => {
+      try {
+        const u = await User.findById(req.user.userId).select("name phone").lean();
+        if (u) notifyOrderPlaced(order, u);
+      } catch (e) { console.error("notifyOrderPlaced(stripe) err:", e.message); }
+    });
+  }
+
+  return res.json({ success: true, message: "Payment confirmed", order });
+}
+
+// POST /user/payments/stripe/checkout — create a hosted Stripe Checkout session (US)
+async function createStripeCheckout(req, res) {
+  const { orderId } = req.body;
+  if (!orderId) return res.status(400).json({ success: false, message: "orderId required" });
+
+  const order = await Order.findOne({ _id: orderId, user: req.user.userId });
+  if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+  if (order.paymentStatus === "paid") return res.status(400).json({ success: false, message: "Order already paid" });
+
+  const origin = req.headers.origin || "https://damndeal.com";
+  const successUrl = `${origin}/order-success/${order._id}?stripe_session={CHECKOUT_SESSION_ID}`;
+  const cancelUrl = `${origin}/checkout?stripe_cancelled=1`;
+
+  const { url, sessionId } = await stripeService.createCheckoutSession(order, successUrl, cancelUrl, "usd");
+
+  await Payment.create({
+    order: order._id, user: req.user.userId,
+    amount: order.grandTotal, method: "stripe",
+    stripeIntentId: sessionId, status: "pending",
+  });
+
+  return res.json({ success: true, url, sessionId });
+}
+
+// POST /user/payments/stripe/verify-checkout — confirm a Checkout session and mark order paid (US)
+async function verifyStripeCheckout(req, res) {
+  const { sessionId } = req.body;
+  if (!sessionId) return res.status(400).json({ success: false, message: "sessionId required" });
+
+  const session = await stripeService.retrieveSession(sessionId);
+  const orderId = session?.metadata?.orderId;
+  if (!orderId) return res.status(400).json({ success: false, message: "Invalid session" });
+
+  const order = await Order.findOne({ _id: orderId, user: req.user.userId });
+  if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+
+  if (session.payment_status !== "paid") {
+    return res.status(402).json({ success: false, message: "Payment not completed", paymentStatus: session.payment_status });
+  }
+
+  await Payment.findOneAndUpdate(
+    { order: order._id, stripeIntentId: sessionId },
+    { status: "paid" }
+  );
+
+  const wasUnpaid = order.paymentStatus !== "paid";
+  if (wasUnpaid) {
+    order.paymentStatus = "paid";
+    order.paymentMethod = "stripe";
+    if (session.payment_intent) order.stripePaymentIntentId = String(session.payment_intent);
+    await order.save();
+    setImmediate(async () => {
+      try {
+        const u = await User.findById(req.user.userId).select("name phone email").lean();
+        if (u) notifyOrderPlaced(order, u);
+      } catch (e) { console.error("notifyOrderPlaced(stripe-checkout) err:", e.message); }
+      try { await require("./order.controller").forwardCJForOrder(order._id); } catch (e) { console.error("CJ forward(stripe) err:", e.message); }
+    });
+  }
+
+  return res.json({ success: true, message: "Payment confirmed", order });
+}
+
+module.exports = { createPayment, verifyPayment, createStripeIntent, confirmStripePayment, createStripeCheckout, verifyStripeCheckout };

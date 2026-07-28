@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Road Hustlers — Garage ERP</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Title bar -->
+  <div id="titlebar">
+    <span class="tb-brand">🔧 <b id="tb-shop">Road Hustlers</b> — Garage Management</span>
+    <span class="tb-right"><span id="tb-user"></span><button id="btn-logout" class="tb-btn" onclick="App.logout()" style="display:none">Logout</button></span>
+  </div>
+
+  <div id="shell">
+    <!-- Left icon rail -->
+    <nav id="rail">
+      <button data-screen="dashboard" title="Dashboard (F1)">🏠</button>
+      <button data-screen="workorders" title="Work Orders">🛠️</button>
+      <button data-screen="appointments" title="Appointments">🗓️</button>
+      <button data-screen="customers" title="Customers">👥</button>
+      <button data-screen="leads" title="Leads">📞</button>
+      <button data-screen="parts" title="Parts / Inventory">📦</button>
+      <button data-screen="po" title="Purchasing (Suppliers + POs)">🚚</button>
+      <button data-screen="invoices" title="Invoices">🧾</button>
+      <button data-screen="payments" title="Payments">💵</button>
+      <button data-screen="reports" title="Reports">📊</button>
+      <button data-screen="services" title="Service Catalog">🧰</button>
+      <button data-screen="staff" title="Staff / Technicians">👷</button>
+      <button data-screen="settings" title="Settings">⚙️</button>
+    </nav>
+
+    <!-- Screen area -->
+    <div id="screen-wrap">
+      <div id="screen-header"><button id="hdr-back" onclick="App.go('dashboard')">←</button><span id="hdr-title">DASHBOARD</span><span id="hdr-hint"></span></div>
+      <div id="screen"></div>
+      <div id="fnbar"></div>
+    </div>
+  </div>
+
+  <!-- Login overlay -->
+  <div id="login-ov">
+    <div id="login-box">
+      <div class="lb-head">🔧 Road Hustlers <span>Garage ERP</span></div>
+      <label>Email</label>
+      <input id="lg-email" type="email" autocomplete="username" placeholder="info@road-hustlers.com">
+      <label>Password</label>
+      <input id="lg-pass" type="password" autocomplete="current-password" placeholder="••••••••">
+      <div id="lg-err"></div>
+      <button id="lg-btn" onclick="App.login()">Sign in</button>
+    </div>
+  </div>
+
+  <div id="modal-ov"></div>
+  <div id="toast"></div>
+
+  <script src="api.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

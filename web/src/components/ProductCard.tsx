@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { Product } from '@/lib/types';
-import { imgUrl } from '@/lib/api';
+import { imgUrl, CURRENCY_SYMBOL } from '@/lib/api';
 
 export default function ProductCard({ product }: { product: Product }) {
   const discount = (product.mrp || product.price) > product.sellingPrice
@@ -69,9 +69,9 @@ export default function ProductCard({ product }: { product: Product }) {
           </div>
         )}
         <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
-          <span className="text-sm font-bold text-gray-900">₹{product.sellingPrice}</span>
+          <span className="text-sm font-bold text-gray-900">{CURRENCY_SYMBOL}{product.sellingPrice}</span>
           {discount > 0 && (
-            <span className="text-[10px] text-gray-400 line-through">₹{product.mrp || product.price}</span>
+            <span className="text-[10px] text-gray-400 line-through">{CURRENCY_SYMBOL}{product.mrp || product.price}</span>
           )}
           {product.rating && product.rating > 0 ? (
             <span className="flex items-center gap-0.5 bg-green-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded ml-auto">

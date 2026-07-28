@@ -7,6 +7,10 @@
 const https = require("https");
 const AppSettings = require("../models/AppSettings");
 const secrets = require("../utils/secrets");
+const emailSvc = require("./email.service");
+
+// US (damndeal.com) customers are reached by email; India by Fast2SMS WhatsApp.
+function _isUS(order) { return (order?.region || "IN") === "US"; }
 
 // ── Fast2SMS config cache (refreshed every 60s) ───────────────────────────
 let _f2sCache = null;
@@ -130,6 +134,11 @@ async function sendSMS(phone, message) {
 // ── Order WhatsApp notifications (Fast2SMS templates) ─────────────────────
 async function notifyOrderPlaced(order, user) {
   try {
+    if (_isUS(order)) {
+      const name = (user?.name || "there").trim().split(/\s+/)[0];
+      await emailSvc.sendEmail(user?.email, "Your DamnDeal order is confirmed", emailSvc.tplOrderPlaced(order, name));
+      return;
+    }
     const phone = _normalizePhone(user?.phone);
     if (!phone) return;
     const cfg = await _getFast2SmsConfig();
@@ -147,6 +156,11 @@ async function notifyOrderPlaced(order, user) {
 
 async function notifyOrderShipped(order, user, opts = {}) {
   try {
+    if (_isUS(order)) {
+      const name = (user?.name || "there").trim().split(/\s+/)[0];
+      await emailSvc.sendEmail(user?.email, "Your DamnDeal order has shipped", emailSvc.tplOrderShipped(order, name, opts));
+      return;
+    }
     const phone = _normalizePhone(user?.phone);
     if (!phone) return;
     const cfg = await _getFast2SmsConfig();
@@ -168,6 +182,11 @@ async function notifyOrderShipped(order, user, opts = {}) {
 
 async function notifyOrderCancelled(order, user, opts = {}) {
   try {
+    if (_isUS(order)) {
+      const name = (user?.name || "there").trim().split(/\s+/)[0];
+      await emailSvc.sendEmail(user?.email, "Your DamnDeal order was cancelled", emailSvc.tplOrderCancelled(order, name, opts));
+      return;
+    }
     const phone = _normalizePhone(user?.phone);
     if (!phone) return;
     const cfg = await _getFast2SmsConfig();
@@ -188,11 +207,9 @@ async function sendTestWhatsApp(phone, vars = []) {
   return { success: !result.error && !result.skipped, result };
 }
 
-// Email via SMTP / SendGrid (stub)
+// Email via SMTP (nodemailer) — see email.service.js
 async function sendEmail(to, subject, html) {
-  // TODO: Integrate nodemailer / SendGrid
-  console.log(`[EMAIL] To: ${to} | Subject: ${subject}`);
-  return { success: true, provider: "stub" };
+  return emailSvc.sendEmail(to, subject, html);
 }
 
 // Push notification via FCM (stub)
@@ -283,4 +300,5 @@ module.exports = {
   sendTestWhatsApp,
   _normalizePhone,
   _invalidateFast2SmsCache,
+  _sendFast2SmsWhatsApp,
 };

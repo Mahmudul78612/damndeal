@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Advertise with DamnDeal Ads — Reach millions across DamnPay & DamnDeal</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#ffffff;--soft:#f6f5fb;--border:#e8e8f0;--ink:#15131f;--muted:#6c7080;--p:#6C2FD9;--p2:#8b5cf6;--pink:#e8388f;--green:#0bb07b}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6;-webkit-font-smoothing:antialiased}
+a{text-decoration:none;color:inherit}
+.wrap{max-width:1140px;margin:0 auto;padding:0 1.4rem}
+.btn{display:inline-flex;align-items:center;gap:.45rem;border-radius:11px;padding:.7rem 1.3rem;font-weight:700;font-size:.9rem;cursor:pointer;border:none;transition:.15s}
+.btn-p{background:var(--p);color:#fff}.btn-p:hover{background:#5826b8}
+.btn-o{background:#fff;color:var(--ink);border:1px solid var(--border)}.btn-o:hover{background:var(--soft)}
+.brand{font-weight:900;font-size:1.2rem;letter-spacing:-.02em}
+.brand b{color:var(--ink)}.brand span{color:var(--p)}.brand .tag{font-size:.58rem;background:var(--p);color:#fff;padding:.15rem .42rem;border-radius:6px;vertical-align:middle;margin-left:.35rem;text-transform:uppercase;letter-spacing:.08em}
+
+/* nav */
+nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.85);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+nav .wrap{display:flex;align-items:center;justify-content:space-between;height:64px}
+.nav-links{display:flex;align-items:center;gap:.6rem}
+.nav-links a.txt{padding:.5rem .8rem;color:var(--muted);font-weight:600;font-size:.88rem}
+.nav-links a.txt:hover{color:var(--ink)}
+
+/* hero */
+.hero{background:radial-gradient(900px 500px at 78% -10%,#efe9ff,transparent 60%),var(--bg);padding:3.5rem 0 2rem}
+.hero .wrap{display:grid;grid-template-columns:1.1fr .9fr;gap:2rem;align-items:center}
+.tagpill{display:inline-block;background:#efeefb;color:var(--p);font-weight:700;font-size:.74rem;padding:.3rem .8rem;border-radius:20px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:1rem}
+.hero h1{font-size:3rem;font-weight:900;line-height:1.08;letter-spacing:-.03em}
+.hero h1 em{color:var(--p);font-style:normal}
+.hero p{color:var(--muted);font-size:1.08rem;margin:1.1rem 0 1.6rem;max-width:480px}
+.hero-cta{display:flex;gap:.8rem;flex-wrap:wrap}
+.hero-stats{display:flex;gap:2rem;margin-top:2rem}
+.hero-stats .n{font-size:1.6rem;font-weight:900;color:var(--p)}
+.hero-stats .l{font-size:.78rem;color:var(--muted)}
+.hero-phone{display:flex;justify-content:center}
+
+/* phone mockup */
+.phone{width:230px;border-radius:30px;border:9px solid #15131f;background:#15131f;box-shadow:0 30px 60px rgba(20,15,40,.22);position:relative}
+.phone::before{content:'';position:absolute;top:9px;left:50%;transform:translateX(-50%);width:70px;height:18px;background:#15131f;border-radius:0 0 12px 12px;z-index:3}
+.scr{background:#f4f4f8;border-radius:22px;overflow:hidden;height:440px;position:relative}
+.scr.sm{height:380px}
+.app-bar{background:var(--p);color:#fff;padding:1.4rem .9rem .7rem;display:flex;align-items:center;justify-content:space-between}
+.app-bar .t{font-weight:800;font-size:.92rem}
+.app-bar.pay{background:linear-gradient(120deg,#6C2FD9,#8b5cf6)}
+.scr-body{padding:.7rem}
+.adslot{border:2px dashed var(--p);background:#efeefb;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--p);font-weight:800;font-size:.66rem;text-align:center;gap:2px;height:54px;margin:.5rem 0}
+.adslot .yh{font-size:.58rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;opacity:.7}
+.adslot.big{height:90px}
+.row3{display:flex;gap:.4rem}
+.ic{flex:1;background:#fff;border-radius:10px;padding:.5rem .2rem;text-align:center;font-size:.6rem;color:var(--muted);box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.ic .e{font-size:1.1rem;display:block;margin-bottom:.1rem}
+.cardrow{background:#fff;border-radius:10px;padding:.55rem .6rem;margin-bottom:.4rem;display:flex;align-items:center;gap:.5rem;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.dot{width:26px;height:26px;border-radius:8px;background:#efeefb;flex-shrink:0}
+.ln{height:7px;background:#eceaf4;border-radius:4px}
+.success{text-align:center;padding:1.4rem .6rem .6rem}
+.tick{width:54px;height:54px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.6rem;margin:0 auto .5rem}
+.scratch{background:linear-gradient(135deg,#ffd86b,#ff9e3d);border-radius:12px;height:120px;display:flex;align-items:center;justify-content:center;color:#7a4a00;font-weight:800;margin:.4rem 0}
+.input-box{background:#fff;border:1px solid var(--border);border-radius:9px;padding:.6rem;font-size:.7rem;color:var(--muted);margin:.4rem 0}
+
+/* sections */
+.sec{padding:4rem 0}
+.sec.soft{background:var(--soft)}
+.sec-head{text-align:center;max-width:640px;margin:0 auto 2.6rem}
+.sec-head .k{color:var(--p);font-weight:800;text-transform:uppercase;letter-spacing:.08em;font-size:.78rem}
+.sec-head h2{font-size:2.1rem;font-weight:900;letter-spacing:-.02em;margin:.4rem 0 .6rem}
+.sec-head p{color:var(--muted)}
+
+/* benefits */
+.bgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.2rem}
+.bcard{background:#fff;border:1px solid var(--border);border-radius:16px;padding:1.5rem;box-shadow:0 1px 3px rgba(20,15,40,.04)}
+.bcard .e{width:46px;height:46px;border-radius:12px;background:#efeefb;display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin-bottom:.9rem}
+.bcard h3{font-size:1.05rem;font-weight:800;margin-bottom:.3rem}
+.bcard p{color:var(--muted);font-size:.9rem}
+
+/* showcase grid */
+.show-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2rem 1.2rem;justify-items:center}
+.show-item{text-align:center;max-width:240px}
+.show-item .cap{margin-top:1rem}
+.show-item .cap b{display:block;font-weight:800;font-size:.95rem}
+.show-item .cap span{color:var(--muted);font-size:.82rem}
+
+/* cta */
+.cta{background:linear-gradient(120deg,#2a1b54,#6C2FD9);color:#fff;border-radius:24px;padding:3rem;text-align:center;margin:0 1.4rem}
+.cta h2{font-size:2rem;font-weight:900;margin-bottom:.6rem}
+.cta p{opacity:.85;margin-bottom:1.6rem}
+.cta .btn-white{background:#fff;color:var(--p)}
+.cta .btn-line{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4)}
+
+footer{padding:2.4rem 0;border-top:1px solid var(--border);color:var(--muted);font-size:.85rem}
+footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem}
+
+@media(max-width:900px){.hero .wrap{grid-template-columns:1fr}.hero-phone{order:-1}.bgrid{grid-template-columns:1fr}.show-grid{grid-template-columns:repeat(2,1fr)}.hero h1{font-size:2.3rem}}
+@media(max-width:560px){.show-grid{grid-template-columns:1fr}.nav-links a.txt{display:none}}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <div class="brand"><b>damn</b><span>deal</span><span class="tag">Ads</span></div>
+  <div class="nav-links">
+    <a class="txt" href="#why">Why us</a>
+    <a class="txt" href="#showcase">Placements</a>
+    <a class="btn btn-o" href="#contact">Contact Sales</a>
+    <a class="btn btn-p" href="/ads/portal/">Advertiser Login</a>
+  </div>
+</div></nav>
+
+<!-- HERO -->
+<header class="hero"><div class="wrap">
+  <div>
+    <span class="tagpill">Advertise across our apps</span>
+    <h1>Put your brand in front of <em>millions</em> of real users.</h1>
+    <p>Run banner & video ads inside DamnPay and DamnDeal — geo-targeted by state, with live click & <b>sale tracking</b> (like Meta &amp; Google). Pay for results you can actually see.</p>
+    <div class="hero-cta">
+      <a class="btn btn-p" href="/ads/portal/">Advertiser Login →</a>
+      <a class="btn btn-o" href="#contact">Contact Sales</a>
+    </div>
+    <div class="hero-stats">
+      <div><div class="n">8+</div><div class="l">Ad placements</div></div>
+      <div><div class="n">State-wise</div><div class="l">Geo targeting</div></div>
+      <div><div class="n">Live</div><div class="l">Sale tracking</div></div>
+    </div>
+  </div>
+  <div class="hero-phone">
+    <div class="phone"><div class="scr">
+      <div class="app-bar pay"><span class="t">DamnPay</span><span style="font-size:.7rem">₹ 2,450</span></div>
+      <div class="scr-body">
+        <div class="adslot big"><span class="yh">Sponsored</span>Your Banner Ad Here</div>
+        <div class="row3" style="margin:.5rem 0">
+          <div class="ic"><span class="e">📱</span>Recharge</div>
+          <div class="ic"><span class="e">💡</span>Electricity</div>
+          <div class="ic"><span class="e">📺</span>DTH</div>
+          <div class="ic"><span class="e">💧</span>Water</div>
+        </div>
+        <div class="cardrow"><div class="dot"></div><div style="flex:1"><div class="ln" style="width:70%"></div><div class="ln" style="width:40%;margin-top:5px"></div></div></div>
+        <div class="cardrow"><div class="dot"></div><div style="flex:1"><div class="ln" style="width:60%"></div><div class="ln" style="width:50%;margin-top:5px"></div></div></div>
+      </div>
+    </div></div>
+  </div>
+</div></header>
+
+<!-- WHY / BENEFITS -->
+<section class="sec" id="why"><div class="wrap">
+  <div class="sec-head"><div class="k">Why advertise with us</div><h2>Real audience. Real targeting. Real sales.</h2><p>Everything you need to run, target and measure your campaigns.</p></div>
+  <div class="bgrid">
+    <div class="bcard"><div class="e">📍</div><h3>State-wise targeting</h3><p>Show your ad only in the states/cities you care about. Detected automatically by location.</p></div>
+    <div class="bcard"><div class="e">🛒</div><h3>Sale &amp; conversion tracking</h3><p>See exactly how many purchases your ad drove — like Meta Pixel / Google conversion tracking.</p></div>
+    <div class="bcard"><div class="e">📊</div><h3>Live analytics</h3><p>Impressions, clicks, CTR, conversions &amp; revenue — updated in real time in your portal.</p></div>
+    <div class="bcard"><div class="e">🎬</div><h3>Banner &amp; video ads</h3><p>Upload an image or a video creative with a CTA button (Shop Now, Learn More…).</p></div>
+    <div class="bcard"><div class="e">🧩</div><h3>8+ premium placements</h3><p>From Magic Club to recharge success — high-intent moments inside the apps.</p></div>
+    <div class="bcard"><div class="e">⚡</div><h3>Easy setup</h3><p>We onboard you, you upload, ads go live. Track everything from one dashboard.</p></div>
+  </div>
+</div></section>
+
+<!-- SHOWCASE -->
+<section class="sec soft" id="showcase"><div class="wrap">
+  <div class="sec-head"><div class="k">Ad inventory</div><h2>Where your ads appear</h2><p>Premium, high-attention placements across DamnPay &amp; DamnDeal Magic Club.</p></div>
+  <div class="show-grid">
+
+    <!-- Magic Club -->
+    <div class="show-item">
+      <div class="phone"><div class="scr sm">
+        <div class="app-bar"><span class="t">🎡 Magic Club</span></div>
+        <div class="scr-body">
+          <div class="cardrow"><div class="dot" style="background:#ffe6f1"></div><div style="flex:1"><div class="ln" style="width:60%"></div><div class="ln" style="width:35%;margin-top:5px"></div></div></div>
+          <div class="adslot"><span class="yh">Sponsored</span>Your Ad Between Clubs</div>
+          <div class="cardrow"><div class="dot" style="background:#e6f0ff"></div><div style="flex:1"><div class="ln" style="width:55%"></div><div class="ln" style="width:40%;margin-top:5px"></div></div></div>
+          <div class="adslot"><span class="yh">Sponsored</span>Your Ad Between Clubs</div>
+          <div class="cardrow"><div class="dot" style="background:#fff0e0"></div><div style="flex:1"><div class="ln" style="width:65%"></div><div class="ln" style="width:30%;margin-top:5px"></div></div></div>
+        </div>
+      </div></div>
+      <div class="cap"><b>Magic Club</b><span>One ad between every club</span></div>
+    </div>
+
+    <!-- DamnPay Home Banner -->
+    <div class="show-item">
+      <div class="phone"><div class="scr sm">
+        <div class="app-bar pay"><span class="t">DamnPay</span></div>
+        <div class="scr-body">
+          <div class="adslot big"><span class="yh">Sponsored</span>Home Banner Ad</div>
+          <div class="row3"><div class="ic"><span class="e">📱</span>Recharge</div><div class="ic"><span class="e">💡</span>Bills</div><div class="ic"><span class="e">📺</span>DTH</div></div>
+        </div>
+      </div></div>
+      <div class="cap"><b>DamnPay Home</b><span>Top home banner</span></div>
+    </div>
+
+    <!-- Plan page -->
+    <div class="show-item">
+      <div class="phone"><div class="scr sm">
+        <div class="app-bar pay"><span class="t">Recharge Plans</span></div>
+        <div class="scr-body">
+          <div class="cardrow"><div style="flex:1"><b style="font-size:.7rem">₹239</b><div class="ln" style="width:70%;margin-top:5px"></div></div></div>
+          <div class="cardrow"><div style="flex:1"><b style="font-size:.7rem">₹299</b><div class="ln" style="width:60%;margin-top:5px"></div></div></div>
+          <div class="adslot"><span class="yh">Sponsored</span>Your Ad on Plans</div>
+          <div class="cardrow"><div style="flex:1"><b style="font-size:.7rem">₹479</b><div class="ln" style="width:65%;margin-top:5px"></div></div></div>
+        </div>
+      </div></div>
+      <div class="cap"><b>Plan Page</b><span>Inside recharge plans</span></div>
+    </div>
+
+    <!-- Recharge success -->
+    <div class="show-item">
+      <div class="phone"><div class="scr sm">
+        <div class="app-bar pay"><span class="t">Success</span></div>
+        <div class="scr-body">
+          <div class="success"><div class="tick">✓</div><b style="font-size:.85rem">Recharge Successful</b><div class="ln" style="width:50%;margin:.5rem auto 0"></div></div>
+          <div class="adslot big"><span class="yh">Sponsored</span>Your Ad on Success</div>
+        </div>
+      </div></div>
+      <div class="cap"><b>Recharge Success</b><span>After a successful recharge</span></div>
+    </div>
+
+    <!-- Scratch card -->
+    <div class="show-item">
+      <div class="phone"><div class="scr sm">
+        <div class="app-bar pay"><span class="t">🎁 Scratch Card</span></div>
+        <div class="scr-body">
+          <div class="scratch">SCRATCH &amp; WIN</div>
+          <div class="adslot big"><span class="yh">Sponsored</span>Your Ad on Scratch Card</div>
+        </div>
+      </div></div>
+      <div class="cap"><b>Scratch Card</b><span>On reward reveal</span></div>
+    </div>
+
+    <!-- Add points -->
+    <div class="show-item">
+      <div class="phone"><div class="scr sm">
+        <div class="app-bar pay"><span class="t">Add Points</span></div>
+        <div class="scr-body">
+          <div class="input-box">Enter amount…</div>
+          <div class="row3"><div class="ic">₹100</div><div class="ic">₹500</div><div class="ic">₹1000</div></div>
+          <div class="adslot big"><span class="yh">Sponsored</span>Your Ad on Add Points</div>
+        </div>
+      </div></div>
+      <div class="cap"><b>Add Points</b><span>Wallet top-up screen</span></div>
+    </div>
+
+    <!-- Bill pay -->
+    <div class="show-item">
+      <div class="phone"><div class="scr sm">
+        <div class="app-bar pay"><span class="t">Pay Bill</span></div>
+        <div class="scr-body">
+          <div class="cardrow"><div class="dot" style="background:#e6f0ff"></div><div style="flex:1"><div class="ln" style="width:55%"></div><div class="ln" style="width:40%;margin-top:5px"></div></div></div>
+          <div class="adslot big"><span class="yh">Sponsored</span>Your Ad on Bill Pay</div>
+          <div class="cardrow"><div style="flex:1"><div class="ln" style="width:70%"></div></div></div>
+        </div>
+      </div></div>
+      <div class="cap"><b>Bill Pay</b><span>Electricity / DTH / gas</span></div>
+    </div>
+
+    <!-- Bill fetch / consumer number -->
+    <div class="show-item">
+      <div class="phone"><div class="scr sm">
+        <div class="app-bar pay"><span class="t">Fetch Bill</span></div>
+        <div class="scr-body">
+          <div class="input-box">Consumer number…</div>
+          <div class="input-box">Select operator…</div>
+          <div class="adslot big"><span class="yh">Sponsored</span>Your Ad on Bill Fetch</div>
+        </div>
+      </div></div>
+      <div class="cap"><b>Bill Fetch</b><span>Consumer-number input</span></div>
+    </div>
+
+  </div>
+</div></section>
+
+<!-- CONTACT / CTA -->
+<section class="sec" id="contact"><div class="cta">
+  <h2>Ready to advertise?</h2>
+  <p>Already onboarded? <a href="/ads/portal/" style="color:#fff;text-decoration:underline">Log in</a>. New here? Leave your details and our sales team will set you up.</p>
+
+  <div id="lead-form" style="max-width:520px;margin:1.4rem auto 0;text-align:left;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:16px;padding:1.4rem">
+    <div id="lead-alert"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem">
+      <input id="l-name" placeholder="Your name *" style="grid-column:span 1">
+      <input id="l-company" placeholder="Company">
+      <input id="l-email" type="email" placeholder="Email">
+      <input id="l-phone" placeholder="Phone *">
+    </div>
+    <textarea id="l-msg" placeholder="What do you want to advertise? (optional)" rows="2" style="width:100%;margin-top:.7rem"></textarea>
+    <div style="display:flex;gap:.8rem;justify-content:center;margin-top:1rem;flex-wrap:wrap">
+      <button class="btn btn-white" id="l-btn" onclick="submitLead()">Contact Sales →</button>
+      <a class="btn btn-line" href="/ads/portal/">Advertiser Login</a>
+    </div>
+  </div>
+  <p style="margin-top:1.2rem;font-size:.85rem;opacity:.7">✉️ info@damndeal.in</p>
+</div></section>
+
+<style>
+#lead-form input,#lead-form textarea{width:100%;background:rgba(255,255,255,.95);border:none;border-radius:10px;padding:.65rem .8rem;font-size:.88rem;font-family:inherit;color:#15131f}
+#lead-form input:focus,#lead-form textarea:focus{outline:2px solid #fff}
+.lead-ok{background:rgba(11,176,123,.25);border:1px solid rgba(11,176,123,.5);color:#d6ffe9;padding:.6rem .9rem;border-radius:10px;margin-bottom:.8rem;font-size:.88rem}
+.lead-err{background:rgba(232,68,60,.25);border:1px solid rgba(232,68,60,.5);color:#ffe1df;padding:.6rem .9rem;border-radius:10px;margin-bottom:.8rem;font-size:.88rem}
+</style>
+<script>
+async function submitLead(){
+  var name=document.getElementById('l-name').value.trim();
+  var phone=document.getElementById('l-phone').value.trim();
+  var email=document.getElementById('l-email').value.trim();
+  var al=document.getElementById('lead-alert');
+  if(!name||(!phone&&!email)){ al.innerHTML='<div class="lead-err">Please enter your name and a phone or email.</div>'; return; }
+  var btn=document.getElementById('l-btn'); btn.disabled=true; btn.textContent='Sending...';
+  try{
+    var base=(location.hostname==='localhost')?'http://localhost:7000/api':'/ads/api';
+    var r=await fetch(base+'/sales-lead',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:name,company:document.getElementById('l-company').value.trim(),email:email,phone:phone,message:document.getElementById('l-msg').value.trim()})}).then(x=>x.json());
+    if(r.success){ document.getElementById('lead-form').innerHTML='<div class="lead-ok" style="text-align:center;font-size:1rem">✓ Thanks! Our sales team will reach out to you shortly.</div>'; }
+    else{ al.innerHTML='<div class="lead-err">'+(r.message||'Something went wrong')+'</div>'; btn.disabled=false; btn.textContent='Contact Sales →'; }
+  }catch(e){ al.innerHTML='<div class="lead-err">Network error. Please try again.</div>'; btn.disabled=false; btn.textContent='Contact Sales →'; }
+}
+</script>
+
+<footer><div class="wrap">
+  <div class="brand"><b>damn</b><span>deal</span><span class="tag">Ads</span></div>
+  <div>© 2026 DamnDeal Ads · <a href="/ads/docs/" style="color:var(--p)">Integration docs</a> · <a href="/ads/portal/" style="color:var(--p)">Login</a></div>
+</div></footer>
+
+</body>
+</html>

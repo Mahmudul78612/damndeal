@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
@@ -13,16 +13,34 @@ interface LoginModalProps {
   redirect?: string;
 }
 
+function getRegion(): 'IN' | 'US' {
+  if (typeof window === 'undefined') return 'IN';
+  const env = process.env.NEXT_PUBLIC_REGION;
+  if (env) return env.toUpperCase() === 'US' ? 'US' : 'IN';
+  const h = window.location.hostname;
+  if (h === 'damndeal.com' || h.endsWith('.damndeal.com')) return 'US';
+  return 'IN';
+}
+
 export default function LoginModal({ isOpen, onClose, redirect }: LoginModalProps) {
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { login, verifyOtp } = useAuth();
+  const [region, setRegion] = useState<'IN' | 'US'>('IN');
+  const { login, verifyOtp, firebaseVerify } = useAuth();
   const brandLogo = useBrandLogo('light');
   const brandName = useBrandName();
   const router = useRouter();
+
+  const recaptchaContainerRef = useRef<HTMLDivElement>(null);
+  const recaptchaVerifierRef = useRef<any>(null);
+  const confirmationResultRef = useRef<any>(null);
+
+  useEffect(() => {
+    setRegion(getRegion());
+  }, []);
 
   // Reset on open
   useEffect(() => {
@@ -31,40 +49,77 @@ export default function LoginModal({ isOpen, onClose, redirect }: LoginModalProp
       setOtp('');
       setStep('phone');
       setError('');
+      clearFirebase();
     }
   }, [isOpen]);
 
   // Lock body scroll
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
+    document.body.style.overflow = isOpen ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
   }, [isOpen]);
 
   if (!isOpen) return null;
 
+  const clearFirebase = () => {
+    if (recaptchaVerifierRef.current) {
+      try { recaptchaVerifierRef.current.clear(); } catch {}
+      recaptchaVerifierRef.current = null;
+    }
+    confirmationResultRef.current = null;
+  };
+
   const handleSendOtp = async () => {
-    if (phone.length !== 10) { setError('Enter valid 10-digit phone number'); return; }
     setLoading(true);
     setError('');
+
     try {
-      await login('+91' + phone);
+      if (region === 'US') {
+        const digits = phone.replace(/\D/g, '');
+        if (digits.length !== 10) { setError('Enter a valid 10-digit US phone number'); setLoading(false); return; }
+
+        const { getFirebase } = await import('@/lib/firebase');
+        const { RecaptchaVerifier, signInWithPhoneNumber } = await import('firebase/auth');
+        const { auth } = getFirebase();
+
+        clearFirebase();
+
+        recaptchaVerifierRef.current = new RecaptchaVerifier(auth, recaptchaContainerRef.current!, {
+          size: 'invisible',
+          callback: () => {},
+        });
+
+        confirmationResultRef.current = await signInWithPhoneNumber(auth, '+1' + digits, recaptchaVerifierRef.current);
+      } else {
+        if (phone.length !== 10) { setError('Enter a valid 10-digit phone number'); setLoading(false); return; }
+        await login('+91' + phone);
+      }
+
       setStep('otp');
     } catch (e: any) {
       setError(e.message || 'Failed to send OTP');
+      clearFirebase();
     }
+
     setLoading(false);
   };
 
   const handleVerify = async () => {
-    if (otp.length < 4) { setError('Enter valid OTP'); return; }
+    if (otp.length < 4) { setError('Enter a valid OTP'); return; }
     setLoading(true);
     setError('');
+
     try {
-      const res = await verifyOtp('+91' + phone, otp);
+      let res;
+      if (region === 'US') {
+        if (!confirmationResultRef.current) throw new Error('Session expired. Please resend OTP.');
+        const cred = await confirmationResultRef.current.confirm(otp);
+        const idToken = await cred.user.getIdToken();
+        res = await firebaseVerify(idToken);
+      } else {
+        res = await verifyOtp('+91' + phone, otp);
+      }
+
       onClose();
       if (!res.isProfileComplete) {
         router.push('/complete-profile');
@@ -74,6 +129,7 @@ export default function LoginModal({ isOpen, onClose, redirect }: LoginModalProp
     } catch (e: any) {
       setError(e.message || 'Invalid OTP');
     }
+
     setLoading(false);
   };
 
@@ -83,6 +139,9 @@ export default function LoginModal({ isOpen, onClose, redirect }: LoginModalProp
       else handleVerify();
     }
   };
+
+  const countryCode = region === 'US' ? '+1' : '+91';
+  const isPhoneValid = phone.replace(/\D/g, '').length === 10;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
@@ -133,7 +192,7 @@ export default function LoginModal({ isOpen, onClose, redirect }: LoginModalProp
               <p className="text-xs text-gray-400 mb-5">Enter your phone number to continue</p>
 
               <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200 focus-within:ring-2 focus-within:ring-primary/30 focus-within:border-primary">
-                <span className="text-xs font-medium text-gray-500">+91</span>
+                <span className="text-xs font-medium text-gray-500">{countryCode}</span>
                 <input
                   type="tel"
                   value={phone}
@@ -145,6 +204,9 @@ export default function LoginModal({ isOpen, onClose, redirect }: LoginModalProp
                 />
               </div>
 
+              {/* invisible reCAPTCHA mount point */}
+              <div ref={recaptchaContainerRef} />
+
               <p className="text-[10px] text-gray-400 mt-2">
                 By continuing, you agree to DamnDeal&apos;s <span className="text-primary">Terms of Use</span> and <span className="text-primary">Privacy Policy</span>.
               </p>
@@ -153,7 +215,7 @@ export default function LoginModal({ isOpen, onClose, redirect }: LoginModalProp
 
               <button
                 onClick={handleSendOtp}
-                disabled={loading || phone.length !== 10}
+                disabled={loading || !isPhoneValid}
                 className="w-full mt-4 py-2.5 bg-accent text-white rounded-lg font-bold text-sm hover:bg-amber-600 transition disabled:opacity-50"
               >
                 {loading ? 'Sending...' : 'Request OTP'}
@@ -161,11 +223,14 @@ export default function LoginModal({ isOpen, onClose, redirect }: LoginModalProp
             </div>
           ) : (
             <div onKeyDown={handleKeyDown}>
-              <button onClick={() => { setStep('phone'); setOtp(''); setError(''); }} className="flex items-center gap-1 text-xs text-gray-500 mb-3 hover:text-gray-700">
+              <button
+                onClick={() => { setStep('phone'); setOtp(''); setError(''); clearFirebase(); }}
+                className="flex items-center gap-1 text-xs text-gray-500 mb-3 hover:text-gray-700"
+              >
                 <ChevronLeft size={14} /> Change number
               </button>
               <h3 className="text-base font-bold text-gray-900 mb-0.5">Verify OTP</h3>
-              <p className="text-xs text-gray-400 mb-5">Enter the OTP sent to +91{phone}</p>
+              <p className="text-xs text-gray-400 mb-5">Enter the OTP sent to {countryCode}{phone}</p>
 
               <input
                 type="text"

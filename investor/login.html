@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — DamnDeal Investor Portal</title>
+  <script>
+    (function () {
+      var h = location.hostname.toLowerCase();
+      var us = h === "damndeal.com" || h.endsWith(".damndeal.com");
+      document.documentElement.classList.add(us ? "region-us" : "region-in");
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <!-- Firebase Phone Auth (used on damndeal.com / Global) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <style>
+    .region-us .js-damnpay { display: none !important; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --dd: #6C2FD9;
+      --dp: #D1286A;
+      --ink: #0D0D12;
+      --muted: #6B7280;
+      --border: #E5E7EB;
+      --bg: #FAFAFA;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas: "form info";
+      min-height: 100vh;
+    }
+
+    /* ── LEFT PANEL ──────────────────────────────────────────────────────── */
+    .left {
+      grid-area: info;
+      background: #0C0C0E;
+      display: flex; flex-direction: column; justify-content: space-between;
+      padding: 3rem 3.5rem;
+      position: relative; overflow: hidden;
+    }
+
+    /* Ghost background word */
+    .left-bg-word {
+      position: absolute; bottom: -0.1em; right: -0.05em;
+      font-size: clamp(8rem, 14vw, 14rem);
+      font-weight: 900; letter-spacing: -.06em; line-height: 1;
+      color: transparent;
+      -webkit-text-stroke: 1px rgba(255,255,255,.04);
+      pointer-events: none; user-select: none;
+      white-space: nowrap;
+    }
+
+    /* Top brand */
+    .left-brand { display: flex; align-items: center; gap: .6rem; text-decoration: none; }
+    .left-brand svg { height: 22px; }
+
+    /* Center copy */
+    .left-body { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 3rem 0; }
+
+    .left-tag {
+      font-size: .7rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+      color: rgba(255,255,255,.3); margin-bottom: 1.5rem;
+      display: flex; align-items: center; gap: .6rem;
+    }
+    .left-tag::before { content: ''; width: 18px; height: 1px; background: rgba(255,255,255,.2); }
+
+    .left-body h2 {
+      font-size: clamp(1.9rem, 3.2vw, 2.8rem);
+      font-weight: 900; line-height: 1.1; letter-spacing: -.04em;
+      color: #fff; margin-bottom: 1.5rem;
+    }
+    .left-body h2 span {
+      background: linear-gradient(90deg, #A78BFA, var(--dp));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+
+    .left-body p {
+      font-size: .9rem; color: rgba(255,255,255,.4); line-height: 1.75;
+      max-width: 340px;
+    }
+
+    /* Platform chips */
+    .platform-chips { display: flex; gap: .75rem; margin-top: 2.5rem; flex-wrap: wrap; }
+    .chip {
+      display: inline-flex; align-items: center; gap: .5rem;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 8px; padding: .55rem .9rem;
+      font-size: .78rem; font-weight: 600; color: rgba(255,255,255,.6);
+      background: rgba(255,255,255,.03);
+    }
+    .chip-dot { width: 7px; height: 7px; border-radius: 50%; }
+    .chip-dot.dd { background: #A78BFA; }
+    .chip-dot.dp { background: var(--dp); }
+
+    /* Stats block */
+    .left-stats {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 0;
+      border-top: 1px solid rgba(255,255,255,.07);
+      padding-top: 2rem;
+      position: relative; z-index: 1;
+    }
+    .left-stat { padding-right: 1.5rem; }
+    .left-stat + .left-stat { padding-left: 1.5rem; border-left: 1px solid rgba(255,255,255,.07); }
+    .left-stat-val {
+      font-size: 1.4rem; font-weight: 800; color: #fff;
+      letter-spacing: -.04em; line-height: 1;
+    }
+    .left-stat-label {
+      font-size: .68rem; color: rgba(255,255,255,.3);
+      text-transform: uppercase; letter-spacing: .08em; margin-top: .35rem;
+    }
+
+    /* Testimonial / quote */
+    .left-quote {
+      border-left: 2px solid rgba(255,255,255,.1);
+      padding-left: 1.25rem; margin-top: 2.5rem;
+      position: relative; z-index: 1;
+    }
+    .left-quote p {
+      font-size: .85rem; color: rgba(255,255,255,.35); font-style: italic;
+      line-height: 1.65; max-width: 300px;
+    }
+    .left-quote cite {
+      display: block; margin-top: .6rem;
+      font-size: .72rem; color: rgba(255,255,255,.2); font-style: normal;
+      font-weight: 600; letter-spacing: .04em;
+    }
+
+    /* ── RIGHT PANEL ─────────────────────────────────────────────────────── */
+    .right {
+      grid-area: form;
+      background: var(--bg);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 3rem 2.5rem;
+    }
+
+    .form-wrap {
+      width: 100%; max-width: 380px;
+    }
+
+    .form-back {
+      display: inline-flex; align-items: center; gap: .4rem;
+      font-size: .8rem; color: var(--muted); text-decoration: none;
+      margin-bottom: 2.5rem;
+      transition: color 0.2s;
+    }
+    .form-back:hover { color: var(--ink); }
+
+    .form-title {
+      font-size: 1.55rem; font-weight: 800; letter-spacing: -.03em;
+      color: var(--ink); margin-bottom: .4rem;
+    }
+    .form-subtitle {
+      font-size: .85rem; color: var(--muted); margin-bottom: 2rem; line-height: 1.5;
+    }
+
+    /* Steps indicator */
+    .step-indicator {
+      display: flex; align-items: center; gap: .5rem;
+      margin-bottom: 2rem;
+    }
+    .step-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--border); transition: background 0.3s, transform 0.3s;
+    }
+    .step-dot.active { background: var(--dd); transform: scale(1.3); }
+    .step-dot.done { background: #A78BFA; }
+    .step-line { flex: 1; height: 1px; background: var(--border); }
+
+    /* Form fields */
+    .field { margin-bottom: 1rem; }
+    .field label {
+      display: block; font-size: .78rem; font-weight: 600; color: var(--ink);
+      margin-bottom: .45rem; letter-spacing: .01em;
+    }
+    .field label .opt { color: var(--muted); font-weight: 400; }
+
+    .field input {
+      width: 100%; padding: .75rem 1rem;
+      border: 1.5px solid var(--border); border-radius: 9px;
+      font-family: 'Inter', sans-serif; font-size: .93rem; color: var(--ink);
+      background: #fff;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+    .field input:focus {
+      border-color: var(--dd);
+      box-shadow: 0 0 0 3px rgba(108,47,217,.1);
+    }
+    .field input.otp-field {
+      font-size: 1.5rem; font-weight: 800; letter-spacing: .25em;
+      text-align: center;
+    }
+
+    /* Phone prefix */
+    .phone-wrap { display: flex; gap: .5rem; }
+    .phone-prefix {
+      display: flex; align-items: center; justify-content: center;
+      padding: .75rem .9rem; background: #fff;
+      border: 1.5px solid var(--border); border-radius: 9px;
+      font-size: .88rem; font-weight: 600; color: var(--muted);
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .phone-wrap input { flex: 1; }
+
+    .btn-submit {
+      width: 100%; padding: .85rem;
+      background: var(--dd); color: #fff;
+      border: none; border-radius: 9px;
+      font-family: 'Inter', sans-serif; font-size: .93rem; font-weight: 700;
+      cursor: pointer; margin-top: .5rem;
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    .btn-submit:hover { opacity: .88; transform: translateY(-1px); }
+    .btn-submit:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+    .form-footer {
+      margin-top: 1.25rem; text-align: center;
+      font-size: .8rem; color: var(--muted);
+    }
+    .form-footer a { color: var(--dd); font-weight: 600; text-decoration: none; }
+
+    /* Alert */
+    .alert {
+      padding: .7rem .9rem; border-radius: 8px; font-size: .82rem;
+      margin-bottom: 1rem; line-height: 1.4;
+    }
+    .alert-danger { background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; }
+    .alert-success { background: #F0FDF4; color: #166534; border: 1px solid #BBF7D0; }
+    .alert-info { background: #EFF6FF; color: #1E40AF; border: 1px solid #BFDBFE; }
+
+    /* OTP sent display */
+    .otp-phone-badge {
+      display: flex; align-items: center; justify-content: space-between;
+      background: #F5F3FF; border: 1px solid #DDD6FE;
+      border-radius: 9px; padding: .65rem 1rem;
+      margin-bottom: 1.25rem;
+    }
+    .otp-phone-badge .num { font-size: .9rem; font-weight: 700; color: var(--dd); }
+    .otp-phone-badge .change {
+      font-size: .75rem; color: var(--muted); cursor: pointer;
+      text-decoration: none; font-weight: 600;
+    }
+    .otp-phone-badge .change:hover { color: var(--dd); }
+
+    /* Resend row */
+    .resend-row {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: .75rem; font-size: .78rem; color: var(--muted);
+    }
+    .resend-row a { color: var(--dd); font-weight: 600; text-decoration: none; cursor: pointer; }
+
+    /* ── RESPONSIVE ──────────────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      body { grid-template-columns: 1fr; grid-template-areas: "form"; }
+      .left { display: none; }
+      .right { min-height: 100vh; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LEFT: info panel -->
+<div class="left">
+  <div class="left-bg-word">GROW</div>
+
+  <a href="/investor/index.html" class="left-brand">
+    <svg viewBox="0 0 160 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <text x="0" y="22" font-family="Inter,sans-serif" font-weight="900" font-size="20" fill="#fff">Damn</text>
+      <text x="60" y="22" font-family="Inter,sans-serif" font-weight="900" font-size="20" fill="#A78BFA">Deal</text>
+      <text x="105" y="22" font-family="Inter,sans-serif" font-weight="400" font-size="12" fill="rgba(255,255,255,.3)"> Invest</text>
+    </svg>
+  </a>
+
+  <div class="left-body">
+    <div class="left-tag">Investor Portal</div>
+
+    <h2>Your returns.<br>Two platforms.<br><span>Zero lock-in.</span></h2>
+
+    <p class="js-left-sub">Join investors already earning from India's fastest-growing hyperlocal commerce and digital payments ecosystem.</p>
+
+    <div class="platform-chips">
+      <div class="chip"><span class="chip-dot dd"></span> DamnDeal · E-Commerce</div>
+      <div class="chip js-damnpay"><span class="chip-dot dp"></span> DamnPay · Recharge &amp; Bills</div>
+    </div>
+
+    <div class="left-quote">
+      <p class="js-quote">"Started with 10 slots. Points credited every month. Withdrew 24,000 points in the first quarter."</p>
+      <cite>— Rohit M., Growth Investor</cite>
+    </div>
+  </div>
+
+  <div>
+    <div class="left-stats">
+      <div class="left-stat">
+        <div class="left-stat-val js-slot-points">5,000</div>
+        <div class="left-stat-label">Points / slot</div>
+      </div>
+      <div class="left-stat">
+        <div class="left-stat-val">Anytime</div>
+        <div class="left-stat-label">Withdraw</div>
+      </div>
+      <div class="left-stat">
+        <div class="left-stat-val">3–5</div>
+        <div class="left-stat-label">Days payout</div>
+      </div>
+    </div>
+    <p class="js-point-note" style="display:none;margin-top:1rem;font-size:.78rem;color:rgba(255,255,255,.45)"></p>
+  </div>
+</div>
+
+<!-- RIGHT: login form -->
+<div class="right">
+  <div class="form-wrap">
+
+    <a href="/investor/index.html" class="left-brand" style="margin-bottom:2.5rem;display:inline-flex">
+      <svg viewBox="0 0 160 28" fill="none" xmlns="http://www.w3.org/2000/svg" style="height:22px">
+        <text x="0" y="22" font-family="Inter,sans-serif" font-weight="900" font-size="20" fill="#0D0D12">Damn</text>
+        <text x="60" y="22" font-family="Inter,sans-serif" font-weight="900" font-size="20" fill="#6C2FD9">Deal</text>
+        <text x="105" y="22" font-family="Inter,sans-serif" font-weight="400" font-size="12" fill="#6B7280"> Invest</text>
+      </svg>
+    </a>
+
+    <a href="/investor/index.html" class="form-back">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Back to home
+    </a>
+
+    <!-- STEP 1: Phone -->
+    <div id="step-phone">
+      <div class="step-indicator">
+        <div class="step-dot active"></div>
+        <div class="step-line"></div>
+        <div class="step-dot"></div>
+      </div>
+
+      <div class="form-title">Sign in</div>
+      <div class="form-subtitle">Enter your phone number to get a one-time password.</div>
+
+      <div id="alert-phone"></div>
+
+      <div class="field">
+        <label>Phone Number</label>
+        <div class="phone-wrap">
+          <div class="phone-prefix" id="phone-prefix">🇮🇳 +91</div>
+          <input id="inp-phone" type="tel" placeholder="98765 43210" maxlength="10" inputmode="numeric">
+        </div>
+      </div>
+
+      <!-- invisible reCAPTCHA mount (Firebase / Global) -->
+      <div id="recaptcha-container"></div>
+
+      <div class="field" id="name-group" style="display:none">
+        <label>Full Name <span class="opt">(New user)</span></label>
+        <input id="inp-name" type="text" placeholder="Your full name">
+      </div>
+
+      <div class="field" id="email-group" style="display:none">
+        <label>Email <span class="opt">(Optional)</span></label>
+        <input id="inp-email" type="email" placeholder="you@example.com">
+      </div>
+
+      <button class="btn-submit" id="btn-send-otp" onclick="sendOtpHandler()">Send OTP</button>
+
+      <div class="form-footer">
+        New here? &nbsp;<a href="/investor/index.html#how">How it works →</a>
+      </div>
+    </div>
+
+    <!-- STEP 2: OTP -->
+    <div id="step-otp" style="display:none">
+      <div class="step-indicator">
+        <div class="step-dot done"></div>
+        <div class="step-line" style="background:#DDD6FE"></div>
+        <div class="step-dot active"></div>
+      </div>
+
+      <div class="form-title">Verify OTP</div>
+      <div class="form-subtitle">6-digit code sent to your phone.</div>
+
+      <div class="otp-phone-badge">
+        <span class="num" id="otp-phone-display">+91 —</span>
+        <a class="change" onclick="resetForm()">Change</a>
+      </div>
+
+      <div id="alert-otp"></div>
+
+      <div class="field">
+        <label>One-Time Password</label>
+        <input class="otp-field" id="inp-otp" type="number" placeholder="——————" maxlength="6" inputmode="numeric">
+      </div>
+
+      <button class="btn-submit" id="btn-verify-otp" onclick="verifyOtpHandler()">Verify &amp; Login</button>
+
+      <div class="resend-row">
+        <span>Didn't receive it?</span>
+        <a onclick="resendOtp()">Resend OTP</a>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="/investor/assets/js/config.js"></script>
+<script src="/investor/assets/js/auth.js"></script>
+<script>
+  // ── Region setup ──
+  const REGION = (window.CONFIG && CONFIG.REGION) || 'IN';
+  const IS_US = REGION === 'US';
+  const DIAL = IS_US ? '+1' : '+91';
+
+  (function () {
+    var C = window.CONFIG || {};
+    document.querySelectorAll('.js-slot-points').forEach(function (el) { el.textContent = C.SLOT_POINTS_FMT || '5,000'; });
+    if (C.POINT_NOTE) {
+      document.querySelectorAll('.js-point-note').forEach(function (el) { el.textContent = '✦ ' + C.POINT_NOTE; el.style.display = ''; });
+    }
+    if (IS_US) {
+      var sub = document.querySelector('.js-left-sub');
+      if (sub) sub.textContent = "Join investors already earning from a fast-growing global hyperlocal commerce platform.";
+      var q = document.querySelector('.js-quote');
+      if (q) q.textContent = '"Started with 10 slots. Points credited every month. Withdrew 24,000 points in the first quarter."';
+      // Phone prefix → +1, and reveal name/email upfront (Firebase needs name for new users)
+      var pref = document.getElementById('phone-prefix');
+      if (pref) pref.textContent = '🌐 +1';
+      var ng = document.getElementById('name-group'); if (ng) ng.style.display = 'block';
+      var eg = document.getElementById('email-group'); if (eg) eg.style.display = 'block';
+      document.getElementById('inp-phone').placeholder = '555 123 4567';
+    }
+  })();
+
+  // ── Firebase (Global only) ──
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyDe47xeqB9dKo1xRSiu-1BjlyHQQFq83CA",
+    authDomain: "damnpay.firebaseapp.com",
+    projectId: "damnpay",
+    appId: "1:865851260105:web:1603286c86fffaa5f56118",
+  };
+  let fbConfirmation = null;
+  let fbRecaptcha = null;
+  function fbAuth() {
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    return firebase.auth();
+  }
+
+  requireGuest();
+  let isNewUser = false;
+
+  function gotoOtpStep(displayPhone) {
+    document.getElementById('otp-phone-display').textContent = displayPhone;
+    document.getElementById('step-phone').style.display = 'none';
+    document.getElementById('step-otp').style.display = 'block';
+  }
+
+  async function sendOtpHandler() {
+    const phone = document.getElementById('inp-phone').value.trim();
+    if (!/^\d{10}$/.test(phone)) { showAlert('alert-phone', 'Enter a valid 10-digit phone number', 'danger'); return; }
+    const btn = document.getElementById('btn-send-otp');
+    btn.disabled = true; btn.textContent = 'Sending…';
+
+    // ── Global (USA): Firebase Phone Auth ──
+    if (IS_US) {
+      const name = document.getElementById('inp-name').value.trim();
+      if (!name) { showAlert('alert-phone', 'Please enter your full name to continue.', 'danger'); btn.disabled = false; btn.textContent = 'Send OTP'; return; }
+      try {
+        const auth = fbAuth();
+        if (!fbRecaptcha) {
+          fbRecaptcha = new firebase.auth.RecaptchaVerifier('recaptcha-container', { size: 'invisible' }, auth);
+        }
+        fbConfirmation = await auth.signInWithPhoneNumber('+1' + phone, fbRecaptcha);
+        gotoOtpStep('+1 ' + phone);
+      } catch (e) {
+        showAlert('alert-phone', e.message || 'Failed to send OTP', 'danger');
+        if (fbRecaptcha) { try { fbRecaptcha.clear(); } catch {} fbRecaptcha = null; }
+        btn.disabled = false; btn.textContent = 'Send OTP';
+      }
+      return;
+    }
+
+    // ── India: Fast2SMS ──
+    const name = document.getElementById('inp-name').value.trim();
+    const email = document.getElementById('inp-email').value.trim();
+    try {
+      const body = { phone };
+      if (name) body.name = name;
+      if (email) body.email = email;
+      const res = await fetch(CONFIG.API_BASE + '/investor/auth/send-otp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).then(r => r.json());
+
+      if (res.success) {
+        gotoOtpStep('+91 ' + phone);
+      } else if (res.message && res.message.includes('Name required')) {
+        isNewUser = true;
+        document.getElementById('name-group').style.display = 'block';
+        document.getElementById('email-group').style.display = 'block';
+        showAlert('alert-phone', 'First time? Enter your name to register.', 'info');
+        btn.disabled = false; btn.textContent = 'Send OTP';
+      } else {
+        showAlert('alert-phone', res.message || 'Failed to send OTP', 'danger');
+        btn.disabled = false; btn.textContent = 'Send OTP';
+      }
+    } catch {
+      showAlert('alert-phone', 'Network error. Please try again.', 'danger');
+      btn.disabled = false; btn.textContent = 'Send OTP';
+    }
+  }
+
+  async function verifyOtpHandler() {
+    const phone = document.getElementById('inp-phone').value.trim();
+    const otp = document.getElementById('inp-otp').value.trim();
+    if (!otp || otp.length < 6) { showAlert('alert-otp', 'Enter the 6-digit OTP', 'danger'); return; }
+    const btn = document.getElementById('btn-verify-otp');
+    btn.disabled = true; btn.textContent = 'Verifying…';
+    try {
+      let res;
+      if (IS_US) {
+        if (!fbConfirmation) throw new Error('Session expired. Please resend the OTP.');
+        const cred = await fbConfirmation.confirm(otp);
+        const idToken = await cred.user.getIdToken();
+        const name = document.getElementById('inp-name').value.trim();
+        const email = document.getElementById('inp-email').value.trim();
+        res = await fetch(CONFIG.API_BASE + '/investor/auth/firebase-verify', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken, name, email }),
+        }).then(r => r.json());
+      } else {
+        res = await fetch(CONFIG.API_BASE + '/investor/auth/verify-otp', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, otp }),
+        }).then(r => r.json());
+      }
+
+      if (res.success) {
+        setTokens(res.accessToken, res.refreshToken);
+        setInvestor(res.investor);
+        window.location.href = '/investor/dashboard.html';
+      } else {
+        showAlert('alert-otp', res.message || 'Invalid OTP', 'danger');
+        btn.disabled = false; btn.textContent = 'Verify & Login';
+      }
+    } catch (e) {
+      showAlert('alert-otp', e.message || 'Invalid OTP. Please try again.', 'danger');
+      btn.disabled = false; btn.textContent = 'Verify & Login';
+    }
+  }
+
+  async function resendOtp() {
+    const phone = document.getElementById('inp-phone').value.trim();
+    if (IS_US) {
+      try {
+        const auth = fbAuth();
+        if (fbRecaptcha) { try { fbRecaptcha.clear(); } catch {} fbRecaptcha = null; }
+        fbRecaptcha = new firebase.auth.RecaptchaVerifier('recaptcha-container', { size: 'invisible' }, auth);
+        fbConfirmation = await auth.signInWithPhoneNumber('+1' + phone, fbRecaptcha);
+        showAlert('alert-otp', 'OTP resent.', 'success');
+      } catch (e) {
+        showAlert('alert-otp', e.message || 'Failed to resend', 'danger');
+      }
+      return;
+    }
+    await fetch(CONFIG.API_BASE + '/investor/auth/send-otp', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone }),
+    });
+    showAlert('alert-otp', 'OTP resent to your phone.', 'success');
+  }
+
+  function resetForm() {
+    document.getElementById('step-phone').style.display = 'block';
+    document.getElementById('step-otp').style.display = 'none';
+    document.getElementById('inp-otp').value = '';
+    const btn = document.getElementById('btn-send-otp');
+    btn.disabled = false; btn.textContent = 'Send OTP';
+  }
+
+  function showAlert(id, msg, type) {
+    document.getElementById(id).innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+  }
+
+  // Auto-focus phone on load
+  document.getElementById('inp-phone').focus();
+</script>
+</body>
+</html>

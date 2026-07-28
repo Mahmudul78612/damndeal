@@ -15,10 +15,24 @@ const desktopHomeSectionSchema = new mongoose.Schema(
         "deal_strip",          // horizontal deal cards
         "promo_full",          // full-width promo image
         "featured_categories", // category showcase row
+        // ── Shopify-style content sections ──
+        "rich_text",           // heading + paragraph + optional button (centered)
+        "image_with_text",     // image on one side, text + button on the other
+        "trust_badges",        // row of icon + title + subtitle (e.g. Free Shipping)
+        "newsletter",          // email signup band
+        "countdown",           // offer countdown timer (heading + end time + button)
+        "testimonials",        // customer reviews grid (name + rating + text)
+        "ugc_video",           // UGC video reels, each links to a product/category
       ],
       required: true,
     },
     platform: { type: String, enum: ["ddgo", "damndeal"], default: "damndeal" },
+    regions: {
+      type: [String],
+      enum: ["IN", "US"],
+      default: ["IN"],
+      index: true,
+    },
     data: {
       type: mongoose.Schema.Types.Mixed,
       default: {},

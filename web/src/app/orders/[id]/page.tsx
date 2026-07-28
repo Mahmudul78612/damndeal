@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { api, imgUrl } from '@/lib/api';
+import { api, imgUrl, CURRENCY_SYMBOL } from "@/lib/api";
 import { Order } from '@/lib/types';
-import { ChevronLeft, Package, Truck, CheckCircle, XCircle, Clock, ExternalLink, Download, RotateCcw } from 'lucide-react';
+import { ChevronLeft, Package, Truck, CheckCircle, XCircle, Clock, ExternalLink, Download, RotateCcw, Crown, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -263,7 +263,7 @@ export default function OrderDetailPage() {
                   <p className="text-sm text-gray-800 truncate">{item.name}</p>
                   <p className="text-xs text-gray-400">Qty: {item.quantity}</p>
                 </div>
-                <span className="text-sm font-bold text-gray-900 shrink-0">₹{item.total.toFixed(0)}</span>
+                <span className="text-sm font-bold text-gray-900 shrink-0">{CURRENCY_SYMBOL}{item.total.toFixed(0)}</span>
               </div>
             );
           })}
@@ -274,13 +274,13 @@ export default function OrderDetailPage() {
       <div className="bg-white rounded-2xl p-4 shadow-sm">
         <h2 className="text-sm font-bold text-gray-900 mb-3">Payment Summary</h2>
         <div className="space-y-2 text-sm">
-          <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span>₹{order.subtotal.toFixed(0)}</span></div>
-          <div className="flex justify-between"><span className="text-gray-500">Delivery</span><span>₹{order.deliveryFee}</span></div>
-          {order.platformFee > 0 && <div className="flex justify-between"><span className="text-gray-500">Platform Fee</span><span>₹{order.platformFee}</span></div>}
-          {order.discount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-₹{order.discount}</span></div>}
+          <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span>{CURRENCY_SYMBOL}{order.subtotal.toFixed(0)}</span></div>
+          <div className="flex justify-between"><span className="text-gray-500">Delivery</span><span>{CURRENCY_SYMBOL}{order.deliveryFee}</span></div>
+          {order.platformFee > 0 && <div className="flex justify-between"><span className="text-gray-500">Platform Fee</span><span>{CURRENCY_SYMBOL}{order.platformFee}</span></div>}
+          {order.discount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-{CURRENCY_SYMBOL}{order.discount}</span></div>}
           <div className="border-t border-gray-100 pt-2 flex justify-between">
             <span className="font-bold text-gray-900">Grand Total</span>
-            <span className="font-bold text-lg text-gray-900">₹{order.grandTotal.toFixed(0)}</span>
+            <span className="font-bold text-lg text-gray-900">{CURRENCY_SYMBOL}{order.grandTotal.toFixed(0)}</span>
           </div>
           <p className="text-xs text-gray-400">Payment: {order.paymentMethod?.toUpperCase()}</p>
         </div>
@@ -333,6 +333,28 @@ export default function OrderDetailPage() {
           </div>
         );
       })()}
+
+      {/* Magic Pool CTA */}
+      {order.status === 'delivered' && (
+        <Link
+          href="/magic-pools"
+          className="mt-3 block relative overflow-hidden rounded-2xl bg-gradient-to-r from-fuchsia-600 via-purple-600 to-pink-500 p-4 text-white shadow-lg active:scale-[0.99] transition"
+        >
+          <Sparkles className="absolute -top-2 -right-2 text-white/20" size={80} />
+          <div className="relative flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-white/25 backdrop-blur-sm flex items-center justify-center ring-2 ring-white/40">
+              <Crown size={22} className="text-yellow-300" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-extrabold">Win a prize with this order!</p>
+              <p className="text-[11px] text-white/90">Use your delivered order to grab a Magic Pool ticket</p>
+            </div>
+            <span className="text-xs font-bold bg-white text-fuchsia-700 px-3 py-1.5 rounded-full">
+              Join
+            </span>
+          </div>
+        </Link>
+      )}
 
       {showCancelModal && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-end md:items-center justify-center p-3">

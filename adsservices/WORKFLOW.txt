@@ -1,0 +1,185 @@
+═══════════════════════════════════════════════════════════════════════════════
+  ADS SERVICES — Ad Network / Ad Server Platform
+  Architecture & Workflow Spec
+  Stack: Node.js + Express + MongoDB · Portals: HTML/CSS/JS · GeoIP: geoip-lite
+═══════════════════════════════════════════════════════════════════════════════
+
+WHAT THIS IS
+------------
+A self-hosted ad network. We upload ads (banner images + videos), assign each ad
+to an advertiser (who gets their own login), and SERVE those ads to our other
+apps through a simple API. Ads are targeted by LOCATION (IP → country/state/city).
+Every impression & click is tracked, so advertisers can log in and see their own
+analytics (impressions, clicks, CTR, state-wise breakdown, trends).
+
+THREE SURFACES
+--------------
+  1. ADMIN PORTAL      — we upload/manage ads, advertisers, zones, see everything
+  2. ADVERTISER PORTAL — the client logs in, sees ONLY their own ad analytics
+  3. SERVE API         — our other apps call this to fetch & display ads (public)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  ROLES
+═══════════════════════════════════════════════════════════════════════════════
+  admin       — full control: upload ads, create advertisers, zones, all analytics
+  staff       — upload/manage ads (no advertiser/billing delete)
+  advertiser  — login created by admin; sees ONLY their own ads + analytics
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  DATA MODELS
+═══════════════════════════════════════════════════════════════════════════════
+
+ADMINUSER (internal staff)
+  name, email, passwordHash, role (admin|staff), isActive, lastLogin
+
+ADVERTISER (client whose ads run — login created by admin at upload time)
+  name, email (login), passwordHash, company, phone, isActive, createdBy
+
+ZONE (a placement slot in one of our apps — apps request ads BY zone)
+  name              e.g. "DamnDeal Home Banner"
+  app               which app  e.g. "damndeal" | "damnpay" | "roadhustler"
+  type              banner | video
+  size              e.g. "320x50", "300x250", "video"
+  apiKey            unique key the app sends to request this zone's ads
+  isActive
+
+AD (campaign + creative)
+  advertiser        ref Advertiser
+  title
+  type              banner | video
+  creativeUrl       uploaded image / video file
+  thumbnailUrl      poster for video (optional)
+  width, height     banner dimensions
+  duration          video length (sec)
+  targetUrl         where a click sends the user
+  status            pending | active | paused | expired
+  startDate, endDate
+  targeting {
+    countries []    ISO codes, empty = all
+    states    []    region names, empty = all
+    cities    []    empty = all
+  }
+  zones        [ref Zone]   which placements it may appear in (empty = any matching type)
+  weight       1..10        rotation priority
+  impressionCap            optional total cap (stop after N impressions)
+  impressions, clicks       running counters (denormalized for speed)
+  createdBy
+
+IMPRESSION (one ad view — logged on every serve)
+  ad, advertiser, zone, ip, country, region(state), city, app, userAgent, createdAt
+
+CLICK (one ad click)
+  ad, advertiser, zone, ip, country, region(state), city, app, createdAt
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  CORE FLOWS
+═══════════════════════════════════════════════════════════════════════════════
+
+FLOW A — ADMIN UPLOADS AN AD
+  1. Admin opens "Upload Ad", fills title, type, target URL, dates, targeting.
+  2. For a NEW client: also enters advertiser name + email + password
+     → creates an Advertiser login on the fly. (Existing client: pick from list.)
+  3. Uploads the creative (image/video). Saved to /uploads, status = active.
+  4. Ad is now eligible to be served to matching zones + locations.
+
+FLOW B — AN APP SHOWS AN AD  (the SERVE API)
+  1. App calls:  GET /api/serve?zone=<apiKey>      (optionally &ip=, &country=)
+  2. Server resolves the viewer's location from the request IP (geoip-lite),
+     or from the passed ip/country/state.
+  3. Finds ACTIVE ads where: zone matches (or any), date in range, cap not hit,
+     and targeting matches the viewer's country/state/city.
+  4. Picks one by weight (weighted random rotation).
+  5. Logs an IMPRESSION (+increments ad.impressions).
+  6. Returns the ad: { id, type, creativeUrl, width/height or duration,
+     clickUrl }  — clickUrl is our tracked redirect.
+
+FLOW C — VIEWER CLICKS THE AD
+  1. App opens the returned clickUrl:  GET /api/click/:adId?zone=&app=
+  2. Server logs a CLICK (+increments ad.clicks), then 302-redirects to targetUrl.
+
+FLOW D — ADVERTISER CHECKS ANALYTICS
+  1. Advertiser logs in to the Advertiser Portal (email + password from admin).
+  2. Sees: total impressions, clicks, CTR; per-ad breakdown; STATE-WISE table &
+     map; daily trend chart; top states (recommendation = where it performs best).
+
+FLOW E — STATE-WISE RECOMMENDATION
+  Analytics aggregate impressions/clicks by `region` (state). The portal shows
+  "top performing states" and "underperforming states" so the advertiser/admin
+  can decide where to push more. Admin can then tighten an ad's targeting.states.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  API MAP
+═══════════════════════════════════════════════════════════════════════════════
+
+AUTH  /api/auth
+  POST /login                 admin OR advertiser (x-client-type: admin|advertiser)
+  POST /refresh-token
+  GET  /me
+  POST /logout
+
+SERVE  /api/serve   (PUBLIC — called by our apps; no login)
+  GET  /serve?zone=<apiKey>&ip=&country=&state=     → returns one targeted ad
+  GET  /serve/multi?zone=&count=3                   → returns N ads
+  GET  /click/:adId?zone=&app=                      → logs click, 302 redirect
+  POST /event/impression                            → (optional) client-side beacon
+
+ADMIN  /api/admin   (admin/staff)
+  GET/POST/PUT/DELETE  /ads                         manage ads (+creative upload)
+  POST  /ads/:id/status        active|paused
+  GET/POST/PUT/DELETE  /advertisers                 manage advertiser accounts
+  GET/POST/PUT/DELETE  /zones                        manage placements
+  GET   /analytics/overview                          network-wide KPIs
+  GET   /analytics/ads/:id                           one ad's full analytics
+  GET   /analytics/by-state                          state-wise aggregate
+  GET   /settings
+
+ADVERTISER  /api/advertiser   (advertiser only — scoped to self)
+  GET   /me
+  GET   /ads                                         my ads
+  GET   /ads/:id                                     my ad detail
+  GET   /analytics/overview                          my KPIs
+  GET   /analytics/ads/:id                           my ad analytics (state-wise, trend)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  SERVE RESPONSE (what apps embed)
+═══════════════════════════════════════════════════════════════════════════════
+  {
+    "ad": {
+      "id": "...", "type": "banner",
+      "creativeUrl": "https://.../uploads/ads/x.jpg",
+      "width": 320, "height": 50,
+      "clickUrl": "https://.../api/click/<adId>?zone=<key>&app=<app>",
+      "advertiser": "Acme"
+    }
+  }
+  Banner: render <a href=clickUrl><img src=creativeUrl></a>
+  Video:  render <video src=creativeUrl> + wrap click → clickUrl
+  Empty (no match): { "ad": null }  — app shows nothing / house ad.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  GEO / IP
+═══════════════════════════════════════════════════════════════════════════════
+  - geoip-lite (offline DB) maps IP → { country, region(state code), city }.
+  - Real client IP read from X-Forwarded-For (behind nginx) else socket IP.
+  - Apps may override by passing ?ip= or ?country=&state= (for server-side calls).
+  - Targeting match: ad shows if (countries empty OR includes viewer country)
+    AND (states empty OR includes viewer state) AND (cities empty OR includes city).
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  BUILD PHASES
+═══════════════════════════════════════════════════════════════════════════════
+  1. Foundation + models + auth + seed admin
+  2. Admin: advertisers, zones, ad upload/CRUD
+  3. Serve API: geo-targeted selection + impression + click tracking
+  4. Analytics: overview, per-ad, state-wise, trends (admin + advertiser scoped)
+  5. Admin portal (HTML/CSS/JS)
+  6. Advertiser portal (HTML/CSS/JS)
+  7. Test end-to-end + deploy (api.ads... subdomain)
+═══════════════════════════════════════════════════════════════════════════════

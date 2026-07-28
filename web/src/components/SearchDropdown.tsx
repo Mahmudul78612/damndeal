@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { api, imgUrl } from '@/lib/api';
+import { api, imgUrl, CURRENCY_SYMBOL } from "@/lib/api";
 import { Product, Category } from '@/lib/types';
 import { Search as SearchIcon, X, TrendingUp } from 'lucide-react';
 
@@ -115,8 +115,8 @@ export default function SearchDropdown() {
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-gray-800 line-clamp-1">{p.name}</p>
                         <p className="text-[10px] text-gray-400">
-                          <span className="font-bold text-gray-900">₹{p.sellingPrice}</span>
-                          {p.price > p.sellingPrice && <span className="line-through ml-1">₹{p.price}</span>}
+                          <span className="font-bold text-gray-900">{CURRENCY_SYMBOL}{p.sellingPrice}</span>
+                          {p.price > p.sellingPrice && <span className="line-through ml-1">{CURRENCY_SYMBOL}{p.price}</span>}
                         </p>
                       </div>
                     </Link>

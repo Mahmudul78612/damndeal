@@ -6,9 +6,23 @@ async function getAddresses(req, res) {
 }
 
 async function addAddress(req, res) {
-  const { label, address, landmark, city, state, pincode, lat, lng, isDefault } = req.body;
-  if (!address || !city || !state || !pincode || lat === undefined || lng === undefined) {
-    return res.status(400).json({ success: false, message: "address, city, state, pincode, lat, lng required" });
+  const isUS = req.region === "US";
+  const { label, address, landmark, city, state, isDefault } = req.body;
+  const pincode = req.body.pincode || null;
+  const zip = req.body.zip || null;
+  // Accept both lat/lng and latitude/longitude. Coordinates are optional
+  // (only used for India local delivery; US ships via CJ so not needed).
+  const lat = req.body.lat ?? req.body.latitude ?? null;
+  const lng = req.body.lng ?? req.body.longitude ?? null;
+
+  if (!address || !city || !state) {
+    return res.status(400).json({ success: false, message: "Address, city and state are required" });
+  }
+  if (isUS && !zip) {
+    return res.status(400).json({ success: false, message: "ZIP code is required" });
+  }
+  if (!isUS && !pincode) {
+    return res.status(400).json({ success: false, message: "Pincode is required" });
   }
 
   if (isDefault) {
@@ -16,7 +30,12 @@ async function addAddress(req, res) {
   }
 
   const addr = await Address.create({
-    user: req.user.userId, label, address, landmark, city, state, pincode, lat, lng,
+    user: req.user.userId, label, address, landmark, city, state,
+    pincode: isUS ? null : pincode,
+    zip: isUS ? zip : null,
+    country: isUS ? "US" : "IN",
+    lat: lat != null && lat !== "" ? Number(lat) : null,
+    lng: lng != null && lng !== "" ? Number(lng) : null,
     isDefault: isDefault || false,
   });
 
@@ -28,8 +47,14 @@ async function updateAddress(req, res) {
     await Address.updateMany({ user: req.user.userId }, { isDefault: false });
   }
 
+  // Normalize coordinate aliases + region fields.
+  const body = { ...req.body };
+  if (body.latitude !== undefined) { body.lat = body.latitude === "" ? null : Number(body.latitude); delete body.latitude; }
+  if (body.longitude !== undefined) { body.lng = body.longitude === "" ? null : Number(body.longitude); delete body.longitude; }
+  if (req.region === "US") { body.country = "US"; if (body.zip) body.pincode = null; }
+
   const addr = await Address.findOneAndUpdate(
-    { _id: req.params.id, user: req.user.userId }, req.body, { new: true }
+    { _id: req.params.id, user: req.user.userId }, body, { new: true }
   );
   if (!addr) return res.status(404).json({ success: false, message: "Address not found" });
 

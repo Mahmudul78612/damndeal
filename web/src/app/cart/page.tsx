@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
-import { imgUrl } from '@/lib/api';
+import { imgUrl, CURRENCY_SYMBOL } from "@/lib/api";
 import { Minus, Plus, Trash2, ShoppingBag, ArrowRight } from 'lucide-react';
 
 export default function CartPage() {
@@ -47,7 +47,7 @@ export default function CartPage() {
                 <h3 className="text-xs font-medium text-gray-900 line-clamp-2">{item.name}</h3>
                 {item.unit && <p className="text-[10px] text-gray-400 mt-0.5">{item.unit}</p>}
                 <div className="flex items-center justify-between mt-1.5">
-                  <span className="text-sm font-bold text-gray-900">₹{(item.price * item.quantity).toFixed(0)}</span>
+                  <span className="text-sm font-bold text-gray-900">{CURRENCY_SYMBOL}{(item.price * item.quantity).toFixed(0)}</span>
                   <div className="flex items-center gap-0.5">
                     <button onClick={() => removeItem(item.productId)} className="p-1 text-red-400 hover:text-red-500">
                       <Trash2 size={12} />
@@ -74,18 +74,18 @@ export default function CartPage() {
           <div className="space-y-1.5 text-xs">
             <div className="flex justify-between">
               <span className="text-gray-500">Price ({itemCount} items)</span>
-              <span className="font-medium">₹{(subtotal + totalSavings).toFixed(0)}</span>
+              <span className="font-medium">{CURRENCY_SYMBOL}{(subtotal + totalSavings).toFixed(0)}</span>
             </div>
             {totalSavings > 0 && (
               <div className="flex justify-between text-green-600">
                 <span>Discount</span>
-                <span className="font-medium">− ₹{totalSavings.toFixed(0)}</span>
+                <span className="font-medium">− {CURRENCY_SYMBOL}{totalSavings.toFixed(0)}</span>
               </div>
             )}
             {totalGst > 0 && (
               <div className="flex justify-between">
                 <span className="text-gray-500">GST (included)</span>
-                <span className="text-gray-400">₹{totalGst.toFixed(0)}</span>
+                <span className="text-gray-400">{CURRENCY_SYMBOL}{totalGst.toFixed(0)}</span>
               </div>
             )}
             <div className="flex justify-between text-gray-400">
@@ -94,10 +94,10 @@ export default function CartPage() {
             </div>
             <div className="border-t border-gray-100 pt-2 flex justify-between">
               <span className="font-bold text-gray-900">Total</span>
-              <span className="font-bold text-lg text-gray-900">₹{subtotal.toFixed(0)}</span>
+              <span className="font-bold text-lg text-gray-900">{CURRENCY_SYMBOL}{subtotal.toFixed(0)}</span>
             </div>
             {totalSavings > 0 && (
-              <p className="text-green-600 text-[11px] font-medium text-center pt-1">You will save ₹{totalSavings.toFixed(0)} on this order</p>
+              <p className="text-green-600 text-[11px] font-medium text-center pt-1">You will save {CURRENCY_SYMBOL}{totalSavings.toFixed(0)} on this order</p>
             )}
           </div>
         </div>
@@ -108,7 +108,7 @@ export default function CartPage() {
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div>
             <p className="text-[10px] text-gray-400">Total</p>
-            <p className="text-lg font-extrabold text-gray-900">₹{subtotal.toFixed(0)}</p>
+            <p className="text-lg font-extrabold text-gray-900">{CURRENCY_SYMBOL}{subtotal.toFixed(0)}</p>
           </div>
           {isLoggedIn ? (
             <Link href="/checkout" className="flex items-center gap-1.5 px-5 py-2 bg-primary text-white rounded-lg font-bold text-xs hover:bg-primary-dark transition">

@@ -109,7 +109,7 @@
                           </div>`;
                       })()}
                     </td>
-                    <td>${fmtCurrency(o.grandTotal)}</td>
+                    <td>${fmtCurrency(o.grandTotal, o.currency)}</td>
                     <td>${statusBadge(o.paymentStatus)}</td>
                     <td>${statusBadge(o.status)}</td>
                     <td style="font-size:11px">${o.shipping?.awb || '<span style="color:#ccc">—</span>'}</td>
@@ -242,10 +242,10 @@
           <div><strong>Partner:</strong> ${o.partner?.name || o.partner?.phone || '-'}</div>
           <div><strong>Payment:</strong> ${o.paymentMethod} — ${statusBadge(o.paymentStatus)}</div>
           <div><strong>Fulfillment:</strong> ${o.fulfillmentType || 'platform'}</div>
-          <div><strong>Subtotal:</strong> ${fmtCurrency(o.subtotal)}</div>
-          <div><strong>Delivery Fee:</strong> ${fmtCurrency(o.deliveryFee)}</div>
-          <div><strong>Coupon Disc:</strong> ${fmtCurrency(o.couponDiscount)}</div>
-          <div><strong>Grand Total:</strong> <strong>${fmtCurrency(o.grandTotal)}</strong></div>
+          <div><strong>Subtotal:</strong> ${fmtCurrency(o.subtotal, o.currency)}</div>
+          <div><strong>Delivery Fee:</strong> ${fmtCurrency(o.deliveryFee, o.currency)}</div>
+          <div><strong>Coupon Disc:</strong> ${fmtCurrency(o.couponDiscount, o.currency)}</div>
+          <div><strong>Grand Total:</strong> <strong>${fmtCurrency(o.grandTotal, o.currency)}</strong></div>
         </div>
         <h4 style="margin:16px 0 8px;font-size:14px">Items</h4>
         <table>
@@ -259,8 +259,8 @@
                 <td style="width:44px">${imgSrc ? `<img src="${imgSrc}" style="width:40px;height:40px;object-fit:cover;border-radius:6px" onerror="this.style.display='none'" />` : '<div style="width:40px;height:40px;background:#f1f5f9;border-radius:6px"></div>'}</td>
                 <td>${i.product?.name || i.name || '-'}</td>
                 <td>${i.quantity}</td>
-                <td>${fmtCurrency(i.price)}</td>
-                <td>${fmtCurrency(i.price * i.quantity)}</td>
+                <td>${fmtCurrency(i.price, o.currency)}</td>
+                <td>${fmtCurrency(i.price * i.quantity, o.currency)}</td>
               </tr>`;
             }).join("")}
           </tbody>
@@ -397,7 +397,7 @@
                   <div style="color:#999">${a.city || ''}, ${a.state || ''} — ${a.pincode || ''}</div>
                 </div>
                 <div style="text-align:right">
-                  <strong>${fmtCurrency(o.grandTotal)}</strong>
+                  <strong>${fmtCurrency(o.grandTotal, o.currency)}</strong>
                   <div style="color:#999;font-size:10px">${o.paymentMethod || 'prepaid'}</div>
                 </div>
               </div>`;

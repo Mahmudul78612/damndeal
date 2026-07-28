@@ -37,6 +37,21 @@ const orderSchema = new mongoose.Schema(
       unique: true,
       index: true,
     },
+    // Region this order belongs to (denormalised from products/customer).
+    region: {
+      type: String,
+      enum: ["IN", "US"],
+      default: "IN",
+      index: true,
+    },
+    currency: {
+      type: String,
+      enum: ["INR", "USD"],
+      default: "INR",
+    },
+    // US sales tax (TaxJar / Stripe Tax). For IN, GST already in totalGst.
+    taxAmount: { type: Number, default: 0 },
+    taxBreakdown: { type: mongoose.Schema.Types.Mixed, default: null },
     // Who placed the order (app user)
     user: {
       type: mongoose.Schema.Types.ObjectId,
@@ -170,7 +185,7 @@ const orderSchema = new mongoose.Schema(
     // Payment
     paymentMethod: {
       type: String,
-      enum: ["cash", "upi", "card", "online", "credit", "cod", "razorpay", "wallet"],
+      enum: ["cash", "upi", "card", "online", "credit", "cod", "razorpay", "wallet", "stripe"],
       default: "cash",
     },
     paymentStatus: {
@@ -178,6 +193,9 @@ const orderSchema = new mongoose.Schema(
       enum: ["paid", "pending", "partial", "refunded"],
       default: "paid",
     },
+    // Stripe PaymentIntent id — used to issue refunds for US (damndeal.com) orders.
+    stripePaymentIntentId: { type: String, default: null },
+    refundId: { type: String, default: null },
     status: {
       type: String,
       enum: ["placed", "confirmed", "processing", "ready", "shipped", "delivered", "cancelled", "returned"],
@@ -224,6 +242,24 @@ const orderSchema = new mongoose.Schema(
         timestamp: Date,
         description: String,
       }],
+    },
+    // ── Magic Club (rewards / redemption) ──
+    magicClub: {
+      // points redeemed off this order (debited from MC wallet)
+      redeemedPoints: { type: Number, default: 0 },
+      // ₹ value applied as discount from those points
+      redeemedAmount: { type: Number, default: 0 },
+      debit: {
+        transactionId: { type: String, default: null },
+        token: { type: String, default: null },
+        confirmedAt: { type: Date, default: null },
+        reversedAt: { type: Date, default: null },
+      },
+      // populated after delivery → /api/club/vendor response
+      clubCreated: { type: Boolean, default: false },
+      rewardPoints: { type: Number, default: 0 },
+      // optional referral chain
+      referenceId: { type: String, default: null },
     },
   },
   { timestamps: true }

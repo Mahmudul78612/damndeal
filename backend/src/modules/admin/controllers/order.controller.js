@@ -3,6 +3,8 @@ const Product = require("../../../models/Product");
 const User = require("../../../models/User");
 const InventoryLog = require("../../../models/InventoryLog");
 const { notifyOrderShipped, notifyOrderCancelled } = require("../../../services/notification.service");
+const magicClub = require("../../../services/magicclub.service");
+const { refundPaidOrder } = require("../../../services/refund.service");
 
 async function restoreOrderStock(order) {
   for (const item of order.items || []) {
@@ -28,6 +30,13 @@ async function listOrders(req, res) {
   if (status) filter.status = status;
   if (partner) filter.partner = partner;
   if (source) filter.source = source;
+
+  // Region scope: ?region=all shows both; else current admin region (x-region).
+  const regionQ = req.query.region ? String(req.query.region).toUpperCase() : (req.region || "IN");
+  if (regionQ !== "ALL") {
+    // include legacy orders with no region when viewing IN (they default to IN)
+    filter.region = regionQ === "IN" ? { $in: ["IN", null] } : regionQ;
+  }
 
   // Quick tabs for admin workflow
   if (!status && tab && tab !== "all") {
@@ -112,6 +121,13 @@ async function updateOrderStatus(req, res) {
     if (status === "cancelled") {
       if (previousStatus !== "cancelled") {
         await restoreOrderStock(order);
+        // Refund a paid order (US → Stripe card, India → wallet).
+        try {
+          await refundPaidOrder(order, "Cancelled by admin");
+        } catch (e) {
+          console.error("[ADMIN CANCEL] refund failed:", e.message);
+          return res.status(502).json({ success: false, message: `Refund failed: ${e.message}. Order not cancelled.` });
+        }
       }
       order.cancelReason = note || order.cancelReason || "Cancelled by admin";
     }
@@ -143,7 +159,23 @@ async function rejectOrder(req, res) {
     order.rejectedAt = new Date();
     order.rejectedReason = String(reason).trim();
     order.cancelReason = `Rejected by admin: ${String(reason).trim()}`;
+
+    // Refund a paid order (US → Stripe card, India → wallet).
+    try {
+      await refundPaidOrder(order, "Rejected by admin");
+    } catch (e) {
+      console.error("[ADMIN REJECT] refund failed:", e.message);
+      return res.status(502).json({ success: false, message: `Refund failed: ${e.message}. Order not rejected.` });
+    }
+
     await order.save();
+
+    // Magic Club: reverse redemption + cancel clubs (best-effort)
+    if (order.magicClub?.debit?.transactionId && !order.magicClub.debit.reversedAt) {
+      const rev = await magicClub.reverseDebit(order.magicClub.debit.transactionId);
+      if (rev.ok) { order.magicClub.debit.reversedAt = new Date(); await order.save(); }
+    }
+    magicClub.onOrderCancelled(order).catch(() => {});
 
     setImmediate(async () => {
       try {

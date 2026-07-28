@@ -8,6 +8,27 @@ const productSchema = new mongoose.Schema(
       default: "ddgo",
       index: true,
     },
+    // Region — which country/storefront this product is sold in.
+    // 'IN' = damndeal.in (INR), 'US' = damndeal.com (USD).
+    // Use ['IN','US'] (multi) when the same product is listed in both.
+    regions: {
+      type: [String],
+      enum: ["IN", "US"],
+      default: ["IN"],
+      index: true,
+    },
+    // Optional per-region pricing override. If absent for a region,
+    // sellingPrice/mrp on the root doc are used (treated as INR).
+    prices: {
+      IN: {
+        mrp: { type: Number, min: 0, default: null },
+        sellingPrice: { type: Number, min: 0, default: null },
+      },
+      US: {
+        mrp: { type: Number, min: 0, default: null },
+        sellingPrice: { type: Number, min: 0, default: null },
+      },
+    },
     partner: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

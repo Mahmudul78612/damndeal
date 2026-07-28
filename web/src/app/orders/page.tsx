@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { api, imgUrl } from '@/lib/api';
+import { api, imgUrl, CURRENCY_SYMBOL } from "@/lib/api";
 import { Order } from '@/lib/types';
 import { Package, ChevronRight, ChevronLeft, Download, Search, X } from 'lucide-react';
 
@@ -248,7 +248,7 @@ export default function OrdersPage() {
                             {order.items.length} item{order.items.length > 1 ? 's' : ''} · ID: <span className="font-mono">#{order.orderNumber}</span>
                           </p>
                           <div className="flex items-center justify-between mt-1.5">
-                            <span className="text-[14px] font-bold text-gray-900">₹{order.grandTotal.toFixed(0)}</span>
+                            <span className="text-[14px] font-bold text-gray-900">{CURRENCY_SYMBOL}{order.grandTotal.toFixed(0)}</span>
                             <div className="flex items-center gap-3">
                               {order.status === 'delivered' && (
                                 <button onClick={(e) => handleInvoice(e, order._id)} className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline">

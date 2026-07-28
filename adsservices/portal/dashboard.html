@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>My Ads — Advertiser Portal</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="logo"><span class="brand-logo"><b>damn</b><span>deal</span><span class="tag">Ads</span></span></div>
+      <div class="nav-item active" data-view="overview"><span class="ico">📊</span> Overview</div>
+      <div class="nav-item" data-view="ads"><span class="ico">🖼️</span> My Ads</div>
+      <div class="sidebar-foot"><div class="nav-item" onclick="logout()"><span class="ico">↩️</span> Logout</div></div>
+    </aside>
+    <main class="main">
+      <div class="topbar"><h2 id="title">Overview</h2><span class="who" id="who"></span></div>
+      <div id="content"></div>
+    </main>
+  </div>
+
+  <div class="modal-bg" id="m-analytics">
+    <div class="modal" style="max-width:640px"><div id="an-body"></div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('m-analytics')">Close</button></div></div>
+  </div>
+
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/portal.js"></script>
+</body>
+</html>

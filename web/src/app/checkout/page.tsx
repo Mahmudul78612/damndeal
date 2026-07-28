@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
-import { api, imgUrl } from '@/lib/api';
+import { api, imgUrl, IS_US, CURRENCY_SYMBOL } from '@/lib/api';
 import { Address } from '@/lib/types';
 import { ChevronLeft, MapPin, Plus, Loader2, XCircle, ShieldCheck, Truck, Clock, Package } from 'lucide-react';
 
@@ -16,7 +16,9 @@ export default function CheckoutPage() {
 
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddr, setSelectedAddr] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState('cod');
+  // US (damndeal.com) pays by card via Stripe; India uses COD/Razorpay (Wallet hidden for now).
+  const cur = CURRENCY_SYMBOL;
+  const [paymentMethod, setPaymentMethod] = useState(IS_US ? 'stripe' : 'cod');
   const [note, setNote] = useState('');
   const [estimate, setEstimate] = useState<any>(null);
   const [pincodeEst, setPincodeEst] = useState<any>(null);
@@ -61,10 +63,31 @@ export default function CheckoutPage() {
   const deliveryFee = estimate?.deliveryFee || 0;
   const platformFee = estimate?.platformFee || 0;
   const codFee = (paymentMethod === 'cod' ? (estimate?.codFee || 0) : 0);
-  const grandTotal = subtotal + deliveryFee + platformFee + codFee;
+  // US sales tax — added on top (pass-through). 0 for India.
+  const salesTaxRate = Number(estimate?.usSalesTaxRate || 0);
+  const salesTax = IS_US && salesTaxRate > 0 ? Math.round(subtotal * salesTaxRate) / 100 : 0;
+  const grandTotal = subtotal + deliveryFee + platformFee + codFee + salesTax;
   const selectedAddress = addresses.find(a => a._id === selectedAddr);
   const hasCjItem = items.some(i => i.cjVid);
   const cjEtaText = '10-20 days';
+
+  // COD availability based on backend settings
+  const codEnabled = estimate ? (estimate.codEnabled !== false) : true;
+  const codMaxAmount = Number(estimate?.codMaxAmount || 0);
+  const codTooBig = codMaxAmount > 0 && subtotal > codMaxAmount;
+  const codAvailable = codEnabled && !codTooBig && (pincodeEst ? pincodeEst.cod !== false : true);
+  const codDisabledReason = !codEnabled
+    ? 'Cash on Delivery is currently unavailable'
+    : codTooBig
+      ? `Not available for orders above ₹${codMaxAmount}`
+      : (pincodeEst && pincodeEst.cod === false ? 'COD not available for this pincode' : '');
+
+  // Auto-switch off COD if it became invalid
+  useEffect(() => {
+    if (paymentMethod === 'cod' && !codAvailable && estimate) {
+      setPaymentMethod(IS_US ? 'stripe' : 'razorpay');
+    }
+  }, [codAvailable, paymentMethod, estimate]);
 
   // Load Razorpay checkout SDK once
   useEffect(() => {
@@ -97,6 +120,16 @@ export default function CheckoutPage() {
         note: note.trim() || undefined,
       });
       const placedOrder = orderRes.order;
+
+      // 2a-US. Stripe (damndeal.com) → redirect to hosted Stripe Checkout
+      if (paymentMethod === 'stripe') {
+        setPlacingText('Redirecting to secure payment...');
+        const res = await api.post('/user/payments/stripe/checkout', { orderId: placedOrder._id });
+        if (!res.url) throw new Error('Could not start payment. Please try again.');
+        clear();
+        window.location.href = res.url; // Stripe returns to /order-success/:id?stripe_session=...
+        return;
+      }
 
       // 2a. COD → done
       if (paymentMethod === 'cod') {
@@ -170,7 +203,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24 md:pb-8">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-gray-50 pb-24 md:pb-8">
       {/* Header */}
       <div className="bg-white border-b border-gray-100 sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
@@ -195,8 +228,8 @@ export default function CheckoutPage() {
           <div className="flex-1 space-y-2.5">
 
             {/* Step 1: Delivery Address */}
-            <section className="bg-white rounded-md border border-gray-200">
-              <header className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+            <section className="bg-white rounded-2xl shadow-sm border border-gray-100">
+              <header className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
                 <h2 className="text-[13px] font-semibold text-gray-700 tracking-wide">
                   <span className="text-gray-400 mr-2">1</span>DELIVERY ADDRESS
                 </h2>
@@ -231,7 +264,7 @@ export default function CheckoutPage() {
                               <p className="text-[13px] text-gray-800 leading-snug">
                                 {addr.houseNo ? `${addr.houseNo}, ` : ''}{addr.address}
                               </p>
-                              <p className="text-[12px] text-gray-500 mt-0.5">{addr.city}, {addr.state} - <span className="font-semibold text-gray-700">{addr.pincode}</span></p>
+                              <p className="text-[12px] text-gray-500 mt-0.5">{addr.city}, {addr.state} <span className="font-semibold text-gray-700">{addr.pincode || addr.zip || ''}</span></p>
                             </div>
                           </button>
                         </li>
@@ -265,24 +298,32 @@ export default function CheckoutPage() {
             )}
 
             {/* Step 2: Payment Method */}
-            <section className="bg-white rounded-md border border-gray-200">
-              <header className="px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+            <section className="bg-white rounded-2xl shadow-sm border border-gray-100">
+              <header className="px-4 py-2.5 border-b border-gray-100">
                 <h2 className="text-[13px] font-semibold text-gray-700 tracking-wide">
                   <span className="text-gray-400 mr-2">2</span>PAYMENT METHOD
                 </h2>
               </header>
               <ul className="divide-y divide-gray-100">
-                {[
-                  { key: 'razorpay', label: 'UPI / Cards / Netbanking', desc: 'Pay securely via Razorpay', icon: '💳' },
-                  { key: 'cod', label: 'Cash on Delivery', desc: 'Pay when your order arrives', icon: '💵' },
-                  { key: 'wallet', label: 'DamnDeal Wallet', desc: 'Use your wallet balance', icon: '👛' },
-                ].map(pm => {
+                {(IS_US
+                  ? [
+                      { key: 'stripe', label: 'Credit / Debit Card', desc: 'Pay securely via Stripe', icon: '💳' },
+                    ]
+                  : [
+                      { key: 'razorpay', label: 'UPI / Cards / Netbanking', desc: 'Pay securely via Razorpay', icon: '💳' },
+                      { key: 'cod', label: 'Cash on Delivery', desc: 'Pay when your order arrives', icon: '💵' },
+                      // DamnDeal Wallet hidden for now
+                    ]
+                ).map(pm => {
                   const active = paymentMethod === pm.key;
+                  const disabled = pm.key === 'cod' && !codAvailable;
+                  const desc = disabled ? codDisabledReason : pm.desc;
                   return (
                     <li key={pm.key}>
                       <button
-                        onClick={() => setPaymentMethod(pm.key)}
-                        className={`w-full flex items-center gap-3 px-4 py-3 text-left transition ${active ? 'bg-primary/5' : 'hover:bg-gray-50'}`}
+                        onClick={() => { if (!disabled) setPaymentMethod(pm.key); }}
+                        disabled={disabled}
+                        className={`w-full flex items-center gap-3 px-4 py-3 text-left transition ${active ? 'bg-primary/5' : 'hover:bg-gray-50'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         <span className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${active ? 'border-primary' : 'border-gray-300'}`}>
                           {active && <span className="w-2 h-2 rounded-full bg-primary" />}
@@ -290,7 +331,7 @@ export default function CheckoutPage() {
                         <span className="text-lg leading-none">{pm.icon}</span>
                         <div className="flex-1 min-w-0">
                           <p className="text-[13px] font-semibold text-gray-800">{pm.label}</p>
-                          <p className="text-[12px] text-gray-500">{pm.desc}</p>
+                          <p className={`text-[12px] ${disabled ? 'text-red-600' : 'text-gray-500'}`}>{desc}</p>
                         </div>
                       </button>
                     </li>
@@ -300,8 +341,8 @@ export default function CheckoutPage() {
             </section>
 
             {/* Step 3: Order Note */}
-            <section className="bg-white rounded-md border border-gray-200">
-              <header className="px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+            <section className="bg-white rounded-2xl shadow-sm border border-gray-100">
+              <header className="px-4 py-2.5 border-b border-gray-100">
                 <h2 className="text-[13px] font-semibold text-gray-700 tracking-wide">
                   <span className="text-gray-400 mr-2">3</span>ORDER NOTE <span className="text-gray-400 font-normal normal-case ml-1">(optional)</span>
                 </h2>
@@ -340,7 +381,7 @@ export default function CheckoutPage() {
                         <p className="text-xs font-medium text-gray-800 truncate">{item.name}</p>
                         <p className="text-[11px] text-gray-400">{item.unit || ''} × {item.quantity}</p>
                       </div>
-                      <p className="text-sm font-bold text-gray-900 shrink-0">₹{(item.price * item.quantity).toFixed(0)}</p>
+                      <p className="text-sm font-bold text-gray-900 shrink-0">{cur}{(item.price * item.quantity).toFixed(0)}</p>
                     </div>
                   ))}
                 </div>
@@ -352,18 +393,18 @@ export default function CheckoutPage() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-500">Price ({items.length} items)</span>
-                    <span className="text-gray-700">₹{(subtotal + totalSavings).toFixed(0)}</span>
+                    <span className="text-gray-700">{cur}{(subtotal + totalSavings).toFixed(0)}</span>
                   </div>
                   {totalSavings > 0 && (
                     <div className="flex justify-between text-green-600">
                       <span>Discount</span>
-                      <span className="font-medium">− ₹{totalSavings.toFixed(0)}</span>
+                      <span className="font-medium">− {cur}{totalSavings.toFixed(0)}</span>
                     </div>
                   )}
                   {totalGst > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-400">GST (incl.)</span>
-                      <span className="text-gray-400">₹{Math.round(totalGst)}</span>
+                      <span className="text-gray-400">{cur}{Math.round(totalGst)}</span>
                     </div>
                   )}
                   <div className="flex justify-between">
@@ -371,19 +412,25 @@ export default function CheckoutPage() {
                     {estimate?.freeDeliveryApplied ? (
                       <span className="text-green-600 font-semibold">FREE</span>
                     ) : (
-                      <span className="text-gray-700">₹{deliveryFee}</span>
+                      <span className="text-gray-700">{cur}{deliveryFee}</span>
                     )}
                   </div>
                   {platformFee > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-500">Platform Fee</span>
-                      <span className="text-gray-700">₹{platformFee}</span>
+                      <span className="text-gray-700">{cur}{platformFee}</span>
                     </div>
                   )}
                   {codFee > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-500">COD Charge</span>
-                      <span className="text-gray-700">₹{codFee}</span>
+                      <span className="text-gray-700">{cur}{codFee}</span>
+                    </div>
+                  )}
+                  {salesTax > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Sales Tax ({salesTaxRate}%)</span>
+                      <span className="text-gray-700">{cur}{salesTax.toFixed(2)}</span>
                     </div>
                   )}
 
@@ -397,11 +444,11 @@ export default function CheckoutPage() {
 
                   <div className="border-t border-gray-100 pt-3 flex justify-between items-center">
                     <span className="font-bold text-gray-900 text-base">Total Amount</span>
-                    <span className="font-extrabold text-xl text-gray-900">₹{grandTotal.toFixed(0)}</span>
+                    <span className="font-extrabold text-xl text-gray-900">{cur}{grandTotal.toFixed(IS_US ? 2 : 0)}</span>
                   </div>
                   {totalSavings > 0 && (
                     <p className="text-green-600 text-xs font-medium text-center bg-green-50 rounded-lg py-1.5 -mx-1">
-                      🎉 You save ₹{totalSavings.toFixed(0)} on this order
+                      🎉 You save {cur}{totalSavings.toFixed(0)} on this order
                     </p>
                   )}
                 </div>
@@ -416,7 +463,7 @@ export default function CheckoutPage() {
                 {placing ? (
                   <><Loader2 size={18} className="animate-spin" /> Placing Order...</>
                 ) : (
-                  <>Place Order · ₹{grandTotal.toFixed(0)}</>
+                  <>Place Order · {cur}{grandTotal.toFixed(IS_US ? 2 : 0)}</>
                 )}
               </button>
             </div>
@@ -430,7 +477,7 @@ export default function CheckoutPage() {
           <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
             <div>
               <p className="text-[10px] text-gray-400 uppercase tracking-wide">Total</p>
-              <p className="text-lg font-extrabold text-gray-900">₹{grandTotal.toFixed(0)}</p>
+              <p className="text-lg font-extrabold text-gray-900">{cur}{grandTotal.toFixed(IS_US ? 2 : 0)}</p>
             </div>
             <button
               onClick={handlePlaceOrder}

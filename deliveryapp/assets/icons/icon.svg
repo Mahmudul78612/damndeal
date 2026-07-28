@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#3E1A6E"/>
+  <text x="256" y="200" text-anchor="middle" font-family="Arial,sans-serif" font-weight="800" font-size="120" fill="#FFFFFF">Damn</text>
+  <text x="256" y="320" text-anchor="middle" font-family="Arial,sans-serif" font-weight="800" font-size="120" fill="#F59E0B">Deal</text>
+  <text x="256" y="400" text-anchor="middle" font-family="Arial,sans-serif" font-weight="600" font-size="56" fill="rgba(255,255,255,0.7)">Delivery</text>
+</svg>

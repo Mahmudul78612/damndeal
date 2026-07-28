@@ -52,14 +52,15 @@ function calcDistanceKm(lat1, lng1, lat2, lng2) {
  *
  * @returns {{ deliveryFee, freeDeliveryApplied, platformFee, distanceKm, estimatedDeliveryMinutes, minOrderAmount }}
  */
-async function calculateFees({ subtotal, discount = 0, distanceKm, freeDeliveryAbove = 0, platform = "damndeal", productOverrides = [], paymentMethod = null }) {
+async function calculateFees({ subtotal, discount = 0, distanceKm, freeDeliveryAbove = 0, platform = "damndeal", productOverrides = [], paymentMethod = null, region = "IN" }) {
   const isDdgo = platform === "ddgo";
+  const isUS = region === "US"; // USA (damndeal.com) = card-only via Stripe, no COD
 
   // Fetch both DDGO-specific and default keys
   const keys = [
     "delivery_fee", "delivery_fee_per_km", "free_delivery_above",
     "platform_fee", "max_delivery_radius_km", "min_order_amount",
-    "cod_fee",
+    "cod_fee", "cod_enabled", "cod_max_amount",
   ];
   if (isDdgo) {
     keys.push(
@@ -67,16 +68,44 @@ async function calculateFees({ subtotal, discount = 0, distanceKm, freeDeliveryA
       "ddgo_platform_fee", "ddgo_max_delivery_radius", "ddgo_min_order_amount",
     );
   }
+  if (isUS) {
+    // US (damndeal.com) has its own USD fee settings. India's ₹ values must
+    // never apply to a US order. Defaults are 0 — shipping comes from CJ freight.
+    keys.push("delivery_fee_US", "platform_fee_US", "min_order_amount_US", "free_delivery_above_US");
+  }
   const settings = await getSettings(keys);
 
-  // DDGO keys take priority, fallback to global defaults
-  const baseDeliveryFee = (isDdgo && settings.ddgo_delivery_fee != null) ? settings.ddgo_delivery_fee : (settings.delivery_fee ?? 0);
-  const perKmFee = (isDdgo && settings.ddgo_delivery_fee_per_km != null) ? settings.ddgo_delivery_fee_per_km : (settings.delivery_fee_per_km ?? 0);
-  const platformFreeDeliveryAbove = (isDdgo && settings.ddgo_free_delivery_above != null) ? settings.ddgo_free_delivery_above : (settings.free_delivery_above ?? 0);
-  const platformFee = (isDdgo && settings.ddgo_platform_fee != null) ? settings.ddgo_platform_fee : (settings.platform_fee ?? 0);
-  const maxRadius = (isDdgo && settings.ddgo_max_delivery_radius != null) ? settings.ddgo_max_delivery_radius : (settings.max_delivery_radius_km ?? 20);
-  const minOrderAmount = (isDdgo && settings.ddgo_min_order_amount != null) ? settings.ddgo_min_order_amount : (settings.min_order_amount ?? 0);
-  const codFeeAmount = paymentMethod === "cod" ? Number(settings.cod_fee || 0) : 0;
+  // US: USD-specific settings (default 0). Else DDGO keys take priority, then global defaults.
+  const baseDeliveryFee = isUS ? Number(settings.delivery_fee_US ?? 0)
+    : (isDdgo && settings.ddgo_delivery_fee != null) ? settings.ddgo_delivery_fee : (settings.delivery_fee ?? 0);
+  const perKmFee = isUS ? 0
+    : (isDdgo && settings.ddgo_delivery_fee_per_km != null) ? settings.ddgo_delivery_fee_per_km : (settings.delivery_fee_per_km ?? 0);
+  const platformFreeDeliveryAbove = isUS ? Number(settings.free_delivery_above_US ?? 0)
+    : (isDdgo && settings.ddgo_free_delivery_above != null) ? settings.ddgo_free_delivery_above : (settings.free_delivery_above ?? 0);
+  const platformFee = isUS ? Number(settings.platform_fee_US ?? 0)
+    : (isDdgo && settings.ddgo_platform_fee != null) ? settings.ddgo_platform_fee : (settings.platform_fee ?? 0);
+  const maxRadius = isUS ? Number.MAX_SAFE_INTEGER
+    : (isDdgo && settings.ddgo_max_delivery_radius != null) ? settings.ddgo_max_delivery_radius : (settings.max_delivery_radius_km ?? 20);
+  const minOrderAmount = isUS ? Number(settings.min_order_amount_US ?? 0)
+    : (isDdgo && settings.ddgo_min_order_amount != null) ? settings.ddgo_min_order_amount : (settings.min_order_amount ?? 0);
+
+  // ── COD gating ──
+  // cod_enabled: defaults to true. Explicit 'false' / false disables.
+  // cod_max_amount: > 0 means subtotal must not exceed it for COD.
+  const codEnabledRaw = settings.cod_enabled;
+  // US never allows COD (Stripe card only); IN respects the cod_enabled setting.
+  const codEnabled = isUS ? false : !(codEnabledRaw === false || codEnabledRaw === "false" || codEnabledRaw === 0 || codEnabledRaw === "0");
+  const codMaxAmount = Number(settings.cod_max_amount || 0);
+  let codFeeAmount = 0;
+  if (paymentMethod === "cod") {
+    if (!codEnabled) {
+      return { error: "Cash on Delivery is currently unavailable. Please pay online.", codEnabled, codMaxAmount };
+    }
+    if (codMaxAmount > 0 && Number(subtotal || 0) > codMaxAmount) {
+      return { error: `Cash on Delivery is not available for orders above ₹${codMaxAmount}. Please pay online.`, codEnabled, codMaxAmount };
+    }
+    codFeeAmount = Number(settings.cod_fee || 0);
+  }
 
   // Check radius (only when distance is provided)
   if (distanceKm > 0 && distanceKm > maxRadius) {
@@ -116,6 +145,8 @@ async function calculateFees({ subtotal, discount = 0, distanceKm, freeDeliveryA
     usedProductOverride,
     platformFee,
     codFee: codFeeAmount,
+    codEnabled,
+    codMaxAmount,
     distanceKm,
     estimatedDeliveryMinutes,
     minOrderAmount,

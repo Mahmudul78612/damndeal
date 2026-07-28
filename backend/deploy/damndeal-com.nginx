@@ -1,0 +1,106 @@
+server {
+    listen 80;
+    server_name damndeal.com www.damndeal.com;
+
+    # Let certbot do its http-01 challenge before we redirect
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    location / {
+        return 301 https://damndeal.com$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name www.damndeal.com;
+
+    # placeholder certs (will be replaced by certbot --nginx)
+    ssl_certificate /etc/letsencrypt/live/damndeal.in/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/damndeal.in/privkey.pem;
+
+    return 301 https://damndeal.com$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name damndeal.com;
+
+    # placeholder certs (will be replaced by certbot --nginx)
+    ssl_certificate /etc/letsencrypt/live/damndeal.in/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/damndeal.in/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    client_max_body_size 10M;
+
+    # Admin lives only on .in
+    location /admin/ {
+        return 301 https://damndeal.in/admin/;
+    }
+    location = /admin {
+        return 301 https://damndeal.in/admin/;
+    }
+
+    # Partner portal lives only on .in
+    location /partner/ {
+        return 301 https://damndeal.in/partner/;
+    }
+    location = /partner {
+        return 301 https://damndeal.in/partner/;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:5000/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Region US;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 90s;
+    }
+
+    location /socket.io/ {
+        proxy_pass http://127.0.0.1:5000/socket.io/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    location /uploads/ {
+        alias /var/www/damndeal/uploads/;
+        expires 30d;
+        add_header Cache-Control public;
+        access_log off;
+    }
+
+    location /_next/static/ {
+        alias /var/www/damndeal/web/.next/static/;
+        expires 365d;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Region US;
+        proxy_cache_bypass $http_upgrade;
+    }
+}

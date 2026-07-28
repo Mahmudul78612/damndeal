@@ -6,6 +6,7 @@
 const https = require("https");
 const http = require("http");
 const AppSettings = require("../models/AppSettings");
+const secrets = require("../utils/secrets");
 
 const CJ_BASE = "https://developers.cjdropshipping.com/api2.0/v1";
 
@@ -56,14 +57,15 @@ async function getAccessToken() {
     return _tokenCache.accessToken;
   }
 
-  // Load API key from DB
+  // Load API key from DB (cj_api_key is stored ENCRYPTED — decrypt before use)
   const apiKeySetting = await AppSettings.findOne({ key: "cj_api_key" });
   if (!apiKeySetting || !apiKeySetting.value) {
     throw new Error("CJ API Key not configured. Set 'cj_api_key' in Settings.");
   }
+  const apiKey = secrets.decryptSetting("cj_api_key", apiKeySetting.value);
 
   const res = await request("POST", "/authentication/getAccessToken", {
-    apiKey: apiKeySetting.value,
+    apiKey,
   });
 
   if (!res.result || !res.data?.accessToken) {
@@ -133,21 +135,25 @@ async function getCategories() {
 async function createCJOrder(order, cjItems) {
   const token = await getAccessToken();
 
-  const addr = order.shippingAddress || order.address || {};
+  // Ship to the order's actual country (US for damndeal.com, else India).
+  const isUS = (order.region || "IN") === "US";
+  const addr = order.deliveryAddress || order.shippingAddress || order.address || {};
   const customer = order.user || order.customer || {};
 
   const body = {
     orderNumber: order._id.toString(),
-    shippingCountryCode: "IN",
-    shippingCountry: "India",
+    shippingCountryCode: isUS ? "US" : "IN",
+    shippingCountry: isUS ? "United States" : "India",
     shippingProvince: addr.state || "",
     shippingCity: addr.city || "",
     shippingZip: addr.pincode || addr.zip || "",
     shippingPhone: customer.phone || addr.phone || "",
     shippingCustomerName: customer.name || addr.name || "Customer",
     shippingAddress: [addr.line1, addr.line2, addr.landmark].filter(Boolean).join(", ") || addr.address || "",
-    logisticName: "CJPacket Ordinary",
-    fromCountryCode: "CN",
+    // US products ship from the US warehouse; India from China. Omit logisticName
+    // for US so CJ auto-selects a valid domestic carrier.
+    fromCountryCode: isUS ? "US" : "CN",
+    ...(isUS ? {} : { logisticName: "CJPacket Ordinary" }),
     payType: 2, // balance deduction
     products: cjItems.map((item) => ({
       vid: item.cj_variant_id,
@@ -165,6 +171,20 @@ async function getCJOrderStatus(cjOrderId) {
   const res = await request("GET", `/shopping/order/getOrderDetail?orderId=${cjOrderId}`, null, token);
   if (!res.result) throw new Error(`CJ order query failed: ${res.message}`);
   return res.data;
+}
+
+// ── Cancel a CJ order (so we aren't charged for a cancelled order) ──────────
+// Best-effort: returns {ok, message}; never throws so it can't block a cancel.
+async function cancelCJOrder(cjOrderId) {
+  try {
+    if (!cjOrderId) return { ok: false, message: "no CJ order id" };
+    const token = await getAccessToken();
+    const res = await request("PATCH", "/shopping/order/cancelOrder", { orderId: String(cjOrderId) }, token);
+    if (res && res.result) return { ok: true, message: res.message || "cancelled" };
+    return { ok: false, message: (res && res.message) || "CJ cancel failed" };
+  } catch (e) {
+    return { ok: false, message: e.message };
+  }
 }
 
 // ── Freight Calculation ────────────────────────────────────────────────────
@@ -267,6 +287,7 @@ module.exports = {
   getCategories,
   createCJOrder,
   getCJOrderStatus,
+  cancelCJOrder,
   calculateFreight,
   estimateFreightSummary,
 };

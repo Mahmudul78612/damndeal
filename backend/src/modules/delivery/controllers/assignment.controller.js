@@ -76,6 +76,9 @@ async function markDelivered(req, res) {
   order.paymentStatus = "paid";
   await order.save();
 
+  // Magic Club: create reward club (best-effort, never blocks)
+  require("../../../services/magicclub.service").onOrderDelivered(order).catch(() => {});
+
   // Update delivery boy stats
   const boy = await DeliveryBoy.findOne({ user: req.user.userId });
   if (boy) {

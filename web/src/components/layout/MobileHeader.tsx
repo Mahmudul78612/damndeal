@@ -2,12 +2,12 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { Search, ShoppingCart, X, TrendingUp } from 'lucide-react';
+import { Search, ShoppingCart, X } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useAppConfig, useBrandLogo, useBrandName } from '@/context/ConfigContext';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
-import { api, imgUrl } from '@/lib/api';
+import { api, imgUrl, CURRENCY_SYMBOL } from '@/lib/api';
 import { Product } from '@/lib/types';
 
 export default function MobileHeader() {
@@ -27,6 +27,9 @@ export default function MobileHeader() {
   const debounceRef = useRef<NodeJS.Timeout>(null);
 
   const primaryColor = config.brand_primary_color || '#7C3AED';
+  const appBarLightColor = (config.app_bar_color_light as string) || '';
+  const headerFadeColor = appBarLightColor || primaryColor;
+  const searchBgColor = '#FFFFFF';
 
   // Search on query change
   useEffect(() => {
@@ -55,15 +58,16 @@ export default function MobileHeader() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Collapse logo/cart on scroll, expand back at top
+  // Solidify header on scroll so content doesn't show through.
   useEffect(() => {
     const onScroll = () => {
-      setScrolled(window.scrollY > 30);
+      setScrolled(window.scrollY > 8);
     };
     window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
 
   const handleSearch = () => {
     const q = query.trim();
@@ -78,14 +82,22 @@ export default function MobileHeader() {
   if (pathname !== '/' && pathname !== '') return null;
 
   return (
-    <header className="md:hidden sticky top-0 z-[80]">
-      {/* Solid header background */}
-      <div 
-        className="relative transition-all duration-300 ease-out"
+    <header className="md:hidden sticky top-0 z-[80] relative overflow-hidden">
+      <div
+        className="pointer-events-none absolute inset-0 z-[1] transition-opacity duration-200"
         style={{
-          background: primaryColor,
+          background: `linear-gradient(to bottom, ${headerFadeColor}CC 0%, ${headerFadeColor}99 40%, ${headerFadeColor}66 70%, ${headerFadeColor}33 90%, ${headerFadeColor}00 100%)`,
+          opacity: scrolled ? 0 : 1,
         }}
-      >
+      />
+      <div
+        className="pointer-events-none absolute inset-0 z-[2] transition-opacity duration-200"
+        style={{
+          backgroundColor: headerFadeColor,
+          opacity: scrolled ? 0.95 : 0,
+        }}
+      />
+      <div className="relative z-10">
         <div className="relative z-10 px-3 pt-3 pb-3 safe-top">
           {/* Top Row - Logo + Cart - always visible */}
           <div className="flex items-center justify-between mb-3">
@@ -96,7 +108,7 @@ export default function MobileHeader() {
                 alt={brandName} 
                 width={140} 
                 height={40}
-                className="h-8 w-auto object-contain filter brightness-0 invert"
+                className="h-8 w-auto object-contain"
                 priority
                 unoptimized
               />
@@ -118,7 +130,10 @@ export default function MobileHeader() {
 
           {/* Search Bar with Suggestions */}
           <div className="relative" ref={containerRef}>
-            <div className="flex items-center gap-2 bg-white/95 rounded-full px-3 py-2 text-sm text-gray-500 transition focus-within:bg-white shadow-md">
+            <div
+              className="flex items-center gap-2 rounded-full px-3 py-2 text-sm text-gray-500 transition shadow-md"
+              style={{ backgroundColor: searchBgColor }}
+            >
               <Search size={16} className="text-gray-400 shrink-0" strokeWidth={2} />
               <input
                 ref={inputRef}
@@ -177,7 +192,7 @@ export default function MobileHeader() {
                             {product.name}
                           </p>
                           <p className="text-[10px] text-gray-500">
-                            ₹{product.price?.toLocaleString()}
+                            {CURRENCY_SYMBOL}{product.price?.toLocaleString()}
                           </p>
                         </div>
                       </Link>
@@ -200,16 +215,7 @@ export default function MobileHeader() {
           </div>
         </div>
 
-        {/* Smooth Fade - sits below the solid header, allows content to overlap */}
       </div>
-      <div 
-        className="pointer-events-none -mt-px transition-all duration-300 ease-out"
-        style={{
-          height: scrolled ? 0 : 80,
-          opacity: scrolled ? 0 : 1,
-          background: `linear-gradient(to bottom, ${primaryColor} 0%, ${primaryColor}B3 20%, ${primaryColor}66 40%, ${primaryColor}33 60%, ${primaryColor}1A 80%, ${primaryColor}00 100%)`,
-        }}
-      />
     </header>
   );
 }

@@ -26,17 +26,42 @@
     { value: 'name', label: 'Name' },
   ];
 
+  const DESKTOP_SECTION_TYPES = [
+    { value: 'hero_carousel',       label: 'Hero Carousel',       icon: '🖼️', group: 'banner' },
+    { value: 'banner_2col',         label: 'Banner 2-Column',     icon: '⬜⬜', group: 'banner' },
+    { value: 'banner_3col',         label: 'Banner 3-Column',     icon: '⬜⬜⬜', group: 'banner' },
+    { value: 'banner_single',       label: 'Full-Width Banner',   icon: '🖼️', group: 'banner' },
+    { value: 'category_products',   label: 'Category + Products', icon: '📦', group: 'product' },
+    { value: 'product_grid',        label: 'Product Grid',        icon: '⊞',  group: 'product' },
+    { value: 'deal_strip',          label: 'Deal Strip',          icon: '⚡', group: 'product' },
+    { value: 'promo_full',          label: 'Promo Full-Width',    icon: '🎯', group: 'banner' },
+    { value: 'featured_categories', label: 'Featured Categories', icon: '📂', group: 'other' },
+    { value: 'rich_text',           label: 'Rich Text',           icon: '📝', group: 'content' },
+    { value: 'image_with_text',     label: 'Image + Text',        icon: '🖼️', group: 'content' },
+    { value: 'trust_badges',        label: 'Trust Badges',        icon: '✅', group: 'content' },
+    { value: 'newsletter',          label: 'Newsletter',          icon: '✉️', group: 'content' },
+    { value: 'countdown',           label: 'Countdown Timer',     icon: '⏱️', group: 'content' },
+    { value: 'testimonials',        label: 'Testimonials',        icon: '⭐', group: 'content' },
+    { value: 'ugc_video',           label: 'UGC Video Reels',     icon: '🎬', group: 'content' },
+  ];
+
   /* ── state ── */
   let sections = [];
   let categories = [];
   let previewPlatform = 'damndeal';
+  let activeSite = 'in';   // 'in' | 'com'
+  let comView = 'mobile';  // 'mobile' | 'desktop'
+
+  window.switchSite = function(s){ activeSite = s; load(); };
+  window.switchComView = function(v){ comView = v; load(); };
 
   /* ── helpers ── */
   function esc(s){ const d=document.createElement('div'); d.textContent=String(s||''); return d.innerHTML; }
 
-  function typeBadge(type){
-    const t = SECTION_TYPES.find(x=>x.value===type);
-    const colors = { product:'#7C3AED', banner:'#2196F3', promo:'#E91E63' };
+  function typeBadge(type, typeList){
+    const list = typeList || SECTION_TYPES;
+    const t = list.find(x=>x.value===type);
+    const colors = { product:'#7C3AED', banner:'#2196F3', promo:'#E91E63', other:'#6B7280' };
     const c = colors[t?.group]||'#666';
     return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;background:${c}15;color:${c}">${t?.icon||'?'} ${t?.label||type}</span>`;
   }
@@ -199,13 +224,116 @@
 
   /* ── render ── */
   function render(){
+    const isComDesktop = activeSite === 'com' && comView === 'desktop';
+    const siteLabel = activeSite === 'in' ? 'damndeal.in' : (comView === 'mobile' ? 'damndeal.com – Mobile Web' : 'damndeal.com – Desktop');
+    const currentTypes = isComDesktop ? DESKTOP_SECTION_TYPES : SECTION_TYPES;
+
     main.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div>
           <h2 style="margin:0;font-size:1.2rem;font-weight:700">Home Sections</h2>
-          <p style="margin:4px 0 0;font-size:12px;color:var(--text-light)">Server-driven UI — changes reflect in app without update</p>
+          <p style="margin:4px 0 0;font-size:12px;color:var(--text-light)">Server-driven UI — changes reflect without app update</p>
         </div>
-        <button class="btn btn-primary" onclick="openAdd()">+ Add Section</button>
+        <button class="btn btn-primary" onclick="${isComDesktop ? 'openDesktopAdd()' : 'openAdd()'}">+ Add Section</button>
+      </div>
+
+      <!-- ── Site Tabs ── -->
+      <div style="display:flex;gap:8px;margin-bottom:12px;border-bottom:2px solid #e5e7eb;padding-bottom:10px">
+        <button class="btn ${activeSite==='in'?'btn-primary':'btn-outline'}" onclick="switchSite('in')" style="font-size:13px">
+          🇮🇳 damndeal.in
+        </button>
+        <button class="btn ${activeSite==='com'?'btn-primary':'btn-outline'}" onclick="switchSite('com')" style="font-size:13px">
+          🌍 damndeal.com
+        </button>
+      </div>
+
+      ${activeSite === 'com' ? `
+      <!-- ── .com Sub-tabs ── -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;padding:10px 12px;background:#f8f9fa;border-radius:10px;border:1px solid #e5e7eb">
+        <button class="btn ${comView==='mobile'?'btn-primary':'btn-outline'}" onclick="switchComView('mobile')" style="font-size:12px">
+          📱 Mobile Web
+        </button>
+        <button class="btn ${comView==='desktop'?'btn-primary':'btn-outline'}" onclick="switchComView('desktop')" style="font-size:12px">
+          🖥️ Desktop
+        </button>
+        <span style="margin-left:auto;font-size:11px;color:var(--text-light);line-height:30px">
+          ${comView==='mobile' ? 'Home layout for damndeal.com mobile browsers' : 'Home layout for damndeal.com desktop browsers'}
+        </span>
+      </div>
+      ` : ''}
+
+      <!-- ── Table ── -->
+      <div class="card" style="overflow:auto">
+        <div style="padding:10px 14px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:8px">
+          <span style="font-size:12px;font-weight:600;color:var(--text-light)">${siteLabel}</span>
+          <span class="badge badge-primary" style="font-size:10px">${sections.length} section${sections.length!==1?'s':''}</span>
+        </div>
+        <table class="table" id="secTable">
+          <thead><tr>
+            <th style="width:60px">Order</th>
+            <th>Type</th>
+            <th>Title</th>
+            ${!isComDesktop ? '<th>Platform</th>' : ''}
+            <th>Style</th>
+            <th style="width:60px">Active</th>
+            <th style="width:220px">Actions</th>
+          </tr></thead>
+          <tbody>${sections.length ? sections.map((s,i)=>{
+            const editFn = isComDesktop ? `openDesktopEdit('${s._id}')` : `openEdit('${s._id}')`;
+            return `
+            <tr data-id="${s._id}">
+              <td>
+                <div style="display:flex;flex-direction:column;gap:2px;align-items:center">
+                  ${i>0?`<button class="btn btn-sm" style="padding:0 6px;font-size:.65rem;line-height:1" onclick="move('${s._id}',-1)">▲</button>`:''}
+                  <span style="font-weight:600;font-size:13px">${s.sortOrder ?? i}</span>
+                  ${i<sections.length-1?`<button class="btn btn-sm" style="padding:0 6px;font-size:.65rem;line-height:1" onclick="move('${s._id}',1)">▼</button>`:''}
+                </div>
+              </td>
+              <td>${typeBadge(s.type, currentTypes)}</td>
+              <td style="font-weight:600">${esc(s.title||'—')}</td>
+              ${!isComDesktop ? `<td><span class="badge ${s.platform==='ddgo'?'badge-success':'badge-primary'}" style="font-size:11px">${s.platform||'ddgo'}</span></td>` : ''}
+              <td style="font-size:12px">${stylePreview(s.data)}</td>
+              <td>${s.isActive!==false ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-gray">No</span>'}</td>
+              <td>
+                <div style="display:flex;gap:4px;flex-wrap:wrap">
+                  <button class="btn btn-sm" onclick="${editFn}" style="font-size:11px">✏️ Edit</button>
+                  <button class="btn btn-sm ${s.isActive!==false?'btn-warning':'btn-primary'}" onclick="toggleActive('${s._id}',${s.isActive!==false})" style="font-size:11px">${s.isActive!==false?'Disable':'Enable'}</button>
+                  <button class="btn btn-sm btn-danger" onclick="removeSec('${s._id}')" style="font-size:11px">🗑️</button>
+                </div>
+              </td>
+            </tr>`;
+          }).join('') : `<tr><td colspan="7" class="empty-state">No sections yet for ${siteLabel}. Click + Add Section to get started.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ── Preview ── -->
+      <div style="margin-top:24px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <h3 style="margin:0;font-size:1rem;font-weight:700">${isComDesktop ? '🖥️ Desktop Preview' : '📱 Mobile Preview'}</h3>
+          ${activeSite==='in' ? `
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm ${previewPlatform==='damndeal'?'btn-primary':'btn-outline'}" onclick="setPreviewPlatform('damndeal')" style="font-size:11px">Online Store</button>
+            <button class="btn btn-sm ${previewPlatform==='ddgo'?'btn-primary':'btn-outline'}" onclick="setPreviewPlatform('ddgo')" style="font-size:11px">Quick Commerce</button>
+          </div>` : ''}
+        </div>
+        ${isComDesktop ? `
+        <div style="max-width:960px;margin:0 auto;background:#fff;border-radius:12px;border:2px solid #ddd;padding:16px;min-height:400px;box-shadow:0 4px 20px rgba(0,0,0,.08)">
+          <div style="height:36px;background:#f0f0f0;border-radius:6px;margin-bottom:12px;display:flex;align-items:center;padding:0 12px;gap:6px">
+            <div style="width:12px;height:12px;border-radius:50%;background:#ff5f57"></div>
+            <div style="width:12px;height:12px;border-radius:50%;background:#febc2e"></div>
+            <div style="width:12px;height:12px;border-radius:50%;background:#28c840"></div>
+            <div style="flex:1;background:#fff;height:22px;border-radius:4px;margin:0 8px"></div>
+          </div>
+          <div id="previewContainer">${buildPreview()}</div>
+        </div>` : `
+        <div style="max-width:375px;margin:0 auto;background:#f8f8f8;border-radius:24px;border:2px solid #ddd;padding:12px 0;min-height:500px;box-shadow:0 4px 20px rgba(0,0,0,.1)">
+          <div style="width:40px;height:5px;background:#ddd;border-radius:3px;margin:0 auto 12px"></div>
+          <div style="overflow-y:auto;max-height:600px;padding:0 8px" id="previewContainer">
+            ${buildPreview()}
+          </div>
+          <div style="width:60px;height:5px;background:#ddd;border-radius:3px;margin:12px auto 0"></div>
+        </div>`}
       </div>
 
       <div class="card" style="overflow:auto">
@@ -295,9 +423,9 @@
               </div>
               <div class="form-group">
                 <label>Platform</label>
-                <select class="form-control" id="fPlatform">
+                <select class="form-control" id="fPlatform" ${activeSite==='com'?'disabled':''}>
                   <option value="damndeal">Online Store</option>
-                  <option value="ddgo">Quick Commerce</option>
+                  ${activeSite==='in'?'<option value="ddgo">Quick Commerce</option>':''}
                 </select>
               </div>
             </div>
@@ -677,19 +805,520 @@
     }).join('');
   };
 
+  /* ── Desktop section modal (for .com Desktop tab) ── */
+  let desktopEditId = null;
+
+  window.openDesktopAdd = function(){
+    desktopEditId = null;
+    showDesktopModal();
+  };
+
+  window.openDesktopEdit = function(id){
+    desktopEditId = id;
+    const s = sections.find(x=>x._id===id);
+    if(!s) return;
+    showDesktopModal(s);
+  };
+
+  // Desktop banner upload state
+  window.dtBanners = []; // [{image, linkType, linkValue, _file, _previewUrl}]
+  let dtContentImage = { image: '', _file: null }; // image_with_text single image
+
+  window.onDtcImageFile = function(input){
+    if(input.files && input.files[0]){
+      dtContentImage._file = input.files[0];
+      const url = URL.createObjectURL(input.files[0]);
+      const prev = document.getElementById('dtcImagePreview');
+      if(prev) prev.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover">`;
+    }
+  };
+
+  const DT_BANNER_TYPES = ['hero_carousel','banner_2col','banner_3col','banner_single','promo_full'];
+  const DT_CONTENT_TYPES = ['rich_text','image_with_text','trust_badges','newsletter','countdown','testimonials','ugc_video'];
+  function dtBannerCount(type){
+    return type==='hero_carousel'?5 : type==='banner_2col'?2 : type==='banner_3col'?3 : 1;
+  }
+
+  function showDesktopModal(s){
+    const types = DESKTOP_SECTION_TYPES;
+    const isEdit = !!s;
+    let modal = document.getElementById('desktopModal');
+    if(!modal){
+      modal = document.createElement('div');
+      modal.className = 'modal-overlay';
+      modal.id = 'desktopModal';
+      document.body.appendChild(modal);
+    }
+
+    // Seed banner data from existing section
+    dtBanners = [];
+    dtContentImage = { image: s?.data?.image || '', _file: null };
+    const sType = s?.type || 'banner_2col';
+    if(DT_BANNER_TYPES.includes(sType)){
+      const d = s?.data || {};
+      if(sType==='banner_single' || sType==='promo_full'){
+        dtBanners = [{ image: d.image||'', linkType: d.linkType||'category', linkValue: d.linkValue||'' }];
+      } else {
+        dtBanners = (d.banners||[]).map(b => ({ image:b.image||'', linkType:b.linkType||'category', linkValue:b.linkValue||'' }));
+      }
+    }
+
+    modal.innerHTML = `
+      <div class="modal" style="width:560px;max-height:88vh;overflow-y:auto">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <h3 style="margin:0">${isEdit?'Edit':'Add'} Desktop Section <span style="font-size:12px;color:var(--text-light)">damndeal.com</span></h3>
+          <button class="btn btn-sm" onclick="document.getElementById('desktopModal').classList.remove('show')" style="font-size:18px;padding:0 8px">×</button>
+        </div>
+
+        <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:12px 16px;margin-bottom:12px">
+          <legend style="font-size:12px;font-weight:700;color:var(--text-light);padding:0 6px">BASIC INFO</legend>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Section Type</label>
+              <select class="form-control" id="dtType" onchange="onDtTypeChange()">
+                <optgroup label="Banners">
+                  ${types.filter(t=>t.group==='banner').map(t=>`<option value="${t.value}" ${s?.type===t.value?'selected':''}>${t.icon} ${t.label}</option>`).join('')}
+                </optgroup>
+                <optgroup label="Products">
+                  ${types.filter(t=>t.group==='product').map(t=>`<option value="${t.value}" ${s?.type===t.value?'selected':''}>${t.icon} ${t.label}</option>`).join('')}
+                </optgroup>
+                <optgroup label="Content (Shopify-style)">
+                  ${types.filter(t=>t.group==='content').map(t=>`<option value="${t.value}" ${s?.type===t.value?'selected':''}>${t.icon} ${t.label}</option>`).join('')}
+                </optgroup>
+                <optgroup label="Other">
+                  ${types.filter(t=>t.group==='other').map(t=>`<option value="${t.value}" ${s?.type===t.value?'selected':''}>${t.icon} ${t.label}</option>`).join('')}
+                </optgroup>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Sort Order</label>
+              <input class="form-control" id="dtSort" type="number" value="${s?.sortOrder??sections.length}" min="0">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Title</label>
+            <input class="form-control" id="dtTitle" placeholder="e.g. Featured Products, Top Deals" value="${esc(s?.title||'')}">
+          </div>
+        </fieldset>
+
+        <!-- Banner Config -->
+        <fieldset id="dtBannerConfig" style="border:1px solid #e5e7eb;border-radius:8px;padding:12px 16px;margin-bottom:12px;display:none">
+          <legend style="font-size:12px;font-weight:700;color:var(--text-light);padding:0 6px">BANNER IMAGES</legend>
+          <div id="dtBannerSlots"></div>
+        </fieldset>
+
+        <!-- Product Config -->
+        <fieldset id="dtProductConfig" style="border:1px solid #e5e7eb;border-radius:8px;padding:12px 16px;margin-bottom:12px;display:none">
+          <legend style="font-size:12px;font-weight:700;color:var(--text-light);padding:0 6px">DATA CONFIG</legend>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Category</label>
+              <select class="form-control" id="dtCategory">
+                <option value="">— All Products —</option>
+                ${categories.filter(c=>c.platform==='damndeal'||!c.platform).map(c=>`<option value="${c._id}" ${s?.data?.categoryId===c._id?'selected':''}>${esc(c.name)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Product Limit</label>
+              <input class="form-control" id="dtLimit" type="number" value="${s?.data?.limit||10}" min="1" max="50">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Grid Columns</label>
+              <select class="form-control" id="dtColumns">
+                ${[2,3,4,5,6].map(n=>`<option value="${n}" ${(s?.data?.columns||4)==n?'selected':''}>${n} Columns</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Sort By</label>
+              <select class="form-control" id="dtSortBy">
+                <option value="createdAt" ${s?.data?.sortBy==='createdAt'?'selected':''}>Newest First</option>
+                <option value="sellingPrice" ${s?.data?.sortBy==='sellingPrice'?'selected':''}>Price (Low)</option>
+                <option value="-sellingPrice" ${s?.data?.sortBy==='-sellingPrice'?'selected':''}>Price (High)</option>
+                <option value="name" ${s?.data?.sortBy==='name'?'selected':''}>Name</option>
+              </select>
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- Content Config (Shopify-style content sections) -->
+        <fieldset id="dtContentConfig" style="border:1px solid #e5e7eb;border-radius:8px;padding:12px 16px;margin-bottom:12px;display:none">
+          <legend style="font-size:12px;font-weight:700;color:var(--text-light);padding:0 6px">CONTENT</legend>
+
+          <div id="dtcImageRow" style="display:none">
+            <label style="display:block;margin-bottom:4px">Image <span style="color:#999;font-weight:400">(auto-compressed to WebP on upload)</span></label>
+            <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:8px">
+              <div style="text-align:center">
+                <div id="dtcImagePreview" style="width:150px;height:96px;border-radius:8px;overflow:hidden;background:#f0f0f0;border:2px dashed #ccc;display:flex;align-items:center;justify-content:center;cursor:pointer" onclick="document.getElementById('dtcImageFile').click()">
+                  ${(()=>{const im=s?.data?.image; if(!im) return '<span style="font-size:26px;color:#bbb">📷</span>'; const src=String(im).startsWith('http')?im:CONFIG.UPLOADS_BASE+im; return `<img src="${esc(src)}" style="width:100%;height:100%;object-fit:cover">`;})()}
+                </div>
+                <input type="file" id="dtcImageFile" accept="image/*" style="display:none" onchange="onDtcImageFile(this)">
+                <div style="font-size:9px;color:#999;margin-top:3px">click to upload</div>
+              </div>
+              <div class="form-group" style="flex:1">
+                <label>Image Side</label>
+                <select class="form-control" id="dtcImageSide">
+                  <option value="left" ${s?.data?.imageSide!=='right'?'selected':''}>Left</option>
+                  <option value="right" ${s?.data?.imageSide==='right'?'selected':''}>Right</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group" id="dtcHeadingRow">
+            <label>Heading</label>
+            <input class="form-control" id="dtcHeading" placeholder="e.g. Why shop with us" value="${esc(s?.data?.heading||'')}">
+          </div>
+
+          <div class="form-group" id="dtcTextRow">
+            <label>Text</label>
+            <textarea class="form-control" id="dtcText" rows="3" placeholder="Supporting text…">${esc(s?.data?.text||'')}</textarea>
+          </div>
+
+          <div class="form-group" id="dtcBadgesRow" style="display:none">
+            <label>Badges <span style="color:#999;font-weight:400">(one per line: icon | title | subtitle)</span></label>
+            <textarea class="form-control" id="dtcBadges" rows="4" placeholder="🚚 | Free Shipping | On orders over $50&#10;🔒 | Secure Checkout | 100% protected&#10;↩️ | Easy Returns | 30-day policy">${esc((s?.data?.badges||[]).map(b=>[b.icon,b.title,b.subtitle].filter(x=>x!=null).join(' | ')).join('\n'))}</textarea>
+          </div>
+
+          <div class="form-group" id="dtcPlaceholderRow" style="display:none">
+            <label>Email Input Placeholder</label>
+            <input class="form-control" id="dtcPlaceholder" placeholder="Enter your email" value="${esc(s?.data?.placeholder||'')}">
+          </div>
+
+          <div class="form-group" id="dtcEndTimeRow" style="display:none">
+            <label>Countdown ends at</label>
+            <input class="form-control" id="dtcEndTime" type="datetime-local" value="${esc((s?.data?.endTime||'').slice(0,16))}">
+          </div>
+
+          <div class="form-group" id="dtcTestimonialsRow" style="display:none">
+            <label>Testimonials <span style="color:#999;font-weight:400">(one per line: name | rating(1-5) | review text | location)</span></label>
+            <textarea class="form-control" id="dtcTestimonials" rows="5" placeholder="Aisha K. | 5 | Amazing quality, fast delivery! | New York&#10;Mike R. | 4 | Great value for money | Texas">${esc((s?.data?.items||[]).map(t=>[t.name,t.rating,t.text,t.location].filter(x=>x!=null&&x!=='').join(' | ')).join('\n'))}</textarea>
+          </div>
+
+          <div class="form-group" id="dtcVideosRow" style="display:none">
+            <label>UGC Videos <span style="color:#999;font-weight:400">(one per line: videoURL | link | caption)</span></label>
+            <textarea class="form-control" id="dtcVideos" rows="5" placeholder="https://youtube.com/shorts/abc123 | /categories/CATEGORY_ID | Summer Collection&#10;https://site.com/clip.mp4 | /product/PRODUCT_ID | Best Seller">${esc((s?.data?.videos||[]).map(v=>[v.url,v.linkValue,v.caption].filter(x=>x!=null&&x!=='').join(' | ')).join('\n'))}</textarea>
+            <p style="font-size:10px;color:#999;margin:3px 0 0">Link: paste a <b>/categories/ID</b> or <b>/product/ID</b> path (copy the ID from Categories/Products page), or any URL. Video: YouTube/Shorts link or a direct .mp4 URL.</p>
+          </div>
+
+          <div id="dtcButtonRow">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Button Label <span style="color:#999;font-weight:400">(optional)</span></label>
+                <input class="form-control" id="dtcBtnLabel" placeholder="Shop Now" value="${esc(s?.data?.buttonLabel||'')}">
+              </div>
+              <div class="form-group">
+                <label>Button Color</label>
+                <input class="form-control" id="dtcBtnColor" type="color" value="${esc(s?.data?.buttonColor||'#111827')}" style="height:38px;padding:2px">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Button Link <span style="color:#999;font-weight:400">(URL or /categories/ID)</span></label>
+              <input class="form-control" id="dtcBtnLink" placeholder="https://... or /categories/ID" value="${esc(s?.data?.buttonLink||'')}">
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- Design (applies to every section type) -->
+        <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:12px 16px;margin-bottom:12px">
+          <legend style="font-size:12px;font-weight:700;color:var(--text-light);padding:0 6px">🎨 DESIGN (optional)</legend>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Background Color</label>
+              <input class="form-control" id="dtBg" type="color" value="${esc(s?.data?.bgColor||'#ffffff')}" style="height:38px;padding:2px">
+            </div>
+            <div class="form-group">
+              <label>Vertical Padding</label>
+              <select class="form-control" id="dtPad">
+                ${['none','sm','md','lg'].map(p=>`<option value="${p}" ${(s?.data?.paddingY||'none')===p?'selected':''}>${p.toUpperCase()}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Text Align</label>
+              <select class="form-control" id="dtAlign">
+                ${['left','center','right'].map(a=>`<option value="${a}" ${(s?.data?.align||'left')===a?'selected':''}>${a}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label><input type="checkbox" id="dtFullWidth" ${s?.data?.fullWidth?'checked':''}> Full-width band (edge-to-edge)</label>
+            </div>
+            <div class="form-group">
+              <label><input type="checkbox" id="dtRounded" ${s?.data?.rounded?'checked':''}> Rounded corners</label>
+            </div>
+          </div>
+          <p style="font-size:11px;color:#999;margin:4px 0 0">Leave background white & padding NONE to keep the default look. Full-width band needs a background color.</p>
+        </fieldset>
+
+        <div class="form-group">
+          <label><input type="checkbox" id="dtActive" ${s?.isActive!==false?'checked':''}> Active</label>
+        </div>
+
+        <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:16px">
+          <button class="btn" onclick="document.getElementById('desktopModal').classList.remove('show')">Cancel</button>
+          <button class="btn btn-primary" onclick="saveDesktop()">💾 Save Section</button>
+        </div>
+      </div>`;
+
+    modal.classList.add('show');
+    onDtTypeChange();
+  }
+
+  window.onDtTypeChange = function(){
+    const type = document.getElementById('dtType').value;
+    const isBanner = DT_BANNER_TYPES.includes(type);
+    const isContent = DT_CONTENT_TYPES.includes(type);
+    document.getElementById('dtBannerConfig').style.display = isBanner ? '' : 'none';
+    document.getElementById('dtProductConfig').style.display = (isBanner || isContent) ? 'none' : '';
+    document.getElementById('dtContentConfig').style.display = isContent ? '' : 'none';
+
+    if(isContent){
+      // Toggle the type-specific rows inside the content config.
+      const show = (id, on) => { const el = document.getElementById(id); if(el) el.style.display = on ? '' : 'none'; };
+      const hasButton = ['rich_text','image_with_text','newsletter','countdown'].includes(type);
+      const hasText   = ['rich_text','image_with_text','newsletter','countdown'].includes(type);
+      show('dtcImageRow',        type==='image_with_text');
+      show('dtcBadgesRow',       type==='trust_badges');
+      show('dtcEndTimeRow',      type==='countdown');
+      show('dtcTestimonialsRow', type==='testimonials');
+      show('dtcVideosRow',       type==='ugc_video');
+      show('dtcHeadingRow',      !['trust_badges','testimonials','ugc_video'].includes(type));
+      show('dtcTextRow',         hasText);
+      show('dtcPlaceholderRow',  type==='newsletter');
+      show('dtcButtonRow',       hasButton);
+    }
+
+    if(isBanner){
+      const count = dtBannerCount(type);
+      const isCarousel = type==='hero_carousel';
+      while(dtBanners.length < (isCarousel ? Math.max(1, dtBanners.length) : count)) dtBanners.push({ image:'', linkType:'category', linkValue:'' });
+      if(!isCarousel) dtBanners = dtBanners.slice(0, count);
+      renderDtBanners(type);
+    }
+  };
+
+  window.renderDtBanners = function(type){
+    const container = document.getElementById('dtBannerSlots');
+    if(!container) return;
+    const isCarousel = type==='hero_carousel';
+    container.innerHTML = dtBanners.map((b,i) => {
+      const imgSrc = b._previewUrl || (b.image ? (b.image.startsWith('http') ? b.image : CONFIG.UPLOADS_BASE + b.image) : '');
+      return `
+        <div style="border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:8px;background:#fafafa;display:flex;gap:10px;align-items:flex-start">
+          <div style="min-width:110px;text-align:center">
+            <div style="width:110px;height:64px;border-radius:6px;overflow:hidden;background:#eee;display:flex;align-items:center;justify-content:center;cursor:pointer;border:2px dashed #ccc" onclick="document.getElementById('dtBannerFile${i}').click()">
+              ${imgSrc ? `<img src="${esc(imgSrc)}" style="width:100%;height:100%;object-fit:cover">` : '<span style="font-size:22px;color:#bbb">📷</span>'}
+            </div>
+            <input type="file" id="dtBannerFile${i}" accept="image/*" style="display:none" onchange="onDtBannerFile(${i},this)">
+            <span style="font-size:9px;color:#999">Slide ${i+1} — click to upload</span>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+            <select class="form-control" style="font-size:12px" onchange="dtBanners[${i}].linkType=this.value;dtBanners[${i}].linkValue='';renderDtBanners('${type}')">
+              <option value="category" ${b.linkType==='category'?'selected':''}>Category</option>
+              <option value="url" ${b.linkType==='url'?'selected':''}>URL</option>
+              <option value="none" ${b.linkType==='none'?'selected':''}>No Link</option>
+            </select>
+            ${b.linkType==='category' ? `
+              <select class="form-control" style="font-size:12px" onchange="dtBanners[${i}].linkValue=this.value">
+                <option value="">— Select Category —</option>
+                ${categories.filter(c=>c.platform==='damndeal'||!c.platform).map(c=>`<option value="${c._id}" ${b.linkValue===c._id?'selected':''}>${esc(c.name)}</option>`).join('')}
+              </select>` : b.linkType==='url' ? `
+              <input class="form-control" style="font-size:12px" placeholder="https://..." value="${esc(b.linkValue||'')}" onchange="dtBanners[${i}].linkValue=this.value">` : ''}
+            ${isCarousel && dtBanners.length>1 ? `<button type="button" class="btn btn-sm btn-danger" style="font-size:10px;align-self:flex-start" onclick="dtBanners.splice(${i},1);renderDtBanners('${type}')">Remove</button>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+    if(isCarousel && dtBanners.length < 5){
+      container.innerHTML += `<button type="button" class="btn btn-sm" style="font-size:11px" onclick="dtBanners.push({image:'',linkType:'category',linkValue:''});renderDtBanners('${type}')">+ Add Slide (${dtBanners.length}/5)</button>`;
+    }
+  };
+
+  window.onDtBannerFile = function(i, input){
+    if(input.files[0]){
+      dtBanners[i]._file = input.files[0];
+      dtBanners[i]._previewUrl = URL.createObjectURL(input.files[0]);
+      renderDtBanners(document.getElementById('dtType').value);
+    }
+  };
+
+  // Collect the optional DESIGN fields (only non-default values are stored).
+  function dtDesign(){
+    const d = {};
+    const bg = (document.getElementById('dtBg').value||'').toLowerCase();
+    if(bg && bg !== '#ffffff') d.bgColor = bg;
+    const pad = document.getElementById('dtPad').value;
+    if(pad && pad !== 'none') d.paddingY = pad;
+    const align = document.getElementById('dtAlign').value;
+    if(align && align !== 'left') d.align = align;
+    if(document.getElementById('dtFullWidth').checked) d.fullWidth = true;
+    if(document.getElementById('dtRounded').checked) d.rounded = true;
+    return d;
+  }
+
+  // Collect content fields for Shopify-style content sections.
+  function dtContent(type){
+    const d = {};
+    const val = id => (document.getElementById(id)?.value || '').trim();
+    if(type !== 'trust_badges'){
+      const h = val('dtcHeading'); if(h) d.heading = h;
+      const t = val('dtcText');    if(t) d.text = t;
+    }
+    if(type === 'image_with_text'){
+      d.imageSide = document.getElementById('dtcImageSide').value;
+      // image is attached separately in saveDesktop (file upload)
+    }
+    if(type === 'trust_badges'){
+      d.badges = val('dtcBadges').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
+        const [icon,title,subtitle] = l.split('|').map(x=>(x||'').trim());
+        return { icon: icon||'✅', title: title||'', subtitle: subtitle||'' };
+      });
+    }
+    if(type === 'newsletter'){
+      const ph = val('dtcPlaceholder'); if(ph) d.placeholder = ph;
+    }
+    if(type === 'countdown'){
+      const et = val('dtcEndTime'); if(et) d.endTime = et;
+    }
+    if(type === 'testimonials'){
+      d.items = val('dtcTestimonials').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
+        const [name,rating,text,location] = l.split('|').map(x=>(x||'').trim());
+        return { name: name||'Customer', rating: parseInt(rating)||5, text: text||'', location: location||'' };
+      });
+    }
+    if(type === 'ugc_video'){
+      const linkTypeOf = lv => lv.startsWith('/categories/') ? 'category' : (lv.startsWith('/product/') ? 'product' : 'url');
+      const linkValOf  = lv => lv.startsWith('/categories/') ? lv.split('/categories/')[1] : (lv.startsWith('/product/') ? lv.split('/product/')[1] : lv);
+      d.videos = val('dtcVideos').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
+        const [url,link,caption] = l.split('|').map(x=>(x||'').trim());
+        const v = { url: url||'', caption: caption||'' };
+        if(link){ v.linkType = linkTypeOf(link); v.linkValue = linkValOf(link); }
+        return v;
+      }).filter(v=>v.url);
+    }
+    if(type==='rich_text' || type==='image_with_text' || type==='newsletter' || type==='countdown'){
+      const bl = val('dtcBtnLabel');
+      if(bl){
+        d.buttonLabel = bl;
+        const link = val('dtcBtnLink');
+        if(link){ d.buttonLink = link; d.buttonLinkType = 'url'; }
+        d.buttonColor = document.getElementById('dtcBtnColor').value;
+      }
+    }
+    return d;
+  }
+
+  window.saveDesktop = async function(){
+    const title = document.getElementById('dtTitle').value.trim();
+    if(!title){ showToast('Title is required','error'); return; }
+    const type = document.getElementById('dtType').value;
+    const sortOrder = parseInt(document.getElementById('dtSort').value)||0;
+    const isActive = document.getElementById('dtActive').checked;
+    const isBanner = DT_BANNER_TYPES.includes(type);
+    const isContent = DT_CONTENT_TYPES.includes(type);
+    const design = dtDesign();
+
+    try{
+      if(isBanner){
+        // Validate at least one image
+        const hasImg = dtBanners.some(b => b.image || b._file);
+        if(!hasImg){ showToast('Upload at least one banner image','error'); return; }
+
+        const fd = new FormData();
+        fd.append('title', title);
+        fd.append('type', type);
+        fd.append('platform', 'damndeal');
+        fd.append('sortOrder', sortOrder);
+        fd.append('isActive', isActive);
+        fd.append('regions', JSON.stringify(['US']));
+
+        const data = {};
+        if(type==='banner_single' || type==='promo_full'){
+          data.linkType = dtBanners[0]?.linkType || 'none';
+          data.linkValue = dtBanners[0]?.linkValue || '';
+          data.image = dtBanners[0]?.image || '';
+          if(dtBanners[0]?._file){ fd.append('images', dtBanners[0]._file); delete data.image; }
+        } else {
+          const active = dtBanners.filter(b => b.image || b._file);
+          data.banners = active.map(b => {
+            const banner = { image:b.image||'', linkType:b.linkType||'none', linkValue:b.linkValue||'' };
+            if(b._file) banner._newImage = true;
+            return banner;
+          });
+          active.forEach(b => { if(b._file) fd.append('images', b._file); });
+        }
+        Object.assign(data, design); // design controls apply to banners too
+        fd.append('data', JSON.stringify(data));
+
+        if(desktopEditId){
+          await API.upload('/admin/desktop-home-sections/'+desktopEditId+'/with-images', fd, 'PUT');
+        } else {
+          await API.upload('/admin/desktop-home-sections/with-images', fd);
+        }
+      } else if(type === 'image_with_text'){
+        // Image + Text uses a single uploaded (and compressed) image.
+        const fd = new FormData();
+        fd.append('title', title);
+        fd.append('type', type);
+        fd.append('platform', 'damndeal');
+        fd.append('sortOrder', sortOrder);
+        fd.append('isActive', isActive);
+        fd.append('regions', JSON.stringify(['US']));
+        const data = { ...dtContent(type), ...design };
+        if(dtContentImage.image) data.image = dtContentImage.image; // keep existing if no new file
+        fd.append('data', JSON.stringify(data));
+        if(dtContentImage._file) fd.append('images', dtContentImage._file);
+        if(desktopEditId) await API.upload('/admin/desktop-home-sections/'+desktopEditId+'/with-images', fd, 'PUT');
+        else await API.upload('/admin/desktop-home-sections/with-images', fd);
+      } else if(isContent){
+        const payload = {
+          title, type, sortOrder, isActive,
+          platform: 'damndeal', regions: ['US'],
+          data: { ...dtContent(type), ...design },
+        };
+        if(desktopEditId) await API.put('/admin/desktop-home-sections/'+desktopEditId, payload);
+        else await API.post('/admin/desktop-home-sections', payload);
+      } else {
+        const payload = {
+          title, type, sortOrder, isActive,
+          platform: 'damndeal', regions: ['US'],
+          data: {
+            categoryId: document.getElementById('dtCategory').value || undefined,
+            limit: parseInt(document.getElementById('dtLimit').value)||10,
+            columns: parseInt(document.getElementById('dtColumns').value)||4,
+            sortBy: document.getElementById('dtSortBy').value,
+            ...design,
+          },
+        };
+        if(desktopEditId) await API.put('/admin/desktop-home-sections/'+desktopEditId, payload);
+        else await API.post('/admin/desktop-home-sections', payload);
+      }
+      showToast(desktopEditId?'Section updated':'Section created','success');
+      document.getElementById('desktopModal').classList.remove('show');
+      load();
+    }catch(e){ showToast(e.message,'error'); }
+  };
+
   /* ── load ── */
   async function load(){
     try{
-      const [secRes, catRes] = await Promise.all([
-        API.get('/admin/home-sections'),
-        API.get('/admin/categories'),
-      ]);
+      const catRes = await API.get('/admin/categories?region=all');
+      categories = catRes.data || catRes.categories || catRes || [];
+      if(!Array.isArray(categories)) categories = [];
+
+      let secUrl;
+      if(activeSite === 'in'){
+        secUrl = '/admin/home-sections?region=IN';
+      } else if(comView === 'mobile'){
+        secUrl = '/admin/home-sections?region=US&platform=damndeal';
+      } else {
+        secUrl = '/admin/desktop-home-sections?region=US';
+      }
+      const secRes = await API.get(secUrl);
       sections = secRes.data || secRes.sections || secRes || [];
       if(!Array.isArray(sections)) sections = [];
       sections.sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
-
-      categories = catRes.data || catRes.categories || catRes || [];
-      if(!Array.isArray(categories)) categories = [];
     }catch(e){ sections=[]; categories=[]; showToast(e.message,'error'); }
     render();
   }
@@ -871,6 +1500,7 @@
       fd.append('isActive', isActive);
       fd.append('sourceMode', sourceMode);
       fd.append('placement', document.getElementById('fPlacement').value || 'home_top');
+      fd.append('regions', JSON.stringify(activeSite === 'com' ? ['US'] : ['IN']));
       if(editId) fd.append('editId', editId);
 
       const payloadBanners = bannerItems.map((b) => {
@@ -908,6 +1538,7 @@
       fd.append('platform', platform);
       fd.append('sortOrder', sortOrder);
       fd.append('isActive', isActive);
+      fd.append('regions', JSON.stringify(activeSite === 'com' ? ['US'] : ['IN']));
       if(editId) fd.append('editId', editId);
 
       const bgFile = document.getElementById('fPromoBg').files[0];
@@ -957,7 +1588,9 @@
     const data = getFormData();
     if(data === null) return;
 
-    const payload = { type, platform, sortOrder, title, data, isActive };
+    // Tag with correct region
+    const regions = activeSite === 'com' ? ['US'] : ['IN'];
+    const payload = { type, platform, sortOrder, title, data, isActive, regions };
 
     try{
       if(editId){
@@ -986,6 +1619,13 @@
     }catch(e){ showToast(e.message,'error'); }
   };
 
+  /* ── API base for current view ── */
+  function apiBase(){
+    return (activeSite === 'com' && comView === 'desktop')
+      ? '/admin/desktop-home-sections'
+      : '/admin/home-sections';
+  }
+
   /* ── reorder ── */
   window.move = async function(id, dir){
     const idx = sections.findIndex(x=>x._id===id);
@@ -995,7 +1635,7 @@
     const order = sections.map(s=>s._id);
     [order[idx], order[swapIdx]] = [order[swapIdx], order[idx]];
     try{
-      await API.put('/admin/home-sections/reorder', { order });
+      await API.put(apiBase()+'/reorder', { order });
       showToast('Reordered','success');
       load();
     }catch(e){ showToast(e.message,'error'); }
@@ -1003,7 +1643,7 @@
 
   window.toggleActive = async function(id, current){
     try{
-      await API.put('/admin/home-sections/'+id, { isActive: !current });
+      await API.put(apiBase()+'/'+id, { isActive: !current });
       showToast(current?'Disabled':'Enabled','success');
       load();
     }catch(e){ showToast(e.message,'error'); }
@@ -1012,7 +1652,7 @@
   window.removeSec = async function(id){
     if(!confirm('Delete this section?')) return;
     try{
-      await API.delete('/admin/home-sections/'+id);
+      await API.delete(apiBase()+'/'+id);
       showToast('Deleted','success');
       load();
     }catch(e){ showToast(e.message,'error'); }

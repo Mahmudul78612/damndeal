@@ -1,19 +1,38 @@
-﻿(function () {
+(function () {
   document.body.innerHTML = pageShell("CJ Dropshipping");
   buildLayout("cj-products");
   const content = document.getElementById("page-content");
 
   function esc(s) { const d = document.createElement('div'); d.textContent = String(s || ''); return d.innerHTML; }
-  function usd(n) { return n ? '$' + parseFloat(n).toFixed(2) : 'â€”'; }
-  function inr(n) { return n ? 'â‚¹' + parseFloat(n).toFixed(0) : 'â€”'; }
 
-  let activeTab = "search"; // "search" | "imported" | "settings"
+  // ── Region-aware currency ──────────────────────────────────────────────
+  // US (damndeal.com) → everything stays in USD ($). IN → INR (₹, CJ cost ×84).
+  const REGION = (typeof getRegion === 'function') ? getRegion() : (localStorage.getItem('dd_region') || 'IN');
+  const IS_US = REGION === 'US';
+  const CUR = IS_US ? '$' : '₹';
+  const USD_INR = 84; // estimate rate for IN conversion
+
+  function usd(n) { return n ? '$' + parseFloat(n).toFixed(2) : '—'; }
+  function fmt(n) { return IS_US ? '$' + parseFloat(n || 0).toFixed(2) : '₹' + Math.round(parseFloat(n || 0)); }
+  // For the imported list — use the product's own region (price was saved in that currency)
+  function money(n, regions) {
+    if (!n) return '—';
+    const isUs = Array.isArray(regions) ? (regions.includes('US') && !regions.includes('IN')) : (regions === 'US');
+    return isUs ? '$' + parseFloat(n).toFixed(2) : '₹' + parseFloat(n).toFixed(0);
+  }
+  // Estimate a selling price from CJ USD cost, region-aware
+  function estPrice(costUsd, margin) {
+    const c = parseFloat(costUsd) || 0;
+    return IS_US ? Math.round(c * margin * 100) / 100 : Math.ceil(c * USD_INR * margin);
+  }
+
+  let activeTab = "search";
   let searchResults = [], searchPage = 1, searchTotal = 0, searchKeyword = "";
   let importedPage = 1;
   let ddCategories = [];
   let ddSubCategories = [];
 
-  // â”€â”€ Load DD categories for import modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Load DD categories for import modal ────────────────────────────────
   async function loadDDCategories() {
     try {
       const r = await API.get("/admin/categories?platform=damndeal&limit=200");
@@ -28,19 +47,20 @@
     } catch (_) { ddSubCategories = []; }
   }
 
-  // â”€â”€ Tab rendering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Tab rendering ──────────────────────────────────────────────────────
   function renderTabs() {
     return `
       <div class="platform-tabs" style="margin-bottom:16px">
-        <button class="ptab ${activeTab==='search'?'active':''}" onclick="window._cjTab('search')">ðŸ” Search CJ</button>
-        <button class="ptab ${activeTab==='imported'?'active':''}" onclick="window._cjTab('imported')">ðŸ“¦ Imported</button>
-        <button class="ptab ${activeTab==='settings'?'active':''}" onclick="window._cjTab('settings')">âš™ï¸ Settings</button>
+        <button class="ptab ${activeTab==='search'?'active':''}" onclick="window._cjTab('search')">🔍 Search CJ</button>
+        <button class="ptab ${activeTab==='imported'?'active':''}" onclick="window._cjTab('imported')">📦 Imported</button>
+        <button class="ptab ${activeTab==='settings'?'active':''}" onclick="window._cjTab('settings')">⚙️ Settings</button>
+        <span class="text-muted text-sm" style="margin-left:auto;align-self:center">Region: <b>${IS_US ? '🇺🇸 USA · USD' : '🇮🇳 India · INR'}</b></span>
       </div>`;
   }
 
   window._cjTab = function(tab) { activeTab = tab; renderPage(); };
 
-  // â”€â”€ SEARCH TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── SEARCH TAB ─────────────────────────────────────────────────────────
   async function renderSearch() {
     content.innerHTML = renderTabs() + `
       <div class="toolbar">
@@ -66,7 +86,9 @@
     resultsDiv.innerHTML = '<div class="text-center" style="padding:40px"><div class="spinner"></div></div>';
 
     try {
-      const data = await API.get(`/admin/cj/products/search?keyword=${encodeURIComponent(searchKeyword)}&page=${p}&size=20`);
+      // US region → only USA-warehouse products
+      const cc = IS_US ? '&countryCode=US' : '';
+      const data = await API.get(`/admin/cj/products/search?keyword=${encodeURIComponent(searchKeyword)}&page=${p}&size=20${cc}`);
       searchResults = data.products || [];
       searchTotal = data.total || 0;
       renderSearchResults();
@@ -108,8 +130,35 @@
       </div>`;
   }
 
-  // ── Freight calculation for "Free Delivery" toggle ───────────────────
-  window.__cjFreight = { feeInr: 0 };
+  // ── Freight calculation for "Free Delivery" toggle ─────────────────────
+  window.__cjFreight = { fee: 0 }; // fee is in the active region's currency
+  window.__impCost = 0;            // CJ product cost (USD) for the open product
+
+  // Live profit calculator — Net = Selling − CJ cost − CJ shipping − payment fee.
+  // Payment fee: US Stripe 2.9%+$0.30 · IN Razorpay ~2%. Shows a loss warning in red.
+  window._updateProfit = function() {
+    const box = document.getElementById('imp-profit');
+    if (!box) return;
+    const sell = parseFloat(document.getElementById('imp-price')?.value) || 0;
+    const costUsd = window.__impCost || 0;
+    const cost = IS_US ? costUsd : costUsd * USD_INR;          // product cost in region currency
+    const shipping = window.__cjFreight.fee || 0;             // CJ freight (region currency)
+    const payFee = IS_US ? (sell * 0.029 + 0.30) : (sell * 0.02); // Stripe / Razorpay
+    const totalCost = cost + shipping + payFee;
+    const profit = sell - totalCost;
+    const margin = sell > 0 ? (profit / sell * 100) : 0;
+    const ok = profit > 0.0001;
+    box.style.background = ok ? '#ecfdf5' : '#fef2f2';
+    box.style.border = ok ? '1px solid #a7f3d0' : '1px solid #fecaca';
+    box.innerHTML = `
+      <div style="display:flex;justify-content:space-between;color:#6b7280"><span>CJ product cost</span><span>${fmt(cost)}</span></div>
+      <div style="display:flex;justify-content:space-between;color:#6b7280"><span>CJ shipping ${shipping ? '' : '(click Calculate)'}</span><span>${fmt(shipping)}</span></div>
+      <div style="display:flex;justify-content:space-between;color:#6b7280"><span>${IS_US ? 'Stripe fee (2.9%+$0.30)' : 'Razorpay fee (~2%)'}</span><span>${fmt(payFee)}</span></div>
+      <div style="display:flex;justify-content:space-between;border-top:1px dashed #d1d5db;margin-top:4px;padding-top:4px;font-weight:700;color:${ok ? '#059669' : '#dc2626'}">
+        <span>${ok ? '✅ Net profit' : '⚠️ LOSS'}</span><span>${fmt(profit)} &nbsp;(${margin.toFixed(0)}% margin)</span>
+      </div>
+      ${ok ? '' : '<div style="color:#dc2626;margin-top:3px">Raise the selling price — you will lose money at this price.</div>'}`;
+  };
 
   window._calcFreight = async function(vid) {
     const resultEl = document.getElementById('imp-freight-result');
@@ -119,45 +168,47 @@
     try {
       const qs = `weight=${weight}&quantity=1${vid ? `&vid=${encodeURIComponent(vid)}` : ''}`;
       const r = await API.get(`/admin/cj/freight?${qs}`);
-      window.__cjFreight.feeInr = r.feeInr || 0;
+      // US → freight to USA in USD; IN → freight to India in INR
+      const fee = IS_US ? (r.feeUsd || 0) : (r.feeInr || 0);
+      window.__cjFreight = { fee, feeUsd: r.feeUsd || 0 };
       const days = (r.minDays && r.maxDays) ? `${r.minDays}-${r.maxDays} days` : (r.maxDays ? `~${r.maxDays} days` : '');
-      if (!r.feeInr) {
-        resultEl.innerHTML = `<span style="color:#dc2626">CJ returned ₹0 — try increasing weight or this variant has no shipping data.</span>`;
+      if (!fee) {
+        resultEl.innerHTML = `<span style="color:#dc2626">CJ returned ${CUR}0 — try increasing weight or this variant has no shipping data.</span>`;
       } else {
-        resultEl.innerHTML = `<span style="color:#059669;font-weight:600">₹${r.feeInr.toFixed(0)} freight</span> ($${(r.feeUsd||0).toFixed(2)}${days ? ', ETA ' + days : ''})`;
+        resultEl.innerHTML = `<span style="color:#059669;font-weight:600">${fmt(fee)} freight</span>${days ? ' (ETA ' + days + ')' : ''}`;
       }
-      // Auto-apply if checkbox already on
       if (document.getElementById('imp-include-freight')?.checked) {
         window._toggleFreightInPrice(true);
       }
+      window._updateProfit(); // freight now known → real profit
     } catch (err) {
       resultEl.innerHTML = `<span style="color:#dc2626">Failed: ${esc(err.message)}</span>`;
     }
   };
 
+  // add/remove freight from prices (keeps 2 decimals for USD)
+  function bump(el, delta) {
+    if (!el) return;
+    let v = parseFloat(el.value || 0) + delta;
+    v = Math.max(0, v);
+    el.value = IS_US ? Math.round(v * 100) / 100 : Math.ceil(v);
+  }
   window._toggleFreightInPrice = function(checked) {
-    const fee = window.__cjFreight.feeInr || 0;
+    const fee = window.__cjFreight.fee || 0;
     if (!fee) return;
-    const priceEl = document.getElementById('imp-price');
-    const mrpEl = document.getElementById('imp-mrp');
-    const variantInputs = document.querySelectorAll('#imp-variants input[data-vid]');
     const delta = checked ? fee : -fee;
-    if (priceEl) priceEl.value = Math.max(0, Math.ceil(parseFloat(priceEl.value || 0) + delta));
-    if (mrpEl) mrpEl.value = Math.max(0, Math.ceil(parseFloat(mrpEl.value || 0) + delta));
-    variantInputs.forEach(inp => {
-      inp.value = Math.max(0, Math.ceil(parseFloat(inp.value || 0) + delta));
-    });
+    bump(document.getElementById('imp-price'), delta);
+    bump(document.getElementById('imp-mrp'), delta);
+    document.querySelectorAll('#imp-variants input[data-vid]').forEach(inp => bump(inp, delta));
+    window._updateProfit();
   };
 
-  // â”€â”€ Import Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Import Modal ───────────────────────────────────────────────────────
   window._openImport = async function(idx) {
     const p = searchResults[idx];
     if (!p) return;
+    window.__cjFreight = { fee: 0 };
 
-    // Reset freight cache for new product
-    window.__cjFreight = { feeInr: 0 };
-
-    // Show loading modal first
     showModal(`
       <h3 style="margin-bottom:16px">Import: ${esc(p.nameEn)}</h3>
       <div class="text-center" style="padding:20px"><div class="spinner"></div><p class="text-muted" style="margin-top:8px">Loading product details...</p></div>
@@ -173,20 +224,23 @@
     const images = details?.productImageSet || (p.bigImage ? [p.bigImage] : []);
     const description = details?.productDescription || details?.description || '';
     const defaultCostUsd = details?.sellPrice || p.sellPrice || 0;
+    window.__impCost = parseFloat(defaultCostUsd) || 0;
 
-    // Estimate INR (approx 84x + 20% margin)
-    const estimatedInr = Math.ceil(parseFloat(defaultCostUsd) * 84 * 1.3);
-    const estimatedMrp = Math.ceil(estimatedInr * 1.2);
+    // region-aware estimate (US: USD ×1.3 · IN: USD ×84 ×1.3)
+    const estimatedPrice = estPrice(defaultCostUsd, 1.3);
+    const estimatedMrp = IS_US ? Math.round(estimatedPrice * 1.2 * 100) / 100 : Math.ceil(estimatedPrice * 1.2);
 
     const catOptions = ddCategories.map(c => `<option value="${c._id}">${esc(c.name)}</option>`).join('');
 
-    const variantRows = variants.slice(0, 10).map(v => `
+    const variantRows = variants.slice(0, 10).map(v => {
+      const vp = estPrice(v.variantSellPrice, 1.3);
+      return `
       <tr>
         <td style="font-size:12px">${esc(v.variantKey || v.variantNameEn)}</td>
         <td style="font-size:12px">${usd(v.variantSellPrice)}</td>
-        <td><input type="number" class="form-control" style="width:90px;padding:4px" data-vid="${esc(v.vid)}" data-cjsku="${esc(v.variantSku)}" data-cost="${v.variantSellPrice}" placeholder="â‚¹ price" value="${Math.ceil(parseFloat(v.variantSellPrice || 0) * 84 * 1.3)}"></td>
-      </tr>
-    `).join('');
+        <td><input type="number" step="${IS_US ? '0.01' : '1'}" class="form-control" style="width:90px;padding:4px" data-vid="${esc(v.vid)}" data-cjsku="${esc(v.variantSku)}" data-cost="${v.variantSellPrice}" placeholder="${CUR} price" value="${vp}"></td>
+      </tr>`;
+    }).join('');
 
     showModal(`
       <h3 style="margin-bottom:4px">Import Product</h3>
@@ -214,16 +268,19 @@
         <textarea id="imp-desc" class="form-control" style="height:100px;resize:vertical" placeholder="Product description...">${esc(description)}</textarea>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px">
         <div>
-          <label class="form-label">Selling Price (â‚¹) *</label>
-          <input id="imp-price" class="form-control" type="number" value="${estimatedInr}">
+          <label class="form-label">Selling Price (${CUR}) * <span style="font-weight:400;color:#9ca3af">${IS_US ? 'before tax' : 'incl. GST'}</span></label>
+          <input id="imp-price" class="form-control" type="number" step="${IS_US ? '0.01' : '1'}" value="${estimatedPrice}" oninput="window._updateProfit()">
         </div>
         <div>
-          <label class="form-label">MRP (â‚¹) *</label>
-          <input id="imp-mrp" class="form-control" type="number" value="${estimatedMrp}">
+          <label class="form-label">MRP (${CUR}) * <span style="font-weight:400;color:#9ca3af">strike-through</span></label>
+          <input id="imp-mrp" class="form-control" type="number" step="${IS_US ? '0.01' : '1'}" value="${estimatedMrp}">
         </div>
       </div>
+
+      <!-- LIVE profit calculator — keeps you in profit -->
+      <div id="imp-profit" style="margin-bottom:12px;padding:10px 12px;border-radius:8px;font-size:12px"></div>
 
       <!-- Free Delivery: auto-add CJ freight into price -->
       <div style="margin-bottom:12px;padding:10px;border:1px dashed #c7d2fe;border-radius:8px;background:#f5f3ff">
@@ -258,24 +315,25 @@
       </div>
 
       <div style="margin-bottom:12px">
-        <label class="form-label">GST % (inclusive in selling price)</label>
+        <label class="form-label">${IS_US ? 'Sales Tax %' : 'GST %'} (inclusive in selling price)</label>
         <select id="imp-gst" class="form-control">
-          <option value="0">0% (No GST)</option>
+          <option value="0">0% (None)</option>
           <option value="3">3%</option>
           <option value="5">5%</option>
+          <option value="8" ${IS_US ? 'selected' : ''}>8%</option>
           <option value="12">12%</option>
-          <option value="18" selected>18% (Default)</option>
+          <option value="18" ${IS_US ? '' : 'selected'}>18%</option>
           <option value="28">28%</option>
         </select>
-        <small style="color:#6b7280;font-size:11px">GST is included in the selling price above. For accounting only.</small>
+        <small style="color:#6b7280;font-size:11px">Included in the selling price above. For accounting only.</small>
       </div>
 
       ${variants.length > 1 ? `
         <div style="margin-bottom:12px">
-          <label class="form-label" style="margin-bottom:6px">Variant Pricing (set INR price for each)</label>
+          <label class="form-label" style="margin-bottom:6px">Variant Pricing (set ${CUR} price for each)</label>
           <div style="max-height:200px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px">
             <table style="width:100%;font-size:13px">
-              <thead><tr style="background:#f9fafb"><th style="padding:6px 8px;text-align:left">Variant</th><th style="padding:6px 8px">CJ Cost</th><th style="padding:6px 8px">Your Price (â‚¹)</th></tr></thead>
+              <thead><tr style="background:#f9fafb"><th style="padding:6px 8px;text-align:left">Variant</th><th style="padding:6px 8px">CJ Cost</th><th style="padding:6px 8px">Your Price (${CUR})</th></tr></thead>
               <tbody id="imp-variants">${variantRows}</tbody>
             </table>
           </div>
@@ -304,6 +362,7 @@
     };
     catEl?.addEventListener('change', renderSubCats);
     renderSubCats();
+    window._updateProfit();
   };
 
   window._confirmImport = async function(pid, sku, costUsd, images) {
@@ -313,44 +372,41 @@
     const mrp = parseFloat(document.getElementById('imp-mrp')?.value);
     const categoryId = document.getElementById('imp-cat')?.value;
     const subCategoryId = document.getElementById('imp-subcat')?.value;
-    const gstPercent = parseInt(document.getElementById('imp-gst')?.value || '18', 10);
+    const gstPercent = parseInt(document.getElementById('imp-gst')?.value || '0', 10);
 
     if (!name || !price || !mrp || !categoryId) {
       return showToast("Fill all required fields", "error");
     }
 
-    // Collect variant pricing
     const variantInputs = document.querySelectorAll('#imp-variants input[data-vid]');
-    const cjVariants = Array.from(variantInputs).map(inp => ({
-      label: inp.closest('tr').querySelector('td:first-child').textContent.trim(),
-      cjVid: inp.dataset.vid,
-      cjSku: inp.dataset.cjsku,
-      cjCostUsd: parseFloat(inp.dataset.cost),
-      sellingPrice: parseFloat(inp.value) || price,
-      mrp: Math.ceil(parseFloat(inp.value) * 1.2) || mrp,
-      stock: 999,
-    }));
+    const cjVariants = Array.from(variantInputs).map(inp => {
+      const vp = parseFloat(inp.value) || price;
+      return {
+        label: inp.closest('tr').querySelector('td:first-child').textContent.trim(),
+        cjVid: inp.dataset.vid,
+        cjSku: inp.dataset.cjsku,
+        cjCostUsd: parseFloat(inp.dataset.cost),
+        sellingPrice: vp,
+        mrp: IS_US ? Math.round(vp * 1.2 * 100) / 100 : Math.ceil(vp * 1.2),
+        stock: 999,
+      };
+    });
 
     try {
       const btn = document.querySelector('.modal-body .btn-primary');
       if (btn) { btn.disabled = true; btn.textContent = 'Importing...'; }
 
-      // Images may arrive as array (inline JS arg) or as serialized string.
       let imgArr = [];
-      if (Array.isArray(images)) {
-        imgArr = images;
-      } else if (typeof images === 'string' && images.trim()) {
-        try {
-          imgArr = JSON.parse(images.replace(/&quot;/g, '"'));
-        } catch (_) {
-          imgArr = [];
-        }
+      if (Array.isArray(images)) imgArr = images;
+      else if (typeof images === 'string' && images.trim()) {
+        try { imgArr = JSON.parse(images.replace(/&quot;/g, '"')); } catch (_) { imgArr = []; }
       }
 
       await API.post('/admin/cj/products/import', {
         cjProductId: pid,
         cjVariantSku: sku,
         cjCostUsd: costUsd,
+        cjShippingUsd: (window.__cjFreight && window.__cjFreight.feeUsd) || 0,
         name,
         description,
         sellingPrice: price,
@@ -364,7 +420,7 @@
       });
 
       closeModal('_generic-modal');
-      showToast('Product imported successfully! ðŸŽ‰', 'success');
+      showToast('Product imported successfully! 🎉', 'success');
     } catch (err) {
       showToast(err.message || 'Import failed', 'error');
       const btn = document.querySelector('.modal-body .btn-primary');
@@ -372,7 +428,7 @@
     }
   };
 
-  // â”€â”€ IMPORTED TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── IMPORTED TAB ───────────────────────────────────────────────────────
   async function renderImported(p = 1) {
     importedPage = p;
     content.innerHTML = renderTabs() + '<div class="text-center" style="padding:40px"><div class="spinner"></div></div>';
@@ -393,7 +449,7 @@
           <div class="table-wrapper">
           <table class="data-table">
             <thead><tr>
-              <th>Image</th><th>Name</th><th>CJ Cost</th><th>Selling Price</th><th>MRP</th><th>Category</th><th>Status</th><th>Actions</th>
+              <th>Image</th><th>Name</th><th>CJ Cost</th><th>Selling Price</th><th>MRP</th><th>Region</th><th>Category</th><th>Status</th><th>Actions</th>
             </tr></thead>
             <tbody>
               ${products.map(p => `
@@ -404,12 +460,13 @@
                     <div style="font-size:11px;color:#9ca3af">CJ: ${esc(p.cjVariantSku || p.cjProductId)}</div>
                   </td>
                   <td>${usd(p.cjCostPrice)}</td>
-                  <td><strong>${inr(p.sellingPrice)}</strong></td>
-                  <td>${inr(p.mrp)}</td>
-                  <td style="font-size:12px">${esc(p.category?.name || 'â€”')}</td>
+                  <td><strong>${money(p.sellingPrice, p.regions)}</strong></td>
+                  <td>${money(p.mrp, p.regions)}</td>
+                  <td style="font-size:11px">${(p.regions || ['IN']).join(', ')}</td>
+                  <td style="font-size:12px">${esc(p.category?.name || '—')}</td>
                   <td><span class="badge ${p.isActive ? 'badge-success' : 'badge-danger'}">${p.isActive ? 'Active' : 'Inactive'}</span></td>
                   <td>
-                    <button class="btn btn-sm btn-outline" onclick="window._editImported('${p._id}', ${p.sellingPrice}, ${p.mrp}, ${p.isActive})">Edit</button>
+                    <button class="btn btn-sm btn-outline" onclick="window._editImported('${p._id}', ${p.sellingPrice}, ${p.mrp}, ${p.isActive}, '${(p.regions || []).includes('US') ? 'US' : 'IN'}')">Edit</button>
                     <button class="btn btn-sm btn-outline" style="color:#ef4444;border-color:#ef4444" onclick="window._deleteImported('${p._id}', '${esc(p.name)}')">Delete</button>
                   </td>
                 </tr>
@@ -426,16 +483,18 @@
     }
   }
 
-  window._editImported = function(id, price, mrp, isActive) {
+  window._editImported = function(id, price, mrp, isActive, region) {
+    const cur = region === 'US' ? '$' : '₹';
+    const step = region === 'US' ? '0.01' : '1';
     showModal(`
       <h3 style="margin-bottom:16px">Edit Pricing</h3>
       <div style="margin-bottom:12px">
-        <label class="form-label">Selling Price (â‚¹)</label>
-        <input id="edit-price" class="form-control" type="number" value="${price}">
+        <label class="form-label">Selling Price (${cur})</label>
+        <input id="edit-price" class="form-control" type="number" step="${step}" value="${price}">
       </div>
       <div style="margin-bottom:12px">
-        <label class="form-label">MRP (â‚¹)</label>
-        <input id="edit-mrp" class="form-control" type="number" value="${mrp}">
+        <label class="form-label">MRP (${cur})</label>
+        <input id="edit-mrp" class="form-control" type="number" step="${step}" value="${mrp}">
       </div>
       <div style="margin-bottom:16px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -485,7 +544,7 @@
     }
   };
 
-  // â”€â”€ SETTINGS TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── SETTINGS TAB ───────────────────────────────────────────────────────
   async function renderSettings() {
     content.innerHTML = renderTabs() + '<div class="text-center" style="padding:40px"><div class="spinner"></div></div>';
     try {
@@ -495,13 +554,13 @@
         <div class="card" style="max-width:500px">
           <h3 style="margin-bottom:4px">CJ Dropshipping API Settings</h3>
           <p style="color:#6b7280;font-size:13px;margin-bottom:20px">
-            Get your API key from <a href="https://www.cjdropshipping.com/myCJ.html#/apikey" target="_blank" style="color:#6366f1">CJ Dashboard â†’ API Key</a>
+            Get your API key from <a href="https://www.cjdropshipping.com/myCJ.html#/apikey" target="_blank" style="color:#6366f1">CJ Dashboard → API Key</a>
           </p>
           <div style="margin-bottom:16px">
             <label class="form-label">CJ API Key</label>
-            <input id="cj-apikey" class="form-control" type="password" placeholder="Enter CJ API Key..." value="${s.cj_api_key && s.cj_api_key !== '****null' ? s.cj_api_key : ''}">
+            <input id="cj-apikey" class="form-control" type="password" placeholder="Enter CJ API Key..." value="">
             <div style="font-size:12px;color:#6b7280;margin-top:4px">
-              Status: ${s.configured ? '<span style="color:#059669;font-weight:600">âœ… Configured</span>' : '<span style="color:#ef4444">âŒ Not configured</span>'}
+              Status: ${s.configured ? '<span style="color:#059669;font-weight:600">✅ Configured</span>' : '<span style="color:#ef4444">❌ Not configured</span>'}
             </div>
           </div>
           <button class="btn btn-primary" onclick="window._saveCJSettings()">Save API Key</button>
@@ -512,10 +571,10 @@
           <ol style="color:#374151;font-size:14px;line-height:1.8;padding-left:20px">
             <li>Get API Key from CJ Dropshipping dashboard</li>
             <li>Save it above</li>
-            <li>Go to <strong>Search CJ</strong> tab â†’ search products</li>
-            <li>Set your selling price â†’ Import</li>
+            <li>Go to <strong>Search CJ</strong> tab → search products</li>
+            <li>Set your selling price → Import</li>
             <li>Product appears on website automatically</li>
-            <li>Customer orders â†’ CJ ships directly to customer</li>
+            <li>Customer orders → CJ ships directly to customer</li>
           </ol>
         </div>`;
     } catch (err) {
@@ -535,14 +594,13 @@
     }
   };
 
-  // â”€â”€ Main render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Main render ────────────────────────────────────────────────────────
   function renderPage() {
     if (activeTab === 'search') renderSearch();
     else if (activeTab === 'imported') renderImported(1);
     else if (activeTab === 'settings') renderSettings();
   }
 
-  // â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   (async function init() {
     await loadDDCategories();
     await loadDDSubCategories();
@@ -550,4 +608,3 @@
   })();
 
 })();
-

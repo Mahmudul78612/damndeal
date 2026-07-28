@@ -1,0 +1,224 @@
+================================================================================
+  DAMNDEAL — USA EXPANSION WORKFLOW
+  Goal: damndeal.com (USD, US compliance) + CJ Dropshipping
+        Single backend, single admin, single DB, two storefronts.
+================================================================================
+
+LEGEND:
+  [ ] = pending     [~] = in progress     [x] = done
+  ⚠  = needs user decision / external account
+  🔑 = secret/key required
+
+================================================================================
+PHASE 0 — PREP (one-time, mostly manual)
+================================================================================
+[ ] 0.1  ⚠ Decide region codes:        IN  (India)   |  US (USA)
+[x] 0.2  ⚠ Buy / point damndeal.com → VPS 168.144.20.237 (A record)
+[ ] 0.3  ⚠ Open Stripe US account (need EIN + US bank/Wise Business/Payoneer)
+[ ] 0.4  ⚠ Open CJ Dropshipping account → get API key + email
+[ ] 0.5  ⚠ Open Twilio account → enable Verify service (US OTP)
+[ ] 0.6  ⚠ Open TaxJar (or use Stripe Tax) → US sales-tax automation
+[ ] 0.7  ⚠ Generate US legal pages (Termly/Iubenda):
+            - Privacy Policy (CCPA/CPRA section)
+            - Terms of Service
+            - Refund / Return Policy
+            - Shipping Policy
+            - "Do Not Sell My Personal Info" page
+[ ] 0.8  Backup: SETTINGS_ENCRYPTION_KEY → password manager (CRITICAL)
+[ ] 0.9  Backup: full mongodump before Phase 1 schema migration
+
+================================================================================
+PHASE 1 — BACKEND FOUNDATION  (zero UI change, zero breakage)
+================================================================================
+Goal: every record knows its region. Default = 'IN' so existing data is safe.
+
+[x] 1.1  models/Product.js          → add `region: ['IN','US'], default 'IN'`
+                                       add `prices.IN` + `prices.US` (optional)
+                                       add `source: ['manual','cj']`
+                                       add `cj: { pid, vid, supplierPrice,
+                                                  shippingMethod, lastSyncedAt }`
+[x] 1.2  models/Order.js            → add `region` (denormalised from products)
+                                       add `currency: ['INR','USD']`
+                                       add `taxAmount`, `taxBreakdown`
+[x] 1.3  models/Address.js          → add `country: ['IN','US'], default 'IN'`
+                                       add `state` (free text — US has 50)
+                                       make `pincode` optional (US uses zip)
+                                       add `zip` field
+[x] 1.4  models/AppSetting.js       → no schema change (key/value already)
+                                       Convention: prefix US keys with `us_`
+                                       Sensitive US keys → add to SECRET_KEYS
+[x] 1.5  middleware/region.js       → NEW. detect region from:
+                                         1. req.headers['x-region']      (apps)
+                                         2. req.hostname                  (.com=US)
+                                         3. user.preferredRegion          (logged in)
+                                         4. fallback 'IN'
+                                       attach to req.region
+[x] 1.6  server.js                   → app.use(regionMiddleware) before routes
+[x] 1.7  scripts/migrate-add-region.js
+                                       → backfill region:'IN' on every existing
+                                          product/order/address (safe upsert)
+[x] 1.8  Test: existing INR flow still works end-to-end (no regression)
+[x] 1.9  Deploy: scp models + middleware → cp → pm2 restart --update-env
+[x] 1.10 Run migration on prod once.
+
+================================================================================
+PHASE 2 — ADMIN REGION AWARENESS
+================================================================================
+Goal: admin can switch between IN / US views; products carry dual pricing.
+
+[x] 2.1  admin/assets/js/layout.js   → top-bar region switcher 🇮🇳 / 🇺🇸
+                                       persist to localStorage as `dd_region`
+                                       inject `X-Region` header in api calls
+[x] 2.2  admin/assets/js/api.js      → wrap fetch to auto-add X-Region header
+[x] 2.3  admin/pages/products/        → list filters by current region
+                                       form: Region multi-select (IN / US / Both)
+                                       form: dual price inputs (INR + USD)
+                                              shown when region selected
+                                       form: Source dropdown (Manual / CJ)
+[ ] 2.4  admin/pages/orders/          → filter by region; show currency badge
+[ ] 2.5  admin/pages/settings/        → tabs: India | USA
+                                       move region-scoped keys under tabs
+[x] 2.6  Backend product endpoints    → respect req.region in list/search
+                                       admin override: ?region=US|IN|all
+[x] 2.7  Deploy admin (full folder scp)
+[x] 2.8  Smoke-test toggle, dual-price save, region filter
+
+================================================================================
+PHASE 3 — USA PAYMENTS  (Stripe)
+================================================================================
+[ ] 3.1  npm i stripe  (backend)
+[ ] 3.2  🔑 Add to .env:  STRIPE_SECRET_KEY=  STRIPE_WEBHOOK_SECRET=
+[ ] 3.3  AppSettings (encrypted): us_stripe_publishable_key
+[ ] 3.4  services/stripe.service.js  → createPaymentIntent / verifyWebhook
+[ ] 3.5  modules/user/controllers/payments.controller.js
+                                       → if region=US → Stripe path
+                                       → if region=IN → existing Razorpay path
+[ ] 3.6  POST /user/payments/stripe/create-intent
+        POST /webhooks/stripe                 (no auth, signature verify)
+[ ] 3.7  Order amount in cents, currency 'usd'
+[ ] 3.8  Test card 4242 4242 4242 4242 e2e
+
+================================================================================
+PHASE 4 — USA AUTH (Twilio OTP)
+================================================================================
+[ ] 4.1  npm i twilio
+[ ] 4.2  🔑 .env: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_VERIFY_SID
+[ ] 4.3  services/notification.service.js → branch on region:
+                                              IN → Fast2SMS
+                                              US → Twilio Verify
+[ ] 4.4  Phone format: store E.164 (+14155552671)
+[ ] 4.5  models/User.js → already has phone; ensure no India-specific validation
+[ ] 4.6  ADMIN_PHONES env: support international numbers
+
+================================================================================
+PHASE 5 — USA TAX & COMPLIANCE
+================================================================================
+[ ] 5.1  services/tax.service.js     → US: TaxJar API (or Stripe Tax)
+                                       IN: existing GST logic (passthrough)
+[ ] 5.2  Order placement → calculate tax before payment intent
+[ ] 5.3  Address form: state dropdown (US 50 states), zip validation
+[ ] 5.4  CCPA: web banner "Manage privacy choices"
+[ ] 5.5  Footer links: Privacy / Terms / Refund / Shipping / Do Not Sell
+[ ] 5.6  Cookie consent banner (web)
+[ ] 5.7  ADA: alt text audit, keyboard nav, color contrast pass
+
+================================================================================
+PHASE 6 — CJ DROPSHIPPING
+================================================================================
+[ ] 6.1  🔑 AppSettings (encrypted): cj_email, cj_api_key
+[ ] 6.2  services/cj.service.js
+            • getAccessToken()              (cache 7d in Redis)
+            • searchProducts(query, page)
+            • getProductDetail(pid)
+            • createOrder({addr, items})
+            • getTracking(cjOrderId)
+[ ] 6.3  admin/pages/cj-import/      → search box, results grid,
+                                       "Import" button per product
+[ ] 6.4  Import action:
+            • download CJ images → save to /uploads
+            • create Product (source='cj', region='US', cj.{pid,vid,...})
+            • markup formula configurable in settings
+              (default: supplierPrice × 1.6 + flatShipping)
+[ ] 6.5  Cron: daily cj-sync (stock + price refresh)
+[ ] 6.6  Order hook: on US order paid + has cj product →
+            → cj.service.createOrder
+            → save cjOrderId on Order
+[ ] 6.7  Cron: 6h tracking sync → push notification to user
+[ ] 6.8  Admin orders page: show CJ order ID + tracking link
+
+================================================================================
+PHASE 7 — WEB STOREFRONT (.com)
+================================================================================
+[ ] 7.1  web/.env.us.example          → NEXT_PUBLIC_REGION=US
+                                          NEXT_PUBLIC_API_URL=https://damndeal.com/api
+                                          NEXT_PUBLIC_STRIPE_PK=...
+[ ] 7.2  web/lib/region.ts            → currency formatter, locale, legal map
+[ ] 7.3  All API calls send X-Region: US header
+[ ] 7.4  Cart/checkout: branch on region → Stripe Elements vs Razorpay
+[ ] 7.5  Address form: country-aware (US: state+zip, IN: state+pincode)
+[ ] 7.6  Legal pages route group `app/(legal)/` — region-aware content
+[ ] 7.7  Build: pnpm build for US env → pm2 start as `damndeal-web-us` :3001
+
+================================================================================
+PHASE 8 — INFRA / DEPLOY (.com)
+================================================================================
+[x] 8.1  DNS: damndeal.com → 168.144.20.237 (A record)
+[x] 8.2  nginx server block for damndeal.com:
+            • / → proxy 127.0.0.1:3000  (shared web, X-Region:US injected)
+            • /api/ → proxy 127.0.0.1:5000  (same backend, X-Region:US injected)
+            • /admin → 301 redirect to damndeal.in/admin (single panel)
+            • /partner → 301 redirect to damndeal.in/partner
+[x] 8.3  certbot --nginx -d damndeal.com -d www.damndeal.com
+[~] 8.4  pm2 start npm --name damndeal-web-us -- start  (cwd web/, port 3001)
+         ↳ deferred: sharing single web process for now; only needed when US-specific build (Stripe pk, currency) ready in Phase 7
+[x] 8.5  pm2 save
+[x] 8.6  Backend CORS: allow damndeal.com + www.damndeal.com origins
+[x] 8.7  Smoke test: curl https://damndeal.com → 200, /api/user/home → 200, /admin → 301
+
+================================================================================
+PHASE 9 — APPS (Flutter) — OPTIONAL, last
+================================================================================
+[ ] 9.1  AppConfig: region picker on first launch (or auto from SIM country)
+[ ] 9.2  All API calls add X-Region header
+[ ] 9.3  Currency formatter helper
+[ ] 9.4  Stripe SDK for US payments (flutter_stripe)
+[ ] 9.5  Address form country-aware
+
+================================================================================
+PHASE 10 — LAUNCH CHECKLIST
+================================================================================
+[ ] 10.1 End-to-end test: register → browse → cart → checkout → Stripe pay
+                          → CJ order auto-created → tracking visible
+[ ] 10.2 Tax calculation correct for 3 sample states (CA, TX, NY)
+[ ] 10.3 Refund flow tested
+[ ] 10.4 CCPA "Do Not Sell" link works
+[ ] 10.5 Page load < 3s on 4G (Lighthouse)
+[ ] 10.6 Sentry / error logging captures US-region errors
+[ ] 10.7 First marketing campaign: small budget, monitor conversions
+
+================================================================================
+ROLLBACK PLAN (per phase)
+================================================================================
+Phase 1: region defaults to IN → no behaviour change. Safe to leave deployed
+         even if later phases delayed.
+Phase 2: admin region switcher can be hidden via feature flag.
+Phase 3: Stripe disabled if STRIPE_SECRET_KEY unset → falls back to error
+         (no US orders accepted).
+Phase 6: CJ disabled if cj_api_key unset → admin import page shows banner.
+Phase 8: nginx server block removable; .in keeps working independently.
+
+================================================================================
+NOTES
+================================================================================
+• DB enums "damndeal" / "ddgo" stay AS-IS. Region is orthogonal:
+    platform=damndeal + region=IN → online store India  (current)
+    platform=damndeal + region=US → online store USA    (new)
+    platform=ddgo     + region=IN → quick commerce IN   (current)
+    platform=ddgo     + region=US → not planned (skip)
+• All sensitive US keys MUST be added to SECRET_KEYS in utils/secrets.js
+• Deploy commands stay the same (scp → cp → pm2 restart --update-env)
+• When in doubt, add region as optional, default IN — never break .in flow.
+
+================================================================================
+START HERE → Phase 1.1 (add region field to Product model)
+================================================================================

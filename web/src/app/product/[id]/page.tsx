@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import { api, imgUrl } from '@/lib/api';
+import { api, imgUrl, CURRENCY_SYMBOL, IS_US } from "@/lib/api";
 import { Product, CjVariant } from '@/lib/types';
 import { useCart } from '@/context/CartContext';
 import ProductReviews from '@/components/ProductReviews';
@@ -395,7 +395,7 @@ function ProductDetailInner({ id }: { id: string }) {
 
   const handleShare = async () => {
     const url = window.location.href;
-    const text = `Check out ${product.name} on DamnDeal — ₹${product.sellingPrice}`;
+    const text = `Check out ${product.name} on DamnDeal — ${CURRENCY_SYMBOL}${product.sellingPrice}`;
     try {
       if (navigator.share) {
         await navigator.share({ title: product.name, text, url });
@@ -610,10 +610,10 @@ function ProductDetailInner({ id }: { id: string }) {
           )}
 
           <div className="flex items-baseline gap-2 mt-1.5">
-            <span className="text-2xl md:text-3xl font-extrabold text-gray-900">₹{currentPrice}</span>
+            <span className="text-2xl md:text-3xl font-extrabold text-gray-900">{CURRENCY_SYMBOL}{currentPrice}</span>
             {discount > 0 && (
               <>
-                <span className="text-sm text-gray-400 line-through">₹{currentMrp}</span>
+                <span className="text-sm text-gray-400 line-through">{CURRENCY_SYMBOL}{currentMrp}</span>
                 <span className="text-xs font-bold text-green-600">{discount}% off</span>
               </>
             )}
@@ -697,19 +697,25 @@ function ProductDetailInner({ id }: { id: string }) {
                 <RotateCcw size={11} className="text-green-600" /> {product.returnPolicy || '7'} Day Return
               </span>
             )}
-            {product.isCOD !== false && (
+            {product.isCOD !== false && !IS_US && (
               <span className="inline-flex items-center gap-1 text-[10px] text-gray-500 bg-gray-50 px-2 py-1 rounded-md font-medium">
                 <Truck size={11} className="text-blue-600" /> COD
               </span>
             )}
-            {product.countryOfOrigin && !isCjProduct && (
+            {product.countryOfOrigin && !isCjProduct && !IS_US && (
               <span className="inline-flex items-center gap-1 text-[10px] text-gray-500 bg-gray-50 px-2 py-1 rounded-md font-medium">
                 🇮🇳 {product.countryOfOrigin}
               </span>
             )}
           </div>
 
-          {/* Delivery Check */}
+          {/* Delivery Check — India pincode serviceability. Hidden on US
+              (CJ ships everywhere; no pincode/COD concept there). */}
+          {IS_US ? (
+            <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-green-700">
+              <Truck size={14} className="text-green-600" /> Free shipping · Ships in 7–15 days
+            </div>
+          ) : (
           <div className="mt-3 bg-gray-50 rounded-xl p-3">
             <div className="flex items-center gap-2">
               <MapPin size={14} className="text-gray-400 shrink-0" />
@@ -746,7 +752,7 @@ function ProductDetailInner({ id }: { id: string }) {
                       <p className="text-[10px] text-gray-400 ml-5">{pincodeResult.city}{pincodeResult.state ? `, ${pincodeResult.state}` : ''}</p>
                     )}
                     {pincodeResult.deliveryFee && pincodeResult.deliveryFee > 0 && !isCjProduct && (
-                      <p className="text-[10px] text-gray-500 ml-5">Estimated delivery fee: ₹{Math.round(pincodeResult.deliveryFee)}</p>
+                      <p className="text-[10px] text-gray-500 ml-5">Estimated delivery fee: {CURRENCY_SYMBOL}{Math.round(pincodeResult.deliveryFee)}</p>
                     )}
                     {pincodeResult.cod && (
                       <p className="text-[10px] text-gray-500 ml-5">✓ Cash on Delivery available</p>
@@ -758,6 +764,7 @@ function ProductDetailInner({ id }: { id: string }) {
               </div>
             )}
           </div>
+          )}
 
           {/* Description preview */}
           {product.description && (
@@ -820,7 +827,7 @@ function ProductDetailInner({ id }: { id: string }) {
                   </div>
                   <div className="p-2.5">
                     <p className="text-xs text-gray-800 line-clamp-2 min-h-[2rem]">{rp.name}</p>
-                    <p className="text-sm font-bold text-gray-900 mt-1">₹{rp.sellingPrice}</p>
+                    <p className="text-sm font-bold text-gray-900 mt-1">{CURRENCY_SYMBOL}{rp.sellingPrice}</p>
                   </div>
                 </Link>
               ))}
@@ -839,7 +846,7 @@ function ProductDetailInner({ id }: { id: string }) {
                   </div>
                   <div className="p-2.5">
                     <p className="text-xs text-gray-800 line-clamp-2 min-h-[2rem]">{yp.name}</p>
-                    <p className="text-sm font-bold text-gray-900 mt-1">₹{yp.sellingPrice}</p>
+                    <p className="text-sm font-bold text-gray-900 mt-1">{CURRENCY_SYMBOL}{yp.sellingPrice}</p>
                   </div>
                 </Link>
               ))}
@@ -858,7 +865,7 @@ function ProductDetailInner({ id }: { id: string }) {
                   </div>
                   <div className="p-2.5">
                     <p className="text-xs text-gray-800 line-clamp-2 min-h-[2rem]">{rp.name}</p>
-                    <p className="text-sm font-bold text-gray-900 mt-1">₹{rp.sellingPrice}</p>
+                    <p className="text-sm font-bold text-gray-900 mt-1">{CURRENCY_SYMBOL}{rp.sellingPrice}</p>
                   </div>
                 </Link>
               ))}
@@ -877,7 +884,7 @@ function ProductDetailInner({ id }: { id: string }) {
                   </div>
                   <div className="p-2.5">
                     <p className="text-xs text-gray-800 line-clamp-2 min-h-[2rem]">{ap.name}</p>
-                    <p className="text-sm font-bold text-gray-900 mt-1">₹{ap.sellingPrice}</p>
+                    <p className="text-sm font-bold text-gray-900 mt-1">{CURRENCY_SYMBOL}{ap.sellingPrice}</p>
                   </div>
                 </Link>
               ))}
@@ -897,12 +904,12 @@ function ProductDetailInner({ id }: { id: string }) {
                 <button onClick={() => updateQty(cartId, qty + 1)} className="p-2 text-white"><Plus size={16} /></button>
               </div>
               <Link href="/cart" className="flex-1 py-2.5 bg-gray-900 text-white rounded-xl font-bold text-center text-sm">
-                Go to Cart — ₹{(currentPrice * qty).toFixed(0)}
+                Go to Cart — {CURRENCY_SYMBOL}{(currentPrice * qty).toFixed(0)}
               </Link>
             </div>
           ) : (
             <button onClick={handleAdd} className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
-              <ShoppingCart size={18} /> Add to Cart — ₹{currentPrice}
+              <ShoppingCart size={18} /> Add to Cart — {CURRENCY_SYMBOL}{currentPrice}
             </button>
           )
         ) : (

@@ -10,7 +10,7 @@
   async function loadData() {
     try {
       const [catRes, subRes] = await Promise.all([
-        API.get("/admin/categories"),
+        API.get("/admin/categories?region=all"),
         API.get("/admin/subcategories"),
       ]);
       categories = catRes.categories || [];
@@ -52,21 +52,25 @@
           </div>
           <div class="card-body table-wrap">
             <table>
-              <thead><tr><th>Image</th><th>Name</th><th>Slug</th><th>Order</th><th>Active</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Image</th><th>Name</th><th>Slug</th><th>Regions</th><th>Order</th><th>Active</th><th>Actions</th></tr></thead>
               <tbody>
-                ${filteredCats.map(c => `
+                ${filteredCats.map(c => {
+                  const regs = Array.isArray(c.regions) && c.regions.length ? c.regions : ['IN'];
+                  const badge = regs.map(r => `<span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;margin-right:4px;color:#fff;background:${r==='US'?'#0EA5E9':'#10B981'}">${r}</span>`).join('');
+                  return `
                   <tr>
                     <td>${imgThumb(c.icon)}</td>
                     <td>${c.name}</td>
                     <td class="text-muted">${c.slug || '-'}</td>
+                    <td>${badge}</td>
                     <td>${c.sortOrder ?? 0}</td>
                     <td>${c.isActive ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-gray">No</span>'}</td>
                     <td>
                       <button class="btn btn-outline btn-sm" onclick="editCat('${c._id}')">Edit</button>
                       <button class="btn btn-danger btn-sm" onclick="deleteCat('${c._id}')">Del</button>
                     </td>
-                  </tr>
-                `).join("") || `<tr><td colspan="6" class="text-center text-muted">No categories</td></tr>`}
+                  </tr>`;
+                }).join("") || `<tr><td colspan="7" class="text-center text-muted">No categories</td></tr>`}
               </tbody>
             </table>
           </div>
@@ -107,6 +111,13 @@
           <div class="modal-body">
             <div class="form-group"><label>Name</label><input class="form-control" id="cat-name"></div>
             <div class="form-group"><label>Sort Order</label><input class="form-control" type="number" id="cat-order" value="0"></div>
+            <div class="form-group">
+              <label>Regions (where this category appears)</label>
+              <div style="display:flex;gap:14px;padding:8px 0">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="cat-region-IN" value="IN" checked> 🇮🇳 IN (damndeal.in)</label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="cat-region-US" value="US"> 🇺🇸 US (damndeal.com)</label>
+              </div>
+            </div>
             <div class="form-group">
               <label>Image</label>
               <div id="cat-img-preview" style="margin-bottom:8px;"></div>
@@ -171,6 +182,9 @@
       document.getElementById("cat-order").value = "0";
       document.getElementById("cat-image").value = "";
       document.getElementById("cat-img-preview").innerHTML = "";
+      const cur = (localStorage.getItem('dd_region') || 'IN').toUpperCase();
+      document.getElementById('cat-region-IN').checked = cur === 'IN';
+      document.getElementById('cat-region-US').checked = cur === 'US';
       openModal("cat-modal");
     }, 0);
   };
@@ -184,6 +198,9 @@
       document.getElementById("cat-name").value = c.name;
       document.getElementById("cat-order").value = c.sortOrder || 0;
       document.getElementById("cat-image").value = "";
+      const regs = Array.isArray(c.regions) && c.regions.length ? c.regions : ['IN'];
+      document.getElementById('cat-region-IN').checked = regs.includes('IN');
+      document.getElementById('cat-region-US').checked = regs.includes('US');
       const preview = document.getElementById("cat-img-preview");
       if (c.icon) {
         const src = c.icon.startsWith("http") ? c.icon : CONFIG.API_BASE.replace("/api", "") + c.icon;
@@ -200,10 +217,16 @@
     const fileInput = document.getElementById("cat-image");
     if (!name) return showToast("Name required", "error");
 
+    const regions = [];
+    if (document.getElementById('cat-region-IN').checked) regions.push('IN');
+    if (document.getElementById('cat-region-US').checked) regions.push('US');
+    if (!regions.length) return showToast("Select at least one region", "error");
+
     const fd = new FormData();
     fd.append("name", name);
     fd.append("sortOrder", sortOrder);
     fd.append("platform", activePlatform);
+    fd.append("regions", JSON.stringify(regions));
     if (fileInput.files[0]) fd.append("image", fileInput.files[0]);
 
     try {

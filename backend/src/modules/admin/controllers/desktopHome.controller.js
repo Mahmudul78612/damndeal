@@ -1,4 +1,5 @@
 const DesktopHomeSection = require("../../../models/DesktopHomeSection");
+const { parseRegionsInput, adminListRegionFilter } = require("../../../utils/region");
 
 function normalizeLinkType(value) {
   const v = String(value || "none").trim().toLowerCase();
@@ -37,6 +38,8 @@ function normalizeSectionData(type, data = {}) {
 async function listSections(req, res) {
   const filter = {};
   if (req.query.platform) filter.platform = req.query.platform;
+  const regionF = adminListRegionFilter(req);
+  if (regionF) Object.assign(filter, regionF);
   const sections = await DesktopHomeSection.find(filter).sort({ sortOrder: 1 });
   return res.json({ success: true, sections });
 }
@@ -46,9 +49,10 @@ async function createSection(req, res) {
   const { title, type, data, sortOrder, platform, isActive } = req.body;
   if (!title || !type) return res.status(400).json({ success: false, message: "title and type required" });
 
+  const regions = parseRegionsInput(req.body.regions) || [(req.region || "IN")];
   const section = await DesktopHomeSection.create({
     title, type, data: data || {}, sortOrder: sortOrder || 0,
-    platform: platform || "damndeal", isActive: isActive !== false,
+    platform: platform || "damndeal", isActive: isActive !== false, regions,
   });
   return res.status(201).json({ success: true, section });
 }
@@ -65,7 +69,7 @@ async function createSectionWithImages(req, res) {
 
     // Attach uploaded images
     const files = req.files || [];
-    if (type === "banner_single" && files.length > 0) {
+    if ((type === "banner_single" || type === "image_with_text") && files.length > 0) {
       data.image = `/uploads/desktop-home/${files[0].filename}`;
     } else if (["hero_carousel", "banner_2col", "banner_3col"].includes(type)) {
       const banners = data.banners || [];
@@ -82,9 +86,11 @@ async function createSectionWithImages(req, res) {
       data.image = `/uploads/desktop-home/${files[0].filename}`;
     }
 
+    const regions = parseRegionsInput(req.body.regions) || [(req.region || "IN")];
     const section = await DesktopHomeSection.create({
       title, type, data, sortOrder: parseInt(sortOrder) || 0,
       platform: platform || "damndeal", isActive: isActive === "true" || isActive === true,
+      regions,
     });
     return res.status(201).json({ success: true, section });
   } catch (err) {
@@ -108,7 +114,7 @@ async function updateSectionWithImages(req, res) {
     data = normalizeSectionData(type, data);
 
     const files = req.files || [];
-    if (type === "banner_single" && files.length > 0) {
+    if ((type === "banner_single" || type === "image_with_text") && files.length > 0) {
       data.image = `/uploads/desktop-home/${files[0].filename}`;
     } else if (["hero_carousel", "banner_2col", "banner_3col"].includes(type)) {
       const banners = data.banners || [];
@@ -131,6 +137,8 @@ async function updateSectionWithImages(req, res) {
     if (platform) payload.platform = platform;
     if (sortOrder !== undefined) payload.sortOrder = parseInt(sortOrder) || 0;
     if (isActive !== undefined) payload.isActive = isActive === "true" || isActive === true;
+    const regions = parseRegionsInput(req.body.regions);
+    if (regions) payload.regions = regions;
 
     const section = await DesktopHomeSection.findByIdAndUpdate(req.params.id, payload, { new: true });
     if (!section) return res.status(404).json({ success: false, message: "Section not found" });

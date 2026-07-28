@@ -30,6 +30,12 @@ const homeSectionSchema = new mongoose.Schema(
       enum: ["ddgo", "damndeal"],
       default: "ddgo",
     },
+    regions: {
+      type: [String],
+      enum: ["IN", "US"],
+      default: ["IN"],
+      index: true,
+    },
     // Optional filter
     data: {
       type: mongoose.Schema.Types.Mixed,

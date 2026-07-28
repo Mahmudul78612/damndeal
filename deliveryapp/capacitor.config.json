@@ -1,0 +1,21 @@
+{
+  "appId": "com.damndeal.delivery",
+  "appName": "DamnDeal Delivery",
+  "webDir": ".",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#3E1A6E",
+      "showSpinner": true,
+      "spinnerColor": "#F59E0B"
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#3E1A6E"
+    }
+  }
+}

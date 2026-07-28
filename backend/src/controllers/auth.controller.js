@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const { sendOtp, verifyOtp } = require("../services/otp.service");
+const { verifyIdToken } = require("../services/firebase.service");
 const { generateTokens, verifyRefreshToken } = require("../services/token.service");
 const {
   phoneSchema,
@@ -145,6 +146,53 @@ async function handleGetMe(req, res) {
   });
 }
 
+// POST /auth/firebase-verify  (US region — Firebase Phone Auth)
+async function handleFirebaseVerify(req, res) {
+  const { idToken } = req.body;
+  if (!idToken) {
+    return res.status(400).json({ success: false, message: "idToken is required" });
+  }
+
+  let decoded;
+  try {
+    decoded = await verifyIdToken(idToken);
+  } catch (e) {
+    return res.status(401).json({ success: false, message: "Invalid or expired Firebase token" });
+  }
+
+  const phone = decoded.phone_number;
+  if (!phone) {
+    return res.status(400).json({ success: false, message: "No phone number in Firebase token" });
+  }
+
+  const role = req.clientRole || "user";
+  let user = await User.findOne({ phone, role });
+  let isNewUser = false;
+  if (!user) {
+    user = await User.create({ phone, role });
+    isNewUser = true;
+  }
+
+  user.lastLogin = new Date();
+  await user.save();
+
+  const tokens = generateTokens(user._id, user.role);
+
+  return res.json({
+    success: true,
+    isNewUser,
+    isProfileComplete: user.isProfileComplete,
+    user: {
+      id: user._id,
+      phone: user.phone,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    },
+    ...tokens,
+  });
+}
+
 // POST /auth/logout (placeholder for token blacklisting)
 async function handleLogout(req, res) {
   // In production, add refresh token to a blacklist in Redis
@@ -154,6 +202,7 @@ async function handleLogout(req, res) {
 module.exports = {
   handleSendOtp,
   handleVerifyOtp,
+  handleFirebaseVerify,
   handleCompleteProfile,
   handleRefreshToken,
   handleGetMe,

@@ -1,9 +1,18 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { ChevronLeft } from 'lucide-react';
+
+function getRegion(): 'IN' | 'US' {
+  if (typeof window === 'undefined') return 'IN';
+  const env = process.env.NEXT_PUBLIC_REGION;
+  if (env) return env.toUpperCase() === 'US' ? 'US' : 'IN';
+  const h = window.location.hostname;
+  if (h === 'damndeal.com' || h.endsWith('.damndeal.com')) return 'US';
+  return 'IN';
+}
 
 export default function LoginPage() {
   return (
@@ -19,30 +28,80 @@ function LoginContent() {
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { login, verifyOtp } = useAuth();
+  const [region, setRegion] = useState<'IN' | 'US'>('IN');
+  const { login, verifyOtp, firebaseVerify } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
   const redirect = params.get('redirect') || '/';
 
+  // Firebase refs — only used for US region
+  const recaptchaContainerRef = useRef<HTMLDivElement>(null);
+  const recaptchaVerifierRef = useRef<any>(null);
+  const confirmationResultRef = useRef<any>(null);
+
+  useEffect(() => {
+    setRegion(getRegion());
+  }, []);
+
+  const clearFirebase = () => {
+    if (recaptchaVerifierRef.current) {
+      try { recaptchaVerifierRef.current.clear(); } catch {}
+      recaptchaVerifierRef.current = null;
+    }
+    confirmationResultRef.current = null;
+  };
+
   const handleSendOtp = async () => {
-    if (phone.length !== 10) { setError('Enter valid 10-digit phone number'); return; }
     setLoading(true);
     setError('');
+
     try {
-      await login('+91' + phone);
+      if (region === 'US') {
+        const digits = phone.replace(/\D/g, '');
+        if (digits.length !== 10) { setError('Enter a valid 10-digit US phone number'); setLoading(false); return; }
+
+        const { getFirebase } = await import('@/lib/firebase');
+        const { RecaptchaVerifier, signInWithPhoneNumber } = await import('firebase/auth');
+        const { auth } = getFirebase();
+
+        clearFirebase();
+
+        recaptchaVerifierRef.current = new RecaptchaVerifier(auth, recaptchaContainerRef.current!, {
+          size: 'invisible',
+          callback: () => {},
+        });
+
+        confirmationResultRef.current = await signInWithPhoneNumber(auth, '+1' + digits, recaptchaVerifierRef.current);
+      } else {
+        if (phone.length !== 10) { setError('Enter a valid 10-digit phone number'); setLoading(false); return; }
+        await login('+91' + phone);
+      }
+
       setStep('otp');
     } catch (e: any) {
       setError(e.message || 'Failed to send OTP');
+      clearFirebase();
     }
+
     setLoading(false);
   };
 
   const handleVerify = async () => {
-    if (otp.length < 4) { setError('Enter valid OTP'); return; }
+    if (otp.length < 4) { setError('Enter a valid OTP'); return; }
     setLoading(true);
     setError('');
+
     try {
-      const res = await verifyOtp('+91' + phone, otp);
+      let res;
+      if (region === 'US') {
+        if (!confirmationResultRef.current) throw new Error('Session expired. Please resend OTP.');
+        const cred = await confirmationResultRef.current.confirm(otp);
+        const idToken = await cred.user.getIdToken();
+        res = await firebaseVerify(idToken);
+      } else {
+        res = await verifyOtp('+91' + phone, otp);
+      }
+
       if (!res.isProfileComplete) {
         router.push('/complete-profile');
       } else {
@@ -51,8 +110,12 @@ function LoginContent() {
     } catch (e: any) {
       setError(e.message || 'Invalid OTP');
     }
+
     setLoading(false);
   };
+
+  const countryCode = region === 'US' ? '+1' : '+91';
+  const isPhoneValid = phone.replace(/\D/g, '').length === 10;
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4">
@@ -73,7 +136,7 @@ function LoginContent() {
               <p className="text-sm text-gray-400 mb-5">Enter your phone number to continue</p>
 
               <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-3 border border-gray-200 focus-within:ring-2 focus-within:ring-primary/30 focus-within:border-primary">
-                <span className="text-sm font-medium text-gray-500">+91</span>
+                <span className="text-sm font-medium text-gray-500">{countryCode}</span>
                 <input
                   type="tel"
                   value={phone}
@@ -85,11 +148,14 @@ function LoginContent() {
                 />
               </div>
 
+              {/* invisible reCAPTCHA mount point */}
+              <div ref={recaptchaContainerRef} />
+
               {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
 
               <button
                 onClick={handleSendOtp}
-                disabled={loading || phone.length !== 10}
+                disabled={loading || !isPhoneValid}
                 className="w-full mt-4 py-3 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary-dark transition disabled:opacity-50"
               >
                 {loading ? 'Sending...' : 'Send OTP'}
@@ -97,11 +163,16 @@ function LoginContent() {
             </>
           ) : (
             <>
-              <button onClick={() => { setStep('phone'); setOtp(''); setError(''); }} className="flex items-center gap-1 text-sm text-gray-500 mb-4 hover:text-gray-700">
+              <button
+                onClick={() => { setStep('phone'); setOtp(''); setError(''); clearFirebase(); }}
+                className="flex items-center gap-1 text-sm text-gray-500 mb-4 hover:text-gray-700"
+              >
                 <ChevronLeft size={16} /> Change number
               </button>
               <h2 className="text-lg font-bold text-gray-900 mb-1">Verify OTP</h2>
-              <p className="text-sm text-gray-400 mb-5">Enter the OTP sent to +91{phone}</p>
+              <p className="text-sm text-gray-400 mb-5">
+                Enter the OTP sent to {countryCode}{phone}
+              </p>
 
               <input
                 type="text"

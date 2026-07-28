@@ -8,6 +8,8 @@ const InventoryLog = require("../../../models/InventoryLog");
 const { calculateFees, calcDistanceKm, getSetting } = require("../../../services/fee.service");
 const cjService = require("../../../services/cj.service");
 const { notifyOrderPlaced, notifyOrderCancelled } = require("../../../services/notification.service");
+const magicClub = require("../../../services/magicclub.service");
+const { refundPaidOrder } = require("../../../services/refund.service");
 const crypto = require("crypto");
 
 function generateOrderNumber() {
@@ -16,7 +18,7 @@ function generateOrderNumber() {
   return `DD-${ts}-${rand}`;
 }
 
-async function _calculateCJDeliverySummary(rawItems, productMap) {
+async function _calculateCJDeliverySummary(rawItems, productMap, region = "IN") {
   const cjLines = rawItems
     .map((item) => {
       const p = productMap[item.product?.toString()];
@@ -31,9 +33,10 @@ async function _calculateCJDeliverySummary(rawItems, productMap) {
     })
     .filter(Boolean);
 
-  if (!cjLines.length) return { feeInr: 0, minDays: null, maxDays: null };
+  if (!cjLines.length) return { feeInr: 0, feeUsd: 0, minDays: null, maxDays: null };
 
   const usdRate = parseFloat(await getSetting("cj_usd_inr_rate", 84)) || 84;
+  const isUS = region === "US";
 
   let totalUsd = 0;
   let minDays = null;
@@ -42,8 +45,8 @@ async function _calculateCJDeliverySummary(rawItems, productMap) {
   for (const line of cjLines) {
     try {
       const estimate = await cjService.estimateFreightSummary({
-        startCountryCode: "CN",
-        endCountryCode: "IN",
+        startCountryCode: isUS ? "US" : "CN",
+        endCountryCode: isUS ? "US" : "IN",
         quantity: line.quantity,
         weight: line.weight,
         vid: line.vid,
@@ -59,6 +62,8 @@ async function _calculateCJDeliverySummary(rawItems, productMap) {
   }
 
   return {
+    // US pays freight in USD as-is; India converts USD → INR.
+    feeUsd: Math.round(totalUsd * 100) / 100,
     feeInr: Math.round(totalUsd * usdRate * 100) / 100,
     minDays,
     maxDays,
@@ -106,6 +111,7 @@ async function getDeliveryEstimate(req, res) {
     platform,
     productOverrides,
     paymentMethod,
+    region: req.region === "US" ? "US" : "IN",
   });
 
   if (fees.error) {
@@ -116,11 +122,15 @@ async function getDeliveryEstimate(req, res) {
     freeDeliveryAbove = await getSetting("free_delivery_above", 0);
   }
 
+  // US sales tax rate so the checkout can show it added on top (pass-through).
+  const usSalesTaxRate = req.region === "US" ? (parseFloat(await getSetting("us_sales_tax_percent")) || 0) : 0;
+
   return res.json({
     success: true,
     estimate: {
       ...fees,
       freeDeliveryAbove,
+      usSalesTaxRate,
       shopName: kyc?.organizationName || "DamnDeal",
     },
   });
@@ -130,7 +140,7 @@ async function getDeliveryEstimate(req, res) {
 async function placeOrder(req, res) {
   try {
   const userId = req.user.userId;
-  const { partnerId, items: rawItems, addressId, paymentMethod, note, platform = "damndeal" } = req.body;
+  const { partnerId, items: rawItems, addressId, paymentMethod, note, platform = "damndeal", magicClubRedeem } = req.body;
   // SECURITY: never trust client-sent discount/price. No coupon system yet → force 0.
   // When coupons are added, validate code server-side and recompute discount here.
   const discount = 0;
@@ -215,6 +225,7 @@ async function placeOrder(req, res) {
       platform,
       productOverrides: products.map((p) => p.deliveryFee),
       paymentMethod,
+      region: req.region === "US" ? "US" : "IN",
     });
   } else {
     // Platform/admin order — use default fees
@@ -226,6 +237,7 @@ async function placeOrder(req, res) {
       platform,
       productOverrides: products.map((p) => p.deliveryFee),
       paymentMethod,
+      region: req.region === "US" ? "US" : "IN",
     });
   }
 
@@ -237,29 +249,64 @@ async function placeOrder(req, res) {
 
   // Minimum order check (uses platform-specific setting from calculateFees)
   if (minOrderAmount > 0 && subtotal - discount < minOrderAmount) {
-    return res.status(400).json({ success: false, message: `Minimum order amount is ₹${minOrderAmount}` });
+    const cur = req.region === "US" ? "$" : "₹";
+    return res.status(400).json({ success: false, message: `Minimum order amount is ${cur}${minOrderAmount}` });
   }
 
   const hasCJItems = products.some((p) => p.source === "cj");
-  let cjDelivery = { feeInr: 0, minDays: null, maxDays: null };
+  let cjDelivery = { feeInr: 0, feeUsd: 0, minDays: null, maxDays: null };
   if (hasCJItems) {
-    cjDelivery = await _calculateCJDeliverySummary(rawItems, productMap);
+    cjDelivery = await _calculateCJDeliverySummary(rawItems, productMap, req.region === "US" ? "US" : "IN");
   }
 
-  const finalDeliveryFee = Math.round((deliveryFee + (cjDelivery.feeInr || 0)) * 100) / 100;
+  // Free shipping for CJ items (both regions): the CJ freight is already baked into
+  // the product's landed cost, so the selling price covers it. This also keeps the
+  // checkout total identical to the Razorpay/Stripe amount (no hidden freight added).
+  const cjFee = 0;
+  const finalDeliveryFee = Math.round((deliveryFee + cjFee) * 100) / 100;
 
-  // Grand total = subtotal - discount + deliveryFee + platformFee + codFee
-  const grandTotal = Math.round((subtotal - discount + finalDeliveryFee + platformFee + (codFee || 0)) * 100) / 100;
+  // US sales tax — added ON TOP at checkout (pass-through: customer pays it, we
+  // remit it to the state). It is NOT part of profit and never reduces margin.
+  let salesTaxAmount = 0;
+  if (req.region === "US") {
+    const usRate = parseFloat(await getSetting("us_sales_tax_percent")) || 0;
+    salesTaxAmount = Math.round((subtotal - discount) * (usRate / 100) * 100) / 100;
+  }
+
+  // Grand total = subtotal - discount + deliveryFee + platformFee + codFee + salesTax
+  let grandTotal = Math.round((subtotal - discount + finalDeliveryFee + platformFee + (codFee || 0) + salesTaxAmount) * 100) / 100;
+  // Profit excludes tax (pass-through). Cost already includes CJ shipping (landed).
   const profit = Math.round((subtotal - discount - costTotal) * 100) / 100;
+
+  // ── Magic Club redemption (best-effort; never block order) ───────────────
+  let mcRedeemPoints = 0, mcRedeemAmount = 0;
+  if (magicClubRedeem && Number(magicClubRedeem.points) > 0) {
+    const reqPoints = Math.floor(Number(magicClubRedeem.points));
+    const reqAmount = await magicClub.pointsToRupees(reqPoints);
+    // Cap redemption at the order grandTotal (no negative orders)
+    const capPoints = Math.min(reqPoints, await magicClub.rupeesToPoints(grandTotal));
+    if (capPoints > 0) {
+      const capAmount = await magicClub.pointsToRupees(capPoints);
+      mcRedeemPoints = capPoints;
+      mcRedeemAmount = Math.round(capAmount * 100) / 100;
+      grandTotal = Math.round((grandTotal - mcRedeemAmount) * 100) / 100;
+    }
+    void reqAmount;
+  }
 
   let finalEstimatedDeliveryMinutes = estimatedDeliveryMinutes;
   if (hasCJItems && cjDelivery.maxDays != null) {
     finalEstimatedDeliveryMinutes = parseInt(cjDelivery.maxDays, 10) * 24 * 60;
   }
 
+  // Region/currency from the request (damndeal.com => US/USD, else IN/INR)
+  const orderRegion = req.region === "US" ? "US" : "IN";
   const order = await Order.create({
     orderNumber: generateOrderNumber(),
     user: userId, partner: partnerId,
+    region: orderRegion,
+    currency: orderRegion === "US" ? "USD" : "INR",
+    taxAmount: salesTaxAmount,
     items: orderItems,
     subtotal: Math.round(subtotal * 100) / 100,
     totalGst: Math.round(totalGst * 100) / 100,
@@ -281,10 +328,34 @@ async function placeOrder(req, res) {
     },
     deliveryOtp: crypto.randomInt(1000, 9999).toString(),
     paymentMethod: paymentMethod || "cod",
-    paymentStatus: (paymentMethod === "cod" || paymentMethod === "razorpay") ? "pending" : "paid",
+    // Online methods (razorpay/stripe) stay pending until payment is confirmed.
+    paymentStatus: (paymentMethod === "cod" || paymentMethod === "razorpay" || paymentMethod === "stripe") ? "pending" : "paid",
     status: "placed", source: "app",
     note: note || "",
+    magicClub: mcRedeemPoints > 0 ? {
+      redeemedPoints: mcRedeemPoints,
+      redeemedAmount: mcRedeemAmount,
+      debit: { token: magicClubRedeem.token || null, transactionId: null, confirmedAt: null, reversedAt: null },
+    } : undefined,
   });
+
+  // Confirm Magic Club debit (best-effort) — only after order is persisted.
+  if (mcRedeemPoints > 0 && magicClubRedeem.token) {
+    try {
+      const r = await magicClub.confirmDebit(magicClubRedeem.token);
+      if (r.ok && r.data) {
+        order.magicClub = order.magicClub || {};
+        order.magicClub.debit = order.magicClub.debit || {};
+        order.magicClub.debit.transactionId = r.data.transactionId || null;
+        order.magicClub.debit.confirmedAt = new Date();
+        await order.save();
+      } else {
+        console.warn("[MAGICCLUB] confirm-debit failed for order", order.orderNumber, r);
+      }
+    } catch (e) {
+      console.error("[MAGICCLUB] confirm-debit threw:", e.message);
+    }
+  }
 
   // Deduct stock
   for (const item of rawItems) {
@@ -298,17 +369,20 @@ async function placeOrder(req, res) {
   }
 
   // ── Fire CJ forward async (non-blocking) ──────────────────────────────────
-  if (hasCJItems) {
+  // Only forward (which deducts CJ balance) once we have the money: COD or an
+  // already-paid order. Online (razorpay/stripe) forwards after payment confirms.
+  if (hasCJItems && (order.paymentStatus === "paid" || paymentMethod === "cod")) {
     setImmediate(() => _forwardCJOrder(order, productMap, rawItems));
   }
 
-  // ── WhatsApp order-confirmation (fire-and-forget) ────────────────────────
-  // Skip for online (Razorpay) until payment is verified — handled in verifyPayment.
-  const skipNotifyNow = (paymentMethod === "razorpay" && order.paymentStatus !== "paid");
+  // ── Order-confirmation (fire-and-forget) ─────────────────────────────────
+  // Skip for online (Razorpay/Stripe) until payment is verified — sent from
+  // verifyPayment / verifyStripeCheckout / the Stripe webhook instead.
+  const skipNotifyNow = ((paymentMethod === "razorpay" || paymentMethod === "stripe") && order.paymentStatus !== "paid");
   if (!skipNotifyNow) {
     setImmediate(async () => {
       try {
-        const u = await User.findById(userId).select("name phone").lean();
+        const u = await User.findById(userId).select("name phone email").lean();
         if (u) notifyOrderPlaced(order, u);
       } catch (e) { console.error("notifyOrderPlaced lookup err:", e.message); }
     });
@@ -355,6 +429,35 @@ async function _forwardCJOrder(order, products, rawItems) {
     }
   } catch (err) {
     console.error(`[CJ] Auto-forward error for ${order.orderNumber}:`, err.message);
+  }
+}
+
+// Forward a CJ order after payment is confirmed (online methods). Idempotent:
+// skips if already forwarded. Called from verifyPayment / verifyStripeCheckout /
+// the Stripe webhook so we never pay CJ before the customer pays us.
+async function forwardCJForOrder(orderId) {
+  try {
+    const order = await Order.findById(orderId).populate("user", "name phone email");
+    if (!order || order.cjOrderId) return;
+    const cjItems = [];
+    for (const item of (order.items || [])) {
+      const p = await Product.findById(item.product).select("source cjVariants cjVariantId").lean();
+      if (!p || p.source !== "cj") continue;
+      let cjVid = item.cjVid || null;
+      if (!cjVid && Array.isArray(p.cjVariants) && p.cjVariants.length) cjVid = p.cjVariants[0]?.cjVid || null;
+      if (!cjVid) cjVid = p.cjVariantId || null;
+      if (cjVid) cjItems.push({ cj_variant_id: cjVid, quantity: item.quantity });
+    }
+    if (!cjItems.length) return;
+    const result = await cjService.createCJOrder(order, cjItems);
+    if (result?.result && result?.data?.orderId) {
+      await Order.updateOne({ _id: order._id }, { $set: { cjOrderId: result.data.orderId, cjOrderStatus: result.data.orderStatus || "CREATED" } });
+      console.log(`[CJ] Order forwarded (post-payment): ${order.orderNumber} → CJ ${result.data.orderId}`);
+    } else {
+      console.warn(`[CJ] Post-payment forward failed for ${order.orderNumber}:`, result?.message);
+    }
+  } catch (err) {
+    console.error(`[CJ] forwardCJForOrder error:`, err.message);
   }
 }
 
@@ -419,7 +522,23 @@ async function cancelOrder(req, res) {
 
   order.status = "cancelled";
   order.cancelReason = req.body.reason || "Cancelled by user";
+
+  // Refund a paid order back to its source (US → Stripe card, India → wallet).
+  try {
+    await refundPaidOrder(order, "Cancelled by customer");
+  } catch (e) {
+    console.error("[CANCEL] refund failed:", e.message);
+    return res.status(502).json({ success: false, message: `Could not process refund: ${e.message}. Order not cancelled.` });
+  }
+
   await order.save();
+
+  // Magic Club: reverse redemption (if any) + cancel clubs (best-effort)
+  if (order.magicClub?.debit?.transactionId && !order.magicClub.debit.reversedAt) {
+    const rev = await magicClub.reverseDebit(order.magicClub.debit.transactionId);
+    if (rev.ok) { order.magicClub.debit.reversedAt = new Date(); await order.save(); }
+  }
+  magicClub.onOrderCancelled(order).catch(() => {});
 
   // WhatsApp cancellation notification (fire-and-forget)
   setImmediate(async () => {
@@ -432,4 +551,4 @@ async function cancelOrder(req, res) {
   return res.json({ success: true, order });
 }
 
-module.exports = { placeOrder, getMyOrders, getOrderDetail, cancelOrder, getDeliveryEstimate };
+module.exports = { placeOrder, getMyOrders, getOrderDetail, cancelOrder, getDeliveryEstimate, forwardCJForOrder };

@@ -3,6 +3,8 @@ const Order = require("../../../models/Order");
 const Product = require("../../../models/Product");
 const InventoryLog = require("../../../models/InventoryLog");
 const walletService = require("../../../services/wallet.service");
+const magicClub = require("../../../services/magicclub.service");
+const stripeService = require("../../../services/stripe.service");
 
 // GET /admin/returns
 async function listReturns(req, res) {
@@ -56,16 +58,45 @@ async function reviewReturn(req, res) {
       }
     }
 
-    // Refund to wallet
-    await walletService.credit(
-      ret.user, ret.totalRefundAmount, "refund",
-      `Refund for return #${ret._id}`, ret.order.toString()
-    );
+    const ord = await Order.findById(ret.order);
+
+    // Refund — US (damndeal.com) → Stripe to original card; India → wallet credit
+    if (ord && ord.region === "US") {
+      try {
+        if (ord.stripePaymentIntentId && ord.paymentStatus === "paid") {
+          const r = await stripeService.refundPayment(ord.stripePaymentIntentId, ret.totalRefundAmount);
+          ord.refundId = r.refundId;
+        }
+      } catch (e) {
+        console.error("[RETURN] Stripe refund failed:", e.message);
+        return res.status(502).json({ success: false, message: `Stripe refund failed: ${e.message}` });
+      }
+    } else {
+      await walletService.credit(
+        ret.user, ret.totalRefundAmount, "refund",
+        `Refund for return #${ret._id}`, ret.order.toString()
+      );
+    }
 
     ret.status = "refunded";
 
-    // Update order status
-    await Order.findByIdAndUpdate(ret.order, { status: "returned" });
+    // Update order status + payment status
+    if (ord) {
+      ord.status = "returned";
+      ord.paymentStatus = "refunded";
+      await ord.save();
+
+      // Magic Club (India only): cancel clubs + reverse redemption (best-effort)
+      if (ord.region !== "US") {
+        try {
+          if (ord.magicClub?.debit?.transactionId && !ord.magicClub.debit.reversedAt) {
+            const rev = await magicClub.reverseDebit(ord.magicClub.debit.transactionId);
+            if (rev.ok) { ord.magicClub.debit.reversedAt = new Date(); await ord.save(); }
+          }
+          magicClub.onOrderCancelled(ord).catch(() => {});
+        } catch (e) { console.error("[MAGICCLUB] return-refund hook err:", e.message); }
+      }
+    }
   } else {
     ret.status = "rejected";
   }

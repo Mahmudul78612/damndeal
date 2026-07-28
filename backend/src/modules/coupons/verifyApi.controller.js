@@ -1,0 +1,65 @@
+/**
+ * Coupons — external verify API (x-api-key).
+ * For vendors who have their own website/portal: they call these endpoints
+ * from their backend to verify and redeem DamnDeal coupon codes.
+ *
+ *   POST /api/coupons/api/verify  { code }   header: x-api-key: dck_...
+ *   POST /api/coupons/api/redeem  { code }
+ */
+const { CouponVendor, CouponClaim, CouponCampaign } = require("../../models/coupon.models");
+
+async function requireApiVendor(req, res) {
+  const key = req.headers["x-api-key"];
+  if (!key) { res.status(401).json({ success: false, message: "Missing x-api-key header" }); return null; }
+  const vendor = await CouponVendor.findOne({ apiKey: key });
+  if (!vendor) { res.status(401).json({ success: false, message: "Invalid API key" }); return null; }
+  if (vendor.status !== "approved") { res.status(403).json({ success: false, message: "Vendor account is not active" }); return null; }
+  return vendor;
+}
+
+async function findClaim(vendor, code) {
+  return CouponClaim.findOne({ code: String(code || "").trim().toUpperCase(), vendor: vendor._id })
+    .populate("campaign", "title offerText offerType offerValue endAt");
+}
+
+/* POST /api/coupons/api/verify */
+async function verify(req, res) {
+  const vendor = await requireApiVendor(req, res); if (!vendor) return;
+  const claim = await findClaim(vendor, req.body.code);
+  if (!claim) return res.status(404).json({ success: false, valid: false, message: "Code not found" });
+  const expired = claim.campaign?.endAt && claim.campaign.endAt < new Date();
+  return res.json({
+    success: true,
+    valid: claim.status === "claimed" && !expired,
+    status: expired && claim.status === "claimed" ? "expired" : claim.status,
+    offer: {
+      title: claim.campaign?.title,
+      offerText: claim.campaign?.offerText,
+      offerType: claim.campaign?.offerType,
+      offerValue: claim.campaign?.offerValue,
+      expiresAt: claim.campaign?.endAt,
+    },
+    claimedAt: claim.claimedAt,
+    redeemedAt: claim.redeemedAt,
+  });
+}
+
+/* POST /api/coupons/api/redeem — single-use consume */
+async function redeem(req, res) {
+  const vendor = await requireApiVendor(req, res); if (!vendor) return;
+  const claim = await findClaim(vendor, req.body.code);
+  if (!claim) return res.status(404).json({ success: false, message: "Code not found" });
+  if (claim.status === "redeemed") return res.status(409).json({ success: false, message: "Code already redeemed", redeemedAt: claim.redeemedAt });
+  if (claim.status !== "claimed") return res.status(410).json({ success: false, message: `Code is ${claim.status}` });
+  if (claim.campaign?.endAt && claim.campaign.endAt < new Date()) return res.status(410).json({ success: false, message: "Coupon expired" });
+
+  claim.status = "redeemed"; claim.redeemedAt = new Date(); claim.redeemedVia = "api";
+  await claim.save();
+  await CouponCampaign.updateOne({ _id: claim.campaign._id }, { $inc: { redeemedCount: 1 } });
+  return res.json({
+    success: true, redeemed: true, redeemedAt: claim.redeemedAt,
+    offer: { title: claim.campaign?.title, offerText: claim.campaign?.offerText, offerType: claim.campaign?.offerType, offerValue: claim.campaign?.offerValue },
+  });
+}
+
+module.exports = { verify, redeem };

@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — DamnDeal Investor Portal</title>
+  <script>
+    (function () {
+      var h = location.hostname.toLowerCase();
+      var us = h === "damndeal.com" || h.endsWith(".damndeal.com");
+      document.documentElement.classList.add(us ? "region-us" : "region-in");
+    })();
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/investor/assets/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="brand">Damn<span style="color:#F59E0B">Deal</span> Invest</div>
+  <div class="nav-links">
+    <span id="nav-name" style="color:rgba(255,255,255,.8);font-size:.9rem"></span>
+    <a href="#" onclick="logout()" style="color:rgba(255,255,255,.7);font-size:.85rem">Logout</a>
+  </div>
+</nav>
+
+<div class="dash-layout">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <a href="#" onclick="showTab('dashboard')" id="tab-dashboard" class="active"><span class="icon">📊</span> Dashboard</a>
+    <a href="#" onclick="showTab('slots')" id="tab-slots"><span class="icon">🎯</span> My Slots</a>
+    <a href="#" onclick="showTab('buy')" id="tab-buy"><span class="icon">🛒</span> Buy Slots</a>
+    <a href="#" onclick="showTab('withdraw')" id="tab-withdraw"><span class="icon">💸</span> Withdraw</a>
+    <a href="#" onclick="showTab('kyc')" id="tab-kyc"><span class="icon">📋</span> KYC</a>
+    <a href="#" onclick="showTab('profile')" id="tab-profile"><span class="icon">👤</span> Profile</a>
+  </div>
+
+  <!-- Main content -->
+  <div class="dash-content" id="main-content">
+    <div class="text-center"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- Modals -->
+<div class="modal-overlay" id="modal-buy">
+  <div class="modal">
+    <h3>Buy Magic Club Slots</h3>
+    <div id="buy-alert"></div>
+    <div class="alert alert-info mb-2" id="buy-info">Loading bank details…</div>
+    <div class="form-group">
+      <label>Number of Slots (minimum 100)</label>
+      <input class="form-control" id="buy-slots" type="number" min="100" placeholder="e.g. 100">
+    </div>
+    <div class="form-group">
+      <label>Total Points</label>
+      <div class="form-control" id="buy-total" style="background:#F9FAFB;color:#6B7280">0 points</div>
+    </div>
+    <div class="form-group">
+      <label>UTR / Transaction Reference</label>
+      <input class="form-control" id="buy-utr" type="text" placeholder="Bank transfer reference number">
+    </div>
+    <div class="form-group">
+      <label>Upload Payment Receipt</label>
+      <input class="form-control" id="buy-receipt" type="file" accept="image/*,application/pdf">
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+      <button class="btn btn-outline" onclick="closeModal('modal-buy')">Cancel</button>
+      <button class="btn btn-primary" id="btn-buy-submit" onclick="submitPurchase()">Submit Request</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-withdraw">
+  <div class="modal">
+    <h3>Withdraw Points</h3>
+    <div id="withdraw-alert"></div>
+    <p style="font-size:.88rem;color:#6B7280;margin-bottom:1rem">Available: <strong id="w-balance">0</strong> points</p>
+    <div class="form-group">
+      <label>Points to Withdraw (min 100)</label>
+      <input class="form-control" id="w-points" type="number" min="100" placeholder="e.g. 500">
+    </div>
+    <div class="form-group">
+      <label>Points to Withdraw</label>
+      <div class="form-control" id="w-amount" style="background:#F9FAFB;color:#6B7280">0 points</div>
+    </div>
+    <div class="alert alert-warning" style="font-size:.85rem">Withdrawal will go to your registered bank account. Update profile if needed.</div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+      <button class="btn btn-outline" onclick="closeModal('modal-withdraw')">Cancel</button>
+      <button class="btn btn-primary" id="btn-w-submit" onclick="submitWithdrawal()">Request Withdrawal</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-kyc">
+  <div class="modal">
+    <h3>Upload KYC Document</h3>
+    <div id="kyc-alert"></div>
+    <div class="form-group">
+      <label>Document Type</label>
+      <select class="form-control" id="kyc-type">
+        <option value="pan" class="js-kyc-in">PAN Card</option>
+        <option value="aadhaar" class="js-kyc-in">Aadhaar Card</option>
+        <option value="ssn" class="js-kyc-us" hidden>SSN</option>
+        <option value="driver_license" class="js-kyc-us" hidden>Driver's License</option>
+        <option value="passport">Passport</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Upload Document (image or PDF)</label>
+      <input class="form-control" id="kyc-file" type="file" accept="image/*,application/pdf">
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+      <button class="btn btn-outline" onclick="closeModal('modal-kyc')">Cancel</button>
+      <button class="btn btn-primary" id="btn-kyc-submit" onclick="submitKyc()">Upload</button>
+    </div>
+  </div>
+</div>
+
+<script src="/investor/assets/js/config.js"></script>
+<script src="/investor/assets/js/auth.js"></script>
+<script>
+  // ── Region adaptation (USA = DamnDeal only, US KYC docs) ──
+  (function () {
+    if (window.CONFIG && CONFIG.REGION === "US") {
+      document.querySelectorAll(".js-kyc-in").forEach(function (el) { el.hidden = true; });
+      document.querySelectorAll(".js-kyc-us").forEach(function (el) { el.hidden = false; });
+      var sel = document.getElementById("kyc-type");
+      if (sel) sel.value = "ssn";
+    }
+  })();
+
+  requireAuth();
+
+  let DATA = null;
+  let activeTab = "dashboard";
+
+  async function loadData() {
+    const res = await invApi("GET", "/investor/me");
+    if (!res || !res.success) return;
+    DATA = res;
+    document.getElementById("nav-name").textContent = res.investor.name;
+    renderTab(activeTab);
+  }
+
+  function showTab(tab) {
+    activeTab = tab;
+    document.querySelectorAll(".sidebar a").forEach(a => a.classList.remove("active"));
+    document.getElementById("tab-" + tab).classList.add("active");
+    if (DATA) renderTab(tab);
+  }
+
+  function renderTab(tab) {
+    const el = document.getElementById("main-content");
+    if (tab === "dashboard") renderDashboard(el);
+    else if (tab === "slots") renderSlots(el);
+    else if (tab === "buy") { renderBuyTab(el); }
+    else if (tab === "withdraw") renderWithdrawTab(el);
+    else if (tab === "kyc") renderKyc(el);
+    else if (tab === "profile") renderProfile(el);
+  }
+
+  function badge(status) {
+    const m = { pending:"warning", approved:"success", rejected:"danger", submitted:"purple", not_submitted:"gray", processed:"success" };
+    return `<span class="badge badge-${m[status]||"gray"}">${status}</span>`;
+  }
+
+  function fmtDate(d) { return new Date(d).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" }); }
+
+  function renderDashboard(el) {
+    const inv = DATA.investor;
+    const kycBanner = inv.kycStatus !== "approved" ? `
+      <div class="kyc-banner">
+        <div class="icon">⚠️</div>
+        <p>KYC ${inv.kycStatus === "not_submitted" ? "not submitted" : "status: " + inv.kycStatus}.
+          <a href="#" onclick="showTab('kyc')">Complete KYC</a> to buy slots.</p>
+      </div>` : "";
+
+    el.innerHTML = `
+      <div class="page-header"><h1>Dashboard</h1><p>Welcome back, ${inv.name}</p></div>
+      ${kycBanner}
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="label">Points Balance</div>
+          <div class="value">${(inv.pointsBalance||0).toLocaleString("en-US")}</div>
+          <div class="sub">Available to withdraw</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Slots Owned</div>
+          <div class="value">${inv.totalSlotsOwned||0}</div>
+          <div class="sub">Active Magic Club slots</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Total Earned</div>
+          <div class="value">${(inv.totalEarned||0).toLocaleString("en-US")}</div>
+          <div class="sub">Points (all time)</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Total Withdrawn</div>
+          <div class="value">${(inv.totalWithdrawn||0).toLocaleString("en-US")}</div>
+          <div class="sub">Points (processed)</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1.5rem">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+            <h3 style="font-size:1rem;font-weight:700">Recent Purchases</h3>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Slots</th><th>Points</th><th>Status</th></tr></thead>
+              <tbody>
+                ${(DATA.purchases||[]).slice(0,5).map(p => `
+                  <tr>
+                    <td>${fmtDate(p.createdAt)}</td>
+                    <td>${p.slotsRequested}</td>
+                    <td>${(p.totalAmount||0).toLocaleString("en-US")} pts</td>
+                    <td>${badge(p.status)}</td>
+                  </tr>`).join("") || "<tr><td colspan='4' class='text-muted text-center'>No purchases yet</td></tr>"}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+            <h3 style="font-size:1rem;font-weight:700">Recent Withdrawals</h3>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Points</th><th>Status</th></tr></thead>
+              <tbody>
+                ${(DATA.withdrawals||[]).slice(0,5).map(w => `
+                  <tr>
+                    <td>${fmtDate(w.createdAt)}</td>
+                    <td>${(w.pointsRequested||0).toLocaleString("en-US")}</td>
+                    <td>${badge(w.status)}</td>
+                  </tr>`).join("") || "<tr><td colspan='3' class='text-muted text-center'>No withdrawals yet</td></tr>"}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function renderSlots(el) {
+    const approvedPurchases = (DATA.purchases||[]).filter(p => p.status === "approved");
+    const allSlotIds = approvedPurchases.flatMap(p => p.slotIds || []);
+    el.innerHTML = `
+      <div class="page-header"><h1>My Magic Club Slots</h1><p>${allSlotIds.length} active slots</p></div>
+      <div class="card">
+        ${allSlotIds.length ? `
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.75rem">
+            ${allSlotIds.map(id => `
+              <div style="background:#F5F3FF;border:1px solid #DDD6FE;border-radius:8px;padding:.75rem;text-align:center">
+                <div style="font-size:.7rem;color:#6B7280;margin-bottom:.25rem">SLOT ID</div>
+                <div style="font-size:.85rem;font-weight:700;color:#5B21B6;word-break:break-all">${id}</div>
+                <span class="badge badge-success" style="margin-top:.4rem">Active</span>
+              </div>`).join("")}
+          </div>` : `<p class="text-muted text-center" style="padding:2rem">No active slots yet. <a href="#" onclick="showTab('buy')" style="color:#7C3AED">Buy slots</a></p>`}
+      </div>`;
+  }
+
+  function renderBuyTab(el) {
+    const note = (window.CONFIG && CONFIG.POINT_NOTE) ? `<p style="font-size:.8rem;color:#9CA3AF;margin-bottom:1rem">✦ ${CONFIG.POINT_NOTE}.</p>` : "";
+    el.innerHTML = `
+      <div class="page-header"><h1>Buy Slots</h1><p>Slot price: ${(DATA.slotPrice||5000).toLocaleString("en-US")} points per slot</p></div>
+      <div class="card" style="max-width:600px">
+        ${note}
+        <p style="font-size:.9rem;color:#6B7280;margin-bottom:1.5rem">Submit your slot request with payment receipt below. Slots will be activated within 24 hours of approval.</p>
+        <button class="btn btn-primary" onclick="openBuyModal()">+ Request Slot Purchase</button>
+      </div>`;
+    setupBuyModal();
+  }
+
+  function renderWithdrawTab(el) {
+    const inv = DATA.investor;
+    el.innerHTML = `
+      <div class="page-header"><h1>Withdraw</h1><p>Cash out your earned points</p></div>
+      <div class="card" style="max-width:600px">
+        <div class="stats-grid" style="grid-template-columns:1fr 1fr;margin-bottom:1.5rem">
+          <div class="stat-card"><div class="label">Points Balance</div><div class="value">${(inv.pointsBalance||0).toLocaleString("en-US")}</div></div>
+          <div class="stat-card"><div class="label">Slots Owned</div><div class="value">${inv.totalSlotsOwned||0}</div></div>
+        </div>
+        ${!inv.bankDetails?.accountNumber && !inv.bankDetails?.upiId ? `
+          <div class="alert alert-warning">Please add your bank details in <a href="#" onclick="showTab('profile')" style="color:#92400E;font-weight:700">Profile</a> before withdrawing.</div>` : `
+          <button class="btn btn-primary" onclick="openWithdrawModal()">Request Withdrawal</button>`}
+        <div class="mt-3">
+          <h3 style="font-size:1rem;margin-bottom:.75rem">Withdrawal History</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Points</th><th>Reference</th><th>Status</th></tr></thead>
+              <tbody>
+                ${(DATA.withdrawals||[]).map(w => `
+                  <tr>
+                    <td>${fmtDate(w.createdAt)}</td>
+                    <td>${(w.pointsRequested||0).toLocaleString("en-US")}</td>
+                    <td>${w.utrNumber||"—"}</td>
+                    <td>${badge(w.status)}</td>
+                  </tr>`).join("") || "<tr><td colspan='4' class='text-muted text-center'>No withdrawals</td></tr>"}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function renderKyc(el) {
+    const inv = DATA.investor;
+    el.innerHTML = `
+      <div class="page-header"><h1>KYC Verification</h1><p>Status: ${badge(inv.kycStatus)}</p></div>
+      <div class="card" style="max-width:600px">
+        ${inv.kycStatus === "approved" ? `<div class="alert alert-success">✅ Your KYC is approved. You can buy slots.</div>` :
+          inv.kycStatus === "submitted" ? `<div class="alert alert-warning">⏳ KYC under review. We'll notify you soon.</div>` :
+          inv.kycStatus === "rejected" ? `<div class="alert alert-danger">❌ KYC rejected. ${inv.adminNote ? "Reason: " + inv.adminNote : ""} Please re-upload.</div>` :
+          `<div class="alert alert-info">Upload your KYC documents to start investing.</div>`}
+        ${inv.kycStatus !== "approved" ? `<button class="btn btn-primary mt-2" onclick="openModal('modal-kyc')">Upload KYC Document</button>` : ""}
+        ${(inv.kycDocuments||[]).length ? `
+          <div class="mt-3">
+            <h3 style="font-size:.95rem;margin-bottom:.75rem">Uploaded Documents</h3>
+            ${inv.kycDocuments.map(d => `
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:.6rem 0;border-bottom:1px solid var(--border)">
+                <span style="text-transform:uppercase;font-size:.85rem;font-weight:600">${d.docType}</span>
+                <a href="${d.url}" target="_blank" class="btn btn-sm btn-outline">View</a>
+              </div>`).join("")}
+          </div>` : ""}
+      </div>`;
+  }
+
+  function renderProfile(el) {
+    const inv = DATA.investor;
+    const bd = inv.bankDetails || {};
+    el.innerHTML = `
+      <div class="page-header"><h1>Profile & Bank Details</h1></div>
+      <div class="card" style="max-width:600px">
+        <div id="profile-alert"></div>
+        <h3 style="font-size:1rem;margin-bottom:1rem">Personal Info</h3>
+        <div class="form-group"><label>Full Name</label><input class="form-control" id="p-name" value="${inv.name||""}"></div>
+        <div class="form-group"><label>Email</label><input class="form-control" id="p-email" type="email" value="${inv.email||""}"></div>
+        <div class="form-group"><label>Phone</label><div class="form-control" style="background:#F9FAFB;color:#6B7280">${inv.phone}</div></div>
+        <hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0">
+        <h3 style="font-size:1rem;margin-bottom:1rem">Bank Details</h3>
+        <div class="form-row">
+          <div class="form-group"><label>Account Holder Name</label><input class="form-control" id="p-ah" value="${bd.accountHolder||""}"></div>
+          <div class="form-group"><label>Account Number</label><input class="form-control" id="p-an" value="${bd.accountNumber||""}"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>${(window.CONFIG&&CONFIG.REGION==="US")?"Routing Number":"IFSC Code"}</label><input class="form-control" id="p-ifsc" value="${bd.ifsc||""}"></div>
+          <div class="form-group"><label>Bank Name</label><input class="form-control" id="p-bank" value="${bd.bankName||""}"></div>
+        </div>
+        ${(window.CONFIG&&CONFIG.REGION==="US")?"":`<div class="form-group"><label>UPI ID (optional)</label><input class="form-control" id="p-upi" value="${bd.upiId||""}"></div>`}
+        <button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>
+      </div>`;
+  }
+
+  // ── Actions ──────────────────────────────────────────────────────────────
+  async function saveProfile() {
+    const body = {
+      name: document.getElementById("p-name").value.trim(),
+      email: document.getElementById("p-email").value.trim(),
+      bankDetails: {
+        accountHolder: document.getElementById("p-ah").value.trim(),
+        accountNumber: document.getElementById("p-an").value.trim(),
+        ifsc: document.getElementById("p-ifsc").value.trim(),
+        bankName: document.getElementById("p-bank").value.trim(),
+        upiId: document.getElementById("p-upi")?.value.trim() || "",
+      },
+    };
+    const res = await invApi("PUT", "/investor/me", body);
+    if (res?.success) {
+      DATA.investor = res.investor;
+      document.getElementById("profile-alert").innerHTML = `<div class="alert alert-success">Saved successfully!</div>`;
+    } else {
+      document.getElementById("profile-alert").innerHTML = `<div class="alert alert-danger">${res?.message||"Error saving"}</div>`;
+    }
+  }
+
+  function setupBuyModal() {
+    const price = DATA.slotPrice || 5000;
+    document.getElementById("buy-info").textContent = `${price.toLocaleString("en-US")} points per slot. Transfer the matching amount to our bank account, then upload your receipt here.`;
+    document.getElementById("buy-slots").addEventListener("input", function() {
+      const total = (parseInt(this.value)||0) * price;
+      document.getElementById("buy-total").textContent = total.toLocaleString("en-US") + " points";
+    });
+  }
+
+  function openBuyModal() { openModal("modal-buy"); }
+
+  async function submitPurchase() {
+    const slots = document.getElementById("buy-slots").value;
+    const utr = document.getElementById("buy-utr").value.trim();
+    const file = document.getElementById("buy-receipt").files[0];
+    if (!slots || slots < 100) { document.getElementById("buy-alert").innerHTML = `<div class="alert alert-danger">Minimum 100 slots required</div>`; return; }
+    const btn = document.getElementById("btn-buy-submit");
+    btn.disabled = true; btn.textContent = "Submitting…";
+    const fd = new FormData();
+    fd.append("slotsRequested", slots);
+    fd.append("transactionRef", utr);
+    if (file) fd.append("receipt", file);
+    const res = await invApiForm("/investor/purchase", fd);
+    if (res?.success) {
+      closeModal("modal-buy");
+      await loadData();
+      showTab("dashboard");
+    } else {
+      document.getElementById("buy-alert").innerHTML = `<div class="alert alert-danger">${res?.message||"Error"}</div>`;
+      btn.disabled = false; btn.textContent = "Submit Request";
+    }
+  }
+
+  function openWithdrawModal() {
+    const inv = DATA.investor;
+    document.getElementById("w-balance").textContent = (inv.pointsBalance||0).toLocaleString("en-US");
+    document.getElementById("w-points").addEventListener("input", function() {
+      document.getElementById("w-amount").textContent = (parseInt(this.value)||0).toLocaleString("en-US") + " points";
+    });
+    openModal("modal-withdraw");
+  }
+
+  async function submitWithdrawal() {
+    const pts = parseInt(document.getElementById("w-points").value);
+    if (!pts || pts < 100) { document.getElementById("withdraw-alert").innerHTML = `<div class="alert alert-danger">Minimum 100 points</div>`; return; }
+    const btn = document.getElementById("btn-w-submit");
+    btn.disabled = true; btn.textContent = "Submitting…";
+    const res = await invApi("POST", "/investor/withdraw", { pointsRequested: pts });
+    if (res?.success) {
+      closeModal("modal-withdraw");
+      await loadData();
+      showTab("withdraw");
+    } else {
+      document.getElementById("withdraw-alert").innerHTML = `<div class="alert alert-danger">${res?.message||"Error"}</div>`;
+      btn.disabled = false; btn.textContent = "Request Withdrawal";
+    }
+  }
+
+  async function submitKyc() {
+    const docType = document.getElementById("kyc-type").value;
+    const file = document.getElementById("kyc-file").files[0];
+    if (!file) { document.getElementById("kyc-alert").innerHTML = `<div class="alert alert-danger">Select a file</div>`; return; }
+    const btn = document.getElementById("btn-kyc-submit");
+    btn.disabled = true; btn.textContent = "Uploading…";
+    const fd = new FormData();
+    fd.append("docType", docType);
+    fd.append("document", file);
+    const res = await invApiForm("/investor/kyc", fd);
+    if (res?.success) {
+      closeModal("modal-kyc");
+      await loadData();
+      showTab("kyc");
+    } else {
+      document.getElementById("kyc-alert").innerHTML = `<div class="alert alert-danger">${res?.message||"Error"}</div>`;
+      btn.disabled = false; btn.textContent = "Upload";
+    }
+  }
+
+  function openModal(id) { document.getElementById(id).classList.add("show"); }
+  function closeModal(id) { document.getElementById(id).classList.remove("show"); }
+
+  loadData();
+</script>
+</body>
+</html>

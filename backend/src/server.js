@@ -9,6 +9,7 @@ const rateLimit = require("express-rate-limit");
 const { connectDB } = require("./config/db");
 const routes = require("./routes");
 const { errorHandler } = require("./middleware/error.middleware");
+const { regionMiddleware } = require("./middleware/region.middleware");
 const { initSocket } = require("./services/socket.service");
 const { initCronJobs } = require("./services/cron.service");
 
@@ -62,9 +63,20 @@ const apiLimiter = rateLimit({
 });
 app.use("/api", apiLimiter);
 
+// Stripe webhook — needs the RAW body for signature verification, so it must
+// be registered before express.json() parses the body.
+app.post(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  require("./modules/user/controllers/webhook.controller").stripeWebhook
+);
+
 // Body parsing
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// Region detection (X-Region header / hostname → req.region; defaults to 'IN')
+app.use(regionMiddleware);
 
 // Serve uploaded files
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));

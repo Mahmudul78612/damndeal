@@ -3,6 +3,7 @@ const rateLimit = require("express-rate-limit");
 const {
   handleSendOtp,
   handleVerifyOtp,
+  handleFirebaseVerify,
   handleCompleteProfile,
   handleRefreshToken,
   handleGetMe,
@@ -36,6 +37,7 @@ const verifyOtpLimiter = rateLimit({
 // Public routes — clientType middleware sets the role based on x-client-type header
 router.post("/send-otp", sendOtpLimiter, clientType, handleSendOtp);
 router.post("/verify-otp", verifyOtpLimiter, clientType, handleVerifyOtp);
+router.post("/firebase-verify", clientType, handleFirebaseVerify);
 router.post("/refresh-token", handleRefreshToken);
 
 // Protected routes

@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "865851260105",
+    "project_id": "damnpay",
+    "storage_bucket": "damnpay.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:865851260105:android:76d1e20df98d4f75f56118",
+        "android_client_info": {
+          "package_name": "com.damndealappp.in"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBjEFY6BAai7HwTEShuk1tDWRSRFT5K6sU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:865851260105:android:6a9d1e79f027937ef56118",
+        "android_client_info": {
+          "package_name": "damnpay.in"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBjEFY6BAai7HwTEShuk1tDWRSRFT5K6sU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:865851260105:android:8ca1d2517c2e21eef56118",
+        "android_client_info": {
+          "package_name": "in.pateegabites.pateega_bites"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBjEFY6BAai7HwTEShuk1tDWRSRFT5K6sU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

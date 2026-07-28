@@ -1,4 +1,5 @@
 const Banner = require("../../../models/Banner");
+const { parseRegionsInput, adminListRegionFilter } = require("../../../utils/region");
 
 // POST /admin/banners
 async function createBanner(req, res) {
@@ -11,6 +12,8 @@ async function createBanner(req, res) {
   if (data.productIds && typeof data.productIds === 'string') {
     try { data.productIds = JSON.parse(data.productIds); } catch (_) { data.productIds = []; }
   }
+  const regions = parseRegionsInput(req.body.regions);
+  data.regions = regions || [(req.region || 'IN')];
   const banner = await Banner.create(data);
   return res.status(201).json({ success: true, banner });
 }
@@ -20,6 +23,8 @@ async function listBanners(req, res) {
   const { placement } = req.query;
   const filter = {};
   if (placement) filter.placement = placement;
+  const regionF = adminListRegionFilter(req);
+  if (regionF) Object.assign(filter, regionF);
 
   const banners = await Banner.find(filter).populate('subCategories', 'name image').sort({ sortOrder: 1, createdAt: -1 });
   return res.json({ success: true, banners });
@@ -36,6 +41,8 @@ async function updateBanner(req, res) {
   if (updates.productIds && typeof updates.productIds === 'string') {
     try { updates.productIds = JSON.parse(updates.productIds); } catch (_) { updates.productIds = []; }
   }
+  const regions = parseRegionsInput(req.body.regions);
+  if (regions) updates.regions = regions; else delete updates.regions;
   const banner = await Banner.findByIdAndUpdate(req.params.id, updates, { new: true });
   if (!banner) return res.status(404).json({ success: false, message: "Banner not found" });
   return res.json({ success: true, banner });

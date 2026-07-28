@@ -14,6 +14,7 @@ interface AuthCtx {
   closeLoginModal: () => void;
   login: (phone: string) => Promise<any>;
   verifyOtp: (phone: string, otp: string) => Promise<any>;
+  firebaseVerify: (idToken: string) => Promise<any>;
   completeProfile: (name: string, email: string) => Promise<void>;
   logout: () => void;
 }
@@ -64,6 +65,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return res;
   };
 
+  const firebaseVerify = async (idToken: string) => {
+    const res = await api.post('/auth/firebase-verify', { idToken });
+    localStorage.setItem('dd_token', res.accessToken);
+    localStorage.setItem('dd_refresh', res.refreshToken);
+    setUser(res.user);
+    return res;
+  };
+
   const completeProfile = async (name: string, email: string) => {
     const res = await api.put('/auth/complete-profile', { name, email });
     setUser(res.user);
@@ -77,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, isLoggedIn: !!user, showLoginModal, loginRedirect, openLoginModal, closeLoginModal, login, verifyOtp, completeProfile, logout }}>
+    <AuthContext.Provider value={{ user, loading, isLoggedIn: !!user, showLoginModal, loginRedirect, openLoginModal, closeLoginModal, login, verifyOtp, firebaseVerify, completeProfile, logout }}>
       {children}
     </AuthContext.Provider>
   );

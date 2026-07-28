@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invest — DamnDeal</title>
+  <!-- Region detection runs first to avoid content flash -->
+  <script>
+    (function () {
+      var h = location.hostname.toLowerCase();
+      var us = h === "damndeal.com" || h.endsWith(".damndeal.com");
+      document.documentElement.classList.add(us ? "region-us" : "region-in");
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    /* DamnPay is India-only — hidden on damndeal.com (USA) */
+    .region-us .js-damnpay { display: none !important; }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --dd: #6C2FD9;
+      --dd-light: #EDE9FE;
+      --dp: #D1286A;
+      --dp-light: #FCE7F0;
+      --ink: #0D0D12;
+      --muted: #6B7280;
+      --border: #E5E7EB;
+      --bg: #FAFAFA;
+      --white: #fff;
+      --radius: 16px;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ─────────────────────────────────────────────────────────────── */
+    .nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 2.5rem;
+      height: 64px;
+      background: transparent;
+      border-bottom: 1px solid rgba(255,255,255,.06);
+      transition: background 0.35s, border-color 0.35s, box-shadow 0.35s;
+    }
+    /* After scrolling past hero — go light */
+    .nav.light {
+      background: rgba(255,255,255,.92);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom-color: rgba(229,231,235,.7);
+      box-shadow: 0 2px 24px rgba(0,0,0,.06);
+    }
+
+    .nav-brand { display: flex; align-items: center; gap: .5rem; text-decoration: none; }
+    .nav-brand svg { height: 26px; width: auto; }
+
+    /* Dark (hero) and light (scrolled) text variants */
+    .nav-links { display: flex; align-items: center; gap: 2rem; }
+    .nav-links a {
+      font-size: .875rem; font-weight: 500;
+      color: rgba(255,255,255,.55);
+      text-decoration: none; transition: color 0.2s;
+    }
+    .nav-links a:hover { color: #fff; }
+    .nav.light .nav-links a { color: var(--muted); }
+    .nav.light .nav-links a:hover { color: var(--ink); }
+
+    .btn-nav {
+      display: inline-flex; align-items: center; gap: .4rem;
+      background: var(--dd); color: #fff !important;
+      padding: .5rem 1.2rem; border-radius: 8px;
+      font-size: .84rem; font-weight: 600;
+      transition: opacity 0.2s, transform 0.2s;
+      white-space: nowrap;
+    }
+    .btn-nav:hover { opacity: .88; transform: translateY(-1px); }
+    .nav-region {
+      display: inline-flex; align-items: center; gap: .35rem;
+      padding: .45rem .9rem; border-radius: 8px;
+      font-size: .82rem; font-weight: 600;
+      border: 1px solid rgba(255,255,255,.25);
+      transition: background 0.2s, border-color 0.2s;
+      white-space: nowrap;
+    }
+    .nav-region:hover { background: rgba(255,255,255,.1); }
+    .nav.light .nav-region { border-color: var(--border); color: var(--ink) !important; }
+    .nav.light .nav-region:hover { background: #F3F4F6; }
+
+    /* Hamburger */
+    .nav-hamburger {
+      display: none; flex-direction: column; justify-content: center;
+      gap: 5px; background: none; border: none; cursor: pointer;
+      padding: .4rem; margin-left: .5rem;
+    }
+    .nav-hamburger span {
+      display: block; width: 22px; height: 2px; border-radius: 2px;
+      background: rgba(255,255,255,.7);
+      transition: background 0.2s, transform 0.3s, opacity 0.3s;
+    }
+    .nav.light .nav-hamburger span { background: var(--ink); }
+
+    /* Open state */
+    .nav-hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .nav-hamburger.open span:nth-child(2) { opacity: 0; }
+    .nav-hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+    /* Mobile drawer */
+    .nav-drawer {
+      display: none;
+      position: fixed; top: 64px; left: 0; right: 0; z-index: 99;
+      background: #0C0C0E;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+      flex-direction: column; padding: 1.25rem 1.5rem 1.75rem;
+      gap: 0;
+      transform: translateY(-10px); opacity: 0;
+      transition: transform 0.3s var(--ease), opacity 0.3s;
+    }
+    .nav-drawer.open { display: flex; transform: translateY(0); opacity: 1; }
+    .nav.light + .nav-drawer {
+      background: rgba(255,255,255,.97);
+      border-bottom-color: var(--border);
+    }
+    .nav-drawer a {
+      font-size: .95rem; font-weight: 500; color: rgba(255,255,255,.6);
+      text-decoration: none; padding: .85rem 0;
+      border-bottom: 1px solid rgba(255,255,255,.05);
+      transition: color 0.2s;
+    }
+    .nav-drawer a:last-child { border-bottom: none; padding-bottom: 0; }
+    .nav-drawer a:hover { color: #fff; }
+    .nav.light + .nav-drawer a { color: var(--muted); border-bottom-color: var(--border); }
+    .nav.light + .nav-drawer a:hover { color: var(--ink); }
+    .nav-drawer .btn-nav { margin-top: .75rem; justify-content: center; }
+
+    @media(max-width: 720px) {
+      .nav { padding: 0 1.25rem; }
+      .nav-links { display: none; }
+      .nav-hamburger { display: flex; }
+    }
+
+    /* ── HERO ────────────────────────────────────────────────────────────── */
+    .hero {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      background: #0C0C0E;
+      position: relative;
+      overflow: hidden;
+      padding-top: 64px; /* nav height */
+    }
+
+    /* Thin vertical rule in the center */
+    .hero::before {
+      content: '';
+      position: absolute; top: 0; left: 50%; bottom: 0;
+      width: 1px;
+      background: rgba(255,255,255,.07);
+      pointer-events: none;
+    }
+
+    /* Horizontal rule 1/3 from top on left panel */
+    .hero-left::after {
+      content: '';
+      position: absolute; left: 0; right: 0;
+      bottom: 0; height: 1px;
+      background: rgba(255,255,255,.06);
+    }
+
+    .hero-left {
+      display: flex; flex-direction: column; justify-content: space-between;
+      padding: 4rem 3.5rem 3.5rem;
+      position: relative;
+      border-right: 1px solid rgba(255,255,255,.06);
+      opacity: 0; animation: slideIn .9s .1s var(--ease) forwards;
+    }
+
+    .hero-right {
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 4rem 3.5rem;
+      gap: 1.5rem;
+      opacity: 0; animation: slideIn .9s .25s var(--ease) forwards;
+    }
+
+    @keyframes slideIn {
+      from { opacity:0; transform: translateY(20px); }
+      to   { opacity:1; transform: translateY(0); }
+    }
+
+    /* BIG background word — typographic texture, not decoration */
+    .hero-bg-word {
+      position: absolute;
+      bottom: -0.15em; left: -0.05em;
+      font-size: clamp(10rem, 18vw, 18rem);
+      font-weight: 900; letter-spacing: -.06em; line-height: 1;
+      color: transparent;
+      -webkit-text-stroke: 1px rgba(255,255,255,.04);
+      pointer-events: none; user-select: none;
+      white-space: nowrap;
+    }
+
+    /* Eyebrow tag */
+    .hero-tag {
+      display: inline-flex; align-items: center; gap: .5rem;
+      font-size: .72rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+      color: rgba(255,255,255,.4);
+      margin-bottom: auto;
+    }
+    .hero-tag::before {
+      content: '';
+      width: 20px; height: 1px; background: rgba(255,255,255,.25);
+    }
+
+    /* Main headline */
+    .hero-headline {
+      margin: auto 0;
+    }
+    .hero-headline h1 {
+      font-size: clamp(2.6rem, 4.5vw, 4rem);
+      font-weight: 900; line-height: 1.05; letter-spacing: -.04em;
+      color: #fff;
+      margin-bottom: 1.5rem;
+    }
+    .hero-headline h1 em {
+      font-style: normal;
+      background: linear-gradient(90deg, var(--dd), #A855F7);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .hero-headline p {
+      font-size: .95rem; color: rgba(255,255,255,.45); line-height: 1.75;
+      max-width: 380px;
+    }
+
+    /* CTA row */
+    .hero-actions {
+      display: flex; align-items: center; gap: 1.5rem;
+      margin-top: 2.5rem; flex-wrap: wrap;
+    }
+
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: .5rem;
+      background: #fff; color: var(--ink);
+      padding: .8rem 1.75rem; border-radius: 8px;
+      font-size: .88rem; font-weight: 700; text-decoration: none;
+      transition: background 0.2s, transform 0.2s;
+    }
+    .btn-primary:hover { background: #EDE9FE; transform: translateY(-1px); }
+
+    .btn-secondary {
+      font-size: .85rem; font-weight: 600; color: rgba(255,255,255,.45);
+      text-decoration: none; display: inline-flex; align-items: center; gap: .4rem;
+      transition: color 0.2s;
+    }
+    .btn-secondary:hover { color: #fff; }
+    .btn-secondary svg { transition: transform 0.2s; }
+    .btn-secondary:hover svg { transform: translateX(3px); }
+
+    /* Bottom row of hero-left: stats inline */
+    .hero-stats-row {
+      display: flex; gap: 2.5rem; padding-top: 2.5rem;
+      border-top: 1px solid rgba(255,255,255,.07);
+      margin-top: 2.5rem;
+    }
+    .hero-stat-val {
+      font-size: 1.5rem; font-weight: 800; color: #fff; letter-spacing: -.04em;
+      line-height: 1;
+    }
+    .hero-stat-label {
+      font-size: .72rem; color: rgba(255,255,255,.35); margin-top: .3rem;
+      text-transform: uppercase; letter-spacing: .06em;
+    }
+
+    /* Right panel: platform cards stacked */
+    .hero-platform-card {
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 14px;
+      padding: 1.75rem 2rem;
+      display: flex; align-items: center; gap: 1.5rem;
+      text-decoration: none; color: #fff;
+      position: relative; overflow: hidden;
+      transition: border-color 0.25s, transform 0.25s;
+      background: rgba(255,255,255,.03);
+    }
+    .hero-platform-card:hover { transform: translateX(6px); }
+    .hero-platform-card.dd:hover { border-color: rgba(108,47,217,.5); }
+    .hero-platform-card.dp:hover { border-color: rgba(209,40,106,.4); }
+
+    /* Left accent bar */
+    .hero-platform-card::before {
+      content: ''; position: absolute; left: 0; top: 20%; bottom: 20%;
+      width: 3px; border-radius: 0 2px 2px 0;
+    }
+    .hero-platform-card.dd::before { background: var(--dd); }
+    .hero-platform-card.dp::before { background: var(--dp); }
+
+    .hpc-logo {
+      width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .hpc-logo.dd { background: rgba(108,47,217,.25); }
+    .hpc-logo.dp { background: rgba(209,40,106,.2); }
+
+    .hpc-body { flex: 1; }
+    .hpc-name { font-size: 1rem; font-weight: 800; line-height: 1; margin-bottom: .3rem; }
+    .hpc-desc { font-size: .8rem; color: rgba(255,255,255,.4); line-height: 1.4; }
+
+    .hpc-arrow {
+      color: rgba(255,255,255,.2);
+      transition: color 0.2s, transform 0.2s;
+      flex-shrink: 0;
+    }
+    .hero-platform-card:hover .hpc-arrow { color: rgba(255,255,255,.7); transform: translateX(3px); }
+
+    /* Divider between the two platform cards */
+    .hero-platform-divider {
+      text-align: center; font-size: .7rem; font-weight: 700;
+      letter-spacing: .1em; text-transform: uppercase;
+      color: rgba(255,255,255,.18);
+      display: flex; align-items: center; gap: .75rem;
+    }
+    .hero-platform-divider::before,
+    .hero-platform-divider::after {
+      content: ''; flex: 1; height: 1px; background: rgba(255,255,255,.06);
+    }
+
+    /* Right panel bottom: points-per-slot pill */
+    .hero-rate-pill {
+      display: inline-flex; align-items: center; gap: .5rem;
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 99px; padding: .55rem 1rem;
+      font-size: .78rem; color: rgba(255,255,255,.5); font-weight: 500;
+      align-self: flex-start; margin-top: .5rem;
+    }
+    .hero-rate-pill strong { color: #fff; font-weight: 700; }
+    .hero-point-note {
+      align-self: flex-start; margin-top: .55rem;
+      font-size: .72rem; color: rgba(255,255,255,.4); font-weight: 500;
+      display: flex; align-items: center; gap: .4rem;
+    }
+    .hero-point-note::before { content: '✦'; color: var(--dp); }
+
+    @keyframes fadeUp {
+      from { opacity:0; transform: translateY(24px); }
+      to   { opacity:1; transform: translateY(0); }
+    }
+
+    @media (max-width: 780px) {
+      .hero { grid-template-columns: 1fr; padding-top: 64px; }
+      .hero::before { display: none; }
+      .hero-left { padding: 2.5rem 1.5rem 2rem; border-right: none; border-bottom: 1px solid rgba(255,255,255,.06); }
+      .hero-right { padding: 2rem 1.5rem 3rem; }
+      .hero-bg-word { font-size: 5rem; }
+    }
+
+    /* ── REVEAL ─────────────────────────────────────────────────────────── */
+    .reveal {
+      opacity: 0; transform: translateY(28px);
+      transition: opacity .65s var(--ease), transform .65s var(--ease);
+    }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+    .reveal-delay-1 { transition-delay: .08s; }
+    .reveal-delay-2 { transition-delay: .16s; }
+    .reveal-delay-3 { transition-delay: .24s; }
+    .reveal-delay-4 { transition-delay: .32s; }
+
+    /* ── SECTION COMMON ──────────────────────────────────────────────────── */
+    section { padding: 6rem 1.5rem; }
+    .section-inner { max-width: 1100px; margin: 0 auto; }
+
+    .section-label {
+      display: inline-flex; align-items: center; gap: .5rem;
+      font-size: .7rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 1.25rem;
+    }
+    .section-label::before { content: ''; width: 16px; height: 1px; background: var(--border); }
+
+    .section-title {
+      font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+      font-weight: 900; letter-spacing: -.04em; line-height: 1.1;
+      color: var(--ink); margin-bottom: 1rem;
+    }
+    .section-sub {
+      color: var(--muted); font-size: .95rem; line-height: 1.75;
+      max-width: 500px;
+    }
+
+    /* ── STATS BAR ───────────────────────────────────────────────────────── */
+    .stats-bar { background: #0C0C0E; padding: 0 1.5rem; }
+    .stats-inner {
+      max-width: 1100px; margin: 0 auto;
+      display: flex; flex-wrap: wrap;
+    }
+    .stat-item {
+      flex: 1; min-width: 150px;
+      padding: 2.5rem 2rem;
+      border-right: 1px solid rgba(255,255,255,.06);
+    }
+    .stat-item:last-child { border-right: none; }
+    .stat-num {
+      font-size: clamp(1.8rem, 3vw, 2.4rem);
+      font-weight: 900; letter-spacing: -.05em; color: #fff; line-height: 1;
+    }
+    .stat-num.purple { color: #C4B5FD; }
+    .stat-num.pink { color: #F9A8D4; }
+    .stat-label {
+      font-size: .72rem; color: rgba(255,255,255,.3); margin-top: .5rem;
+      text-transform: uppercase; letter-spacing: .08em; font-weight: 500;
+    }
+    @media(max-width: 640px) {
+      .stats-inner { display: grid; grid-template-columns: 1fr 1fr; }
+      .stat-item { border-right: none; border-bottom: 1px solid rgba(255,255,255,.06); padding: 1.75rem 1.25rem; }
+      .stat-item:nth-child(odd) { border-right: 1px solid rgba(255,255,255,.06); }
+    }
+
+    /* ── PLATFORMS ───────────────────────────────────────────────────────── */
+    .platforms-section { background: var(--bg); }
+
+    /* Each platform: horizontal split row */
+    .platform-row {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 0; border: 1px solid var(--border); border-radius: var(--radius);
+      overflow: hidden; margin-bottom: 1.25rem;
+      transition: box-shadow 0.25s;
+    }
+    .platform-row:hover { box-shadow: 0 8px 32px rgba(0,0,0,.06); }
+    .platform-row:last-of-type { margin-bottom: 0; }
+
+    .platform-info {
+      padding: 2.5rem 2.5rem;
+      display: flex; flex-direction: column; justify-content: center;
+    }
+    .platform-logo-row {
+      display: flex; align-items: center; gap: .9rem; margin-bottom: 1.25rem;
+    }
+    .platform-logo-sq {
+      width: 44px; height: 44px; border-radius: 10px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .platform-info h3 { font-size: 1.2rem; font-weight: 800; margin-bottom: .25rem; }
+    .platform-info .tag {
+      font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    }
+    .platform-info p {
+      font-size: .88rem; color: var(--muted); line-height: 1.7; margin-bottom: 1.5rem;
+      max-width: 380px;
+    }
+    .feature-chips { display: flex; flex-wrap: wrap; gap: .5rem; }
+    .feature-chip {
+      display: inline-block;
+      padding: .3rem .75rem; border-radius: 99px;
+      font-size: .75rem; font-weight: 600;
+      border: 1px solid;
+    }
+    .chip-dd { border-color: rgba(108,47,217,.25); color: var(--dd); background: #F5F0FF; }
+    .chip-dp { border-color: rgba(209,40,106,.25); color: var(--dp); background: #FFF0F6; }
+
+    .platform-visual {
+      display: flex; align-items: center; justify-content: center;
+      padding: 2.5rem;
+      position: relative; overflow: hidden;
+    }
+    .platform-visual.dd-vis { background: linear-gradient(135deg, #F5F0FF 0%, #EDE9FE 100%); }
+    .platform-visual.dp-vis { background: linear-gradient(135deg, #FFF0F6 0%, #FCE7F0 100%); }
+
+    /* Big letter as visual element */
+    .vis-letter {
+      font-size: clamp(6rem, 12vw, 10rem);
+      font-weight: 900; letter-spacing: -.06em; line-height: 1;
+      user-select: none;
+    }
+    .vis-letter.dd { color: rgba(108,47,217,.12); }
+    .vis-letter.dp { color: rgba(209,40,106,.1); }
+    .vis-link {
+      position: absolute; bottom: 1.5rem; right: 1.75rem;
+      font-size: .78rem; font-weight: 700; text-decoration: none;
+      display: inline-flex; align-items: center; gap: .3rem;
+    }
+    .vis-link.dd { color: var(--dd); }
+    .vis-link.dp { color: var(--dp); }
+    .vis-link svg { transition: transform 0.2s; }
+    .vis-link:hover svg { transform: translateX(3px); }
+
+    /* Combined row */
+    .combined-row {
+      margin-top: 1.25rem; border-radius: var(--radius);
+      background: #0C0C0E;
+      padding: 2rem 2.5rem;
+      display: flex; align-items: center; justify-content: space-between; gap: 2rem; flex-wrap: wrap;
+    }
+    .combined-row p { color: rgba(255,255,255,.5); font-size: .88rem; max-width: 480px; line-height: 1.65; }
+    .combined-row strong { color: #fff; }
+    .combined-tag {
+      font-size: .68rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+      color: rgba(255,255,255,.25); margin-bottom: .4rem;
+    }
+    .combined-num { font-size: 2.5rem; font-weight: 900; color: #fff; letter-spacing: -.05em; white-space: nowrap; }
+
+    @media(max-width: 700px) {
+      .platform-row { grid-template-columns: 1fr; }
+      .platform-visual { padding: 2rem; min-height: 140px; }
+      .vis-letter { font-size: 5rem; }
+    }
+
+    /* ── HOW IT WORKS ────────────────────────────────────────────────────── */
+    .how-section { background: var(--white); }
+
+    .steps-list { margin-top: 3.5rem; display: flex; flex-direction: column; gap: 0; }
+
+    .step-row {
+      display: grid; grid-template-columns: 72px 1fr;
+      gap: 0; position: relative;
+      padding-bottom: 2.5rem;
+    }
+    .step-row:last-child { padding-bottom: 0; }
+
+    /* Vertical connector line */
+    .step-row:not(:last-child) .step-numcol::after {
+      content: '';
+      position: absolute; left: 35px; top: 72px; bottom: 0;
+      width: 1px; background: var(--border);
+    }
+
+    .step-numcol {
+      display: flex; flex-direction: column; align-items: center;
+      position: relative;
+    }
+    .step-circle {
+      width: 44px; height: 44px; border-radius: 50%;
+      border: 1.5px solid var(--border);
+      background: var(--white);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .8rem; font-weight: 800; color: var(--muted);
+      flex-shrink: 0; position: relative; z-index: 1;
+      transition: border-color 0.3s, color 0.3s, background 0.3s;
+    }
+    .step-row.active .step-circle {
+      border-color: var(--dd); color: var(--dd); background: var(--dd-light);
+    }
+
+    .step-content { padding: .6rem 0 0 1.75rem; }
+    .step-content h3 { font-size: 1rem; font-weight: 700; margin-bottom: .4rem; color: var(--ink); }
+    .step-content p { font-size: .87rem; color: var(--muted); line-height: 1.65; max-width: 480px; }
+
+    /* ── PLANS ───────────────────────────────────────────────────────────── */
+    .plans-section { background: var(--bg); }
+
+    .plans-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1px; background: var(--border);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      overflow: hidden; margin-top: 3rem;
+    }
+
+    .plan-card {
+      background: var(--white); padding: 2.25rem 2rem;
+      position: relative;
+      transition: background 0.2s;
+    }
+    .plan-card:hover { background: #FAFAFA; }
+    .plan-card.featured { background: var(--dd); }
+    .plan-card.featured:hover { background: #5A22C8; }
+
+    .plan-badge {
+      display: inline-block;
+      font-size: .65rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+      background: rgba(255,255,255,.2); color: #fff;
+      padding: .2rem .65rem; border-radius: 4px; margin-bottom: 1.25rem;
+    }
+    .plan-tier { font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: .6rem; }
+    .plan-card.featured .plan-tier { color: rgba(255,255,255,.6); }
+
+    .plan-slots { font-size: 2rem; font-weight: 900; letter-spacing: -.04em; color: var(--ink); line-height: 1; }
+    .plan-slots span { font-size: .9rem; font-weight: 500; color: var(--muted); }
+    .plan-card.featured .plan-slots,
+    .plan-card.featured .plan-slots span { color: #fff; }
+
+    .plan-divider { height: 1px; background: var(--border); margin: 1.5rem 0; }
+    .plan-card.featured .plan-divider { background: rgba(255,255,255,.18); }
+
+    .plan-perks { list-style: none; display: flex; flex-direction: column; gap: .65rem; margin-bottom: 2rem; }
+    .plan-perks li {
+      font-size: .84rem; color: #374151; display: flex; align-items: flex-start; gap: .5rem; line-height: 1.4;
+    }
+    .plan-perks li::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--dd); flex-shrink: 0; margin-top: .45rem; }
+    .plan-card.featured .plan-perks li { color: rgba(255,255,255,.8); }
+    .plan-card.featured .plan-perks li::before { background: rgba(255,255,255,.5); }
+
+    .btn-plan {
+      display: block; text-align: center;
+      padding: .75rem; border-radius: 8px;
+      font-size: .88rem; font-weight: 700; text-decoration: none;
+      transition: background 0.2s, color 0.2s, transform 0.2s;
+    }
+    .btn-plan-filled { background: var(--ink); color: #fff; }
+    .btn-plan-filled:hover { background: #1a1a1f; transform: translateY(-1px); }
+    .btn-plan-outline { border: 1.5px solid var(--border); color: var(--ink); }
+    .btn-plan-outline:hover { border-color: var(--dd); color: var(--dd); }
+    .btn-plan-white { background: #fff; color: var(--dd); }
+    .btn-plan-white:hover { background: #EDE9FE; transform: translateY(-1px); }
+
+    /* ── TRUST ───────────────────────────────────────────────────────────── */
+    .trust-section { background: var(--white); }
+
+    .trust-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr));
+      gap: 1px; background: var(--border);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      overflow: hidden; margin-top: 3rem;
+    }
+    .trust-card {
+      background: var(--white); padding: 2rem 1.75rem;
+      transition: background 0.2s;
+    }
+    .trust-card:hover { background: var(--bg); }
+
+    .trust-icon {
+      width: 40px; height: 40px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 1.25rem;
+    }
+    .trust-card:nth-child(1) .trust-icon { background: #EDE9FE; }
+    .trust-card:nth-child(2) .trust-icon { background: #FCE7F0; }
+    .trust-card:nth-child(3) .trust-icon { background: #ECFDF5; }
+    .trust-card:nth-child(4) .trust-icon { background: #FEF3C7; }
+
+    .trust-card h4 { font-size: .92rem; font-weight: 700; margin-bottom: .5rem; }
+    .trust-card p { font-size: .83rem; color: var(--muted); line-height: 1.65; }
+
+    /* ── CTA ─────────────────────────────────────────────────────────────── */
+    .cta-section {
+      background: #0C0C0E; padding: 7rem 1.5rem; text-align: center;
+      position: relative; overflow: hidden;
+    }
+    .cta-section::before {
+      content: '';
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(108,47,217,.18) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .cta-section h2 {
+      font-size: clamp(2rem, 4.5vw, 3.5rem);
+      font-weight: 900; color: #fff; letter-spacing: -.04em;
+      margin-bottom: 1rem; line-height: 1.1; position: relative;
+    }
+    .cta-section h2 em { font-style: normal; color: #C4B5FD; }
+    .cta-section p { color: rgba(255,255,255,.4); font-size: .95rem; margin-bottom: 2.5rem; position: relative; }
+    .cta-section .btn-cta {
+      display: inline-flex; align-items: center; gap: .5rem;
+      background: #fff; color: var(--ink);
+      padding: .9rem 2.25rem; border-radius: 10px;
+      font-size: .95rem; font-weight: 700; text-decoration: none;
+      transition: background 0.2s, transform 0.2s;
+      position: relative;
+    }
+    .cta-section .btn-cta:hover { background: #EDE9FE; transform: translateY(-2px); }
+
+    /* ── FOOTER ──────────────────────────────────────────────────────────── */
+    footer {
+      background: #0C0C0E; border-top: 1px solid rgba(255,255,255,.06);
+      padding: 3.5rem 1.5rem 2rem;
+    }
+    .footer-inner {
+      max-width: 1100px; margin: 0 auto;
+      display: grid; grid-template-columns: 2fr 1fr 1fr;
+      gap: 3rem; margin-bottom: 3rem;
+    }
+    .footer-brand svg { height: 20px; }
+    .footer-brand p { margin-top: .75rem; color: rgba(255,255,255,.35); font-size: .83rem; line-height: 1.7; max-width: 220px; }
+    .footer-col h5 {
+      font-size: .68rem; font-weight: 700; color: rgba(255,255,255,.4);
+      margin-bottom: 1rem; letter-spacing: .1em; text-transform: uppercase;
+    }
+    .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: .7rem; }
+    .footer-col a { color: rgba(255,255,255,.45); text-decoration: none; font-size: .83rem; transition: color 0.2s; }
+    .footer-col a:hover { color: rgba(255,255,255,.9); }
+    .footer-bottom {
+      max-width: 1100px; margin: 0 auto;
+      padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,.06);
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem;
+      font-size: .78rem; color: rgba(255,255,255,.25);
+    }
+
+    @media(max-width: 720px) {
+      section { padding: 4rem 1.25rem; }
+      .footer-inner { grid-template-columns: 1fr; gap: 2rem; }
+      .steps-list { gap: 0; }
+      .how-section .section-inner > div { grid-template-columns: 1fr !important; gap: 2.5rem !important; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav" id="main-nav">
+  <a href="/investor/index.html" class="nav-brand">
+    <!-- white version for dark hero, switches via .light class on JS -->
+    <svg viewBox="0 0 165 28" fill="none" xmlns="http://www.w3.org/2000/svg" id="nav-logo-dark">
+      <text x="0" y="22" font-family="Inter,sans-serif" font-weight="900" font-size="20" fill="#fff">Damn</text>
+      <text x="58" y="22" font-family="Inter,sans-serif" font-weight="900" font-size="20" fill="#C4B5FD">Deal</text>
+      <text x="103" y="22" font-family="Inter,sans-serif" font-weight="400" font-size="12" fill="rgba(255,255,255,.35)"> Invest</text>
+    </svg>
+    <svg viewBox="0 0 165 28" fill="none" xmlns="http://www.w3.org/2000/svg" id="nav-logo-light" style="display:none">
+      <text x="0" y="22" font-family="Inter,sans-serif" font-weight="900" font-size="20" fill="#0D0D12">Damn</text>
+      <text x="58" y="22" font-family="Inter,sans-serif" font-weight="900" font-size="20" fill="#6C2FD9">Deal</text>
+      <text x="103" y="22" font-family="Inter,sans-serif" font-weight="400" font-size="12" fill="#9CA3AF"> Invest</text>
+    </svg>
+  </a>
+
+  <div class="nav-links">
+    <a href="#platforms">Platforms</a>
+    <a href="#how">How it Works</a>
+    <a href="#plans">Plans</a>
+    <a href="https://damndeal.com/investor/index.html" class="nav-region" id="region-switch">🌐 Global</a>
+    <a href="/investor/login.html" class="btn-nav">Login / Register</a>
+  </div>
+
+  <button class="nav-hamburger" id="nav-hamburger" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+
+<!-- Mobile drawer -->
+<div class="nav-drawer" id="nav-drawer">
+  <a href="https://damndeal.com/investor/index.html" id="region-switch-drawer">🌐 Global Investors</a>
+  <a href="#platforms" onclick="closeDrawer()">Platforms</a>
+  <a href="#how" onclick="closeDrawer()">How it Works</a>
+  <a href="#plans" onclick="closeDrawer()">Plans</a>
+  <a href="/investor/login.html" class="btn-nav">Login / Register</a>
+</div>
+
+<!-- HERO -->
+<section class="hero" id="hero">
+
+  <!-- LEFT PANEL -->
+  <div class="hero-left">
+    <div class="hero-bg-word">INVEST</div>
+
+    <div class="hero-tag">Early access open</div>
+
+    <div class="hero-headline">
+      <h1>Own a piece of<br><span class="js-economy-line">India's digital<br><em>economy.</em></span></h1>
+      <p class="js-hero-sub">Two live platforms — hyperlocal commerce and mobile payments. One investment. Points credited from real transactions. Withdraw anytime.</p>
+      <div class="hero-actions">
+        <a href="/investor/login.html" class="btn-primary">Open Account</a>
+        <a href="#how" class="btn-secondary">
+          How it works
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+      </div>
+    </div>
+
+    <div class="hero-stats-row">
+      <div>
+        <div class="hero-stat-val js-slot-points">5,000</div>
+        <div class="hero-stat-label">Points / slot</div>
+      </div>
+      <div>
+        <div class="hero-stat-val">Anytime</div>
+        <div class="hero-stat-label">Withdraw</div>
+      </div>
+      <div>
+        <div class="hero-stat-val" id="c-investors-hero">—</div>
+        <div class="hero-stat-label">Investors</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="hero-right">
+    <a href="https://damndeal.in" target="_blank" class="hero-platform-card dd">
+      <div class="hpc-logo dd">
+        <svg width="26" height="26" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#6C2FD9"/><text x="4" y="23" font-family="Inter,sans-serif" font-weight="900" font-size="15" fill="#fff">DD</text></svg>
+      </div>
+      <div class="hpc-body">
+        <div class="hpc-name">DamnDeal</div>
+        <div class="hpc-desc js-dd-desc">Hyperlocal e-commerce · India &amp; USA</div>
+      </div>
+      <svg class="hpc-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+
+    <div class="hero-platform-divider js-damnpay">+</div>
+
+    <a href="https://damnpay.in" target="_blank" class="hero-platform-card dp js-damnpay">
+      <div class="hpc-logo dp">
+        <svg width="26" height="26" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#D1286A"/><text x="4" y="23" font-family="Inter,sans-serif" font-weight="900" font-size="15" fill="#fff">DP</text></svg>
+      </div>
+      <div class="hpc-body">
+        <div class="hpc-name">DamnPay</div>
+        <div class="hpc-desc">Mobile recharge &amp; bill payments</div>
+      </div>
+      <svg class="hpc-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+
+    <div class="hero-rate-pill">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      <strong><span class="js-slot-points">5,000</span> points per slot</strong> &nbsp;· No lock-in · Withdraw anytime
+    </div>
+    <div class="hero-point-note js-point-note" style="display:none"></div>
+  </div>
+
+</section>
+
+<!-- STATS BAR -->
+<div class="stats-bar">
+  <div class="stats-inner">
+    <div class="stat-item reveal">
+      <div class="stat-num purple" id="c-slots">—</div>
+      <div class="stat-label">Magic Club Slots</div>
+    </div>
+    <div class="stat-item reveal reveal-delay-1">
+      <div class="stat-num js-slot-points">5,000</div>
+      <div class="stat-label">Points / Slot</div>
+    </div>
+    <div class="stat-item reveal reveal-delay-2">
+      <div class="stat-num">Anytime</div>
+      <div class="stat-label">Withdraw Points</div>
+    </div>
+    <div class="stat-item reveal reveal-delay-3">
+      <div class="stat-num pink" id="c-investors">—</div>
+      <div class="stat-label">Active Investors</div>
+    </div>
+    <div class="stat-item reveal reveal-delay-4">
+      <div class="stat-num js-platform-count">2</div>
+      <div class="stat-label">Live Platforms</div>
+    </div>
+  </div>
+</div>
+
+<!-- PLATFORMS -->
+<section class="platforms-section" id="platforms">
+  <div class="section-inner">
+    <p class="section-label reveal">Our Ecosystem</p>
+    <h2 class="section-title reveal reveal-delay-1 js-platforms-title">Two platforms.<br>One investment.</h2>
+    <p class="section-sub reveal reveal-delay-2 js-platforms-sub">Your Magic Club slots earn from combined activity across both — more transactions, more points.</p>
+
+    <div style="margin-top:3rem">
+      <!-- DamnDeal row -->
+      <div class="platform-row reveal">
+        <div class="platform-info">
+          <div class="platform-logo-row">
+            <div class="platform-logo-sq" style="background:#EDE9FE">
+              <svg width="24" height="24" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#6C2FD9"/><text x="4" y="23" font-family="Inter,sans-serif" font-weight="900" font-size="15" fill="#fff">DD</text></svg>
+            </div>
+            <div>
+              <div class="tag" style="color:var(--dd)">Hyperlocal E-Commerce</div>
+              <h3>DamnDeal</h3>
+            </div>
+          </div>
+          <p>Shop from local stores — groceries, electronics, fashion, medicine — delivered fast. Live across India &amp; USA.</p>
+          <div class="feature-chips">
+            <span class="feature-chip chip-dd">Multi-vendor</span>
+            <span class="feature-chip chip-dd">Quick Commerce</span>
+            <span class="feature-chip chip-dd">India + USA</span>
+            <span class="feature-chip chip-dd">Magic Club</span>
+          </div>
+        </div>
+        <div class="platform-visual dd-vis">
+          <div class="vis-letter dd">DD</div>
+          <a href="https://damndeal.in" target="_blank" class="vis-link dd">
+            damndeal.in
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <!-- DamnPay row (India only) -->
+      <div class="platform-row reveal reveal-delay-1 js-damnpay">
+        <div class="platform-info">
+          <div class="platform-logo-row">
+            <div class="platform-logo-sq" style="background:#FCE7F0">
+              <svg width="24" height="24" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#D1286A"/><text x="4" y="23" font-family="Inter,sans-serif" font-weight="900" font-size="15" fill="#fff">DP</text></svg>
+            </div>
+            <div>
+              <div class="tag" style="color:var(--dp)">Recharge &amp; Bill Payments</div>
+              <h3>DamnPay</h3>
+            </div>
+          </div>
+          <p>Instant mobile recharges, electricity, DTH, broadband and more — all in one app. Cashback on every transaction.</p>
+          <div class="feature-chips">
+            <span class="feature-chip chip-dp">All Operators</span>
+            <span class="feature-chip chip-dp">Utility Bills</span>
+            <span class="feature-chip chip-dp">DTH &amp; Broadband</span>
+            <span class="feature-chip chip-dp">Cashback</span>
+          </div>
+        </div>
+        <div class="platform-visual dp-vis">
+          <div class="vis-letter dp">DP</div>
+          <a href="https://damnpay.in" target="_blank" class="vis-link dp">
+            damnpay.in
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <!-- Combined note -->
+      <div class="combined-row reveal">
+        <div>
+          <div class="combined-tag">Why both?</div>
+          <p><strong>Two revenue streams</strong> — commerce commissions from DamnDeal and transaction fees from DamnPay — means your Magic Club slots earn from double the activity.</p>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div class="combined-tag">Revenue streams</div>
+          <div class="combined-num">2×</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how-section" id="how">
+  <div class="section-inner">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5rem;align-items:start">
+      <div>
+        <p class="section-label reveal">Process</p>
+        <h2 class="section-title reveal reveal-delay-1">Four steps<br>to start earning</h2>
+        <p class="section-sub reveal reveal-delay-2" style="margin-top:.75rem">No paperwork. No branch visit. Register in minutes from your phone.</p>
+        <a href="/investor/login.html" class="btn-plan btn-plan-filled reveal reveal-delay-3" style="display:inline-flex;align-items:center;gap:.5rem;margin-top:2rem;width:auto;padding:.75rem 1.5rem">
+          Open Account
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+      </div>
+      <div class="steps-list">
+        <div class="step-row active reveal reveal-delay-1">
+          <div class="step-numcol"><div class="step-circle">01</div></div>
+          <div class="step-content">
+            <h3>Register &amp; KYC</h3>
+            <p>Sign up with your phone number. Complete KYC with PAN or Aadhaar in minutes.</p>
+          </div>
+        </div>
+        <div class="step-row reveal reveal-delay-2">
+          <div class="step-numcol"><div class="step-circle">02</div></div>
+          <div class="step-content">
+            <h3>Buy Magic Club Slots</h3>
+            <p>Choose number of slots, bank transfer the amount, upload your payment receipt.</p>
+          </div>
+        </div>
+        <div class="step-row reveal reveal-delay-3">
+          <div class="step-numcol"><div class="step-circle">03</div></div>
+          <div class="step-content">
+            <h3>Earn Points</h3>
+            <p class="js-earn-sub">Points credited as DamnDeal &amp; DamnPay activity grows. Track your balance live.</p>
+          </div>
+        </div>
+        <div class="step-row reveal reveal-delay-4">
+          <div class="step-numcol"><div class="step-circle">04</div></div>
+          <div class="step-content">
+            <h3>Withdraw Anytime</h3>
+            <p>Request a payout to your bank. Processed in 3–5 business days, no lock-in period.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PLANS -->
+<section class="plans-section" id="plans">
+  <div class="section-inner">
+    <p class="section-label reveal">Investment Plans</p>
+    <h2 class="section-title reveal reveal-delay-1">Choose your entry</h2>
+    <p class="section-sub reveal reveal-delay-2 js-plans-sub">Every slot earns from all activity. <span class="js-slot-points">5,000</span> points per slot across all tiers.</p>
+
+    <div class="plans-grid" style="margin-top:3rem">
+      <div class="plan-card reveal reveal-delay-1">
+        <div class="plan-tier">Starter</div>
+        <div class="plan-slots">100 <span>Slots min.</span></div>
+        <div class="plan-divider"></div>
+        <ul class="plan-perks">
+          <li><span class="js-slot-points">5,000</span> points per slot</li>
+          <li>Points on all platform activity</li>
+          <li>Withdraw anytime</li>
+        </ul>
+        <a href="/investor/login.html" class="btn-plan btn-plan-outline">Get Started</a>
+      </div>
+
+      <div class="plan-card featured reveal reveal-delay-2">
+        <div class="plan-badge">Most Popular</div>
+        <div class="plan-tier">Growth</div>
+        <div class="plan-slots">500 <span>Slots</span></div>
+        <div class="plan-divider"></div>
+        <ul class="plan-perks">
+          <li><span class="js-slot-points">5,000</span> points per slot</li>
+          <li>Priority point credits</li>
+          <li>Dedicated support</li>
+          <li>Withdraw anytime</li>
+        </ul>
+        <a href="/investor/login.html" class="btn-plan btn-plan-white">Invest Now</a>
+      </div>
+
+      <div class="plan-card reveal reveal-delay-3">
+        <div class="plan-tier" style="color:var(--dp)">Premium</div>
+        <div class="plan-slots">1,000 <span>Slots</span></div>
+        <div class="plan-divider"></div>
+        <ul class="plan-perks">
+          <li><span class="js-slot-points">5,000</span> points per slot</li>
+          <li>Premium rewards</li>
+          <li>Direct team access</li>
+          <li>Withdraw anytime</li>
+        </ul>
+        <a href="/investor/login.html" class="btn-plan btn-plan-outline">Contact Us</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TRUST -->
+<section class="trust-section">
+  <div class="section-inner">
+    <p class="section-label reveal">Why Us</p>
+    <h2 class="section-title reveal reveal-delay-1">Built on transparency</h2>
+
+    <div class="trust-grid" style="margin-top:3rem">
+      <div class="trust-card reveal reveal-delay-1">
+        <div class="trust-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6C2FD9" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h4>KYC Verified</h4>
+        <p>All investors complete PAN or Aadhaar KYC before any slot purchase is activated.</p>
+      </div>
+      <div class="trust-card reveal reveal-delay-2">
+        <div class="trust-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D1286A" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <h4>Live &amp; Transacting</h4>
+        <p>Both platforms are live. You're investing in real, operating businesses — not promises.</p>
+      </div>
+      <div class="trust-card reveal reveal-delay-3">
+        <div class="trust-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <h4>No Lock-in</h4>
+        <p>Withdraw your earned points as cash anytime. No fixed term, no penalty, no minimum holding.</p>
+      </div>
+      <div class="trust-card reveal reveal-delay-4">
+        <div class="trust-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+        <h4>Live Dashboard</h4>
+        <p>Track slot IDs, point balance, purchases and withdrawals in real-time from your portal.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <h2 class="reveal">Own a piece of<br><em class="js-economy-short">India's digital growth.</em></h2>
+  <p class="reveal reveal-delay-1">Register in minutes. KYC, buy slots, earn — all from your phone.</p>
+  <a href="/investor/login.html" class="btn-cta reveal reveal-delay-2">
+    Open Your Account
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+  </a>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <svg viewBox="0 0 165 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <text x="0" y="22" font-family="Inter,sans-serif" font-weight="900" font-size="20" fill="#fff">Damn</text>
+        <text x="58" y="22" font-family="Inter,sans-serif" font-weight="900" font-size="20" fill="#C4B5FD">Deal</text>
+        <text x="103" y="22" font-family="Inter,sans-serif" font-weight="400" font-size="12" fill="rgba(255,255,255,.3)"> Invest</text>
+      </svg>
+      <p class="js-ecosystem-blurb">Earn passive returns from India's hyperlocal commerce and digital payments ecosystem.</p>
+    </div>
+    <div class="footer-col">
+      <h5>Platforms</h5>
+      <ul>
+        <li><a href="https://damndeal.in" target="_blank" class="js-dd-link">DamnDeal</a></li>
+        <li class="js-damnpay"><a href="https://damnpay.in" target="_blank">DamnPay</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h5>Portal</h5>
+      <ul>
+        <li><a href="/investor/login.html">Login / Register</a></li>
+        <li><a href="#how">How it Works</a></li>
+        <li><a href="#plans">Plans</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span class="js-copyright">© 2025 DamnDeal &amp; DamnPay. All rights reserved.</span>
+    <span><span class="js-slot-points">5,000</span> points / slot &nbsp;·&nbsp; No lock-in &nbsp;·&nbsp; KYC required</span>
+  </div>
+</footer>
+
+<script src="/investor/assets/js/config.js"></script>
+<script src="/investor/assets/js/auth.js"></script>
+<script>
+  // ── Region adaptation (IN = DamnDeal + DamnPay · US = DamnDeal only) ──
+  (function () {
+    var C = window.CONFIG || {};
+    var isUS = C.REGION === 'US';
+
+    // Slot points + platform count everywhere
+    document.querySelectorAll('.js-slot-points').forEach(function (el) {
+      el.textContent = C.SLOT_POINTS_FMT || '5,000';
+    });
+    document.querySelectorAll('.js-platform-count').forEach(function (el) {
+      el.textContent = C.PLATFORM_COUNT || '2';
+    });
+
+    if (!isUS) return; // India keeps the default markup (Global switch link)
+
+    // ── USA: flip the region switch to point back to India ──
+    var sw = document.getElementById('region-switch');
+    if (sw) { sw.textContent = '🇮🇳 India'; sw.href = 'https://damndeal.in/investor/index.html'; }
+    var swd = document.getElementById('region-switch-drawer');
+    if (swd) { swd.textContent = '🇮🇳 India Investors'; swd.href = 'https://damndeal.in/investor/index.html'; }
+
+    // ── USA-specific copy ──
+    var set = function (sel, html) {
+      var el = document.querySelector(sel);
+      if (el) el.innerHTML = html;
+    };
+    set('.js-economy-line', "the global digital<br><em>economy.</em>");
+    set('.js-economy-short', "global digital growth.");
+    set('.js-hero-sub', 'A live hyperlocal commerce platform. One investment. Points credited from real transactions. Withdraw anytime.');
+    set('.js-platforms-title', 'One platform.<br>One investment.');
+    set('.js-platforms-sub', 'Your Magic Club slots earn from DamnDeal activity — more transactions, more points.');
+    set('.js-earn-sub', 'Points credited as DamnDeal activity grows. Track your balance live.');
+    set('.js-ecosystem-blurb', C.ECOSYSTEM_BLURB || "a global hyperlocal commerce ecosystem.");
+    set('.js-copyright', '© 2025 DamnDeal. All rights reserved.');
+    set('.js-dd-desc', 'Hyperlocal e-commerce · Global');
+    document.querySelectorAll('.js-dd-link').forEach(function (a) { a.href = 'https://damndeal.com'; });
+    document.title = 'Invest — DamnDeal';
+
+    // Point-value note (1 point = 1 cent of local currency)
+    if (C.POINT_NOTE) {
+      document.querySelectorAll('.js-point-note').forEach(function (el) {
+        el.textContent = C.POINT_NOTE;
+        el.style.display = '';
+      });
+    }
+  })();
+
+  // ── Scroll: nav dark → light after hero
+  const nav = document.getElementById('main-nav');
+  const logoDark = document.getElementById('nav-logo-dark');
+  const logoLight = document.getElementById('nav-logo-light');
+  const heroEl = document.getElementById('hero');
+
+  function updateNav() {
+    const heroBottom = heroEl ? heroEl.getBoundingClientRect().bottom : 0;
+    const isLight = heroBottom < 64;
+    nav.classList.toggle('light', isLight);
+    logoDark.style.display = isLight ? 'none' : 'block';
+    logoLight.style.display = isLight ? 'block' : 'none';
+  }
+  window.addEventListener('scroll', updateNav, { passive: true });
+  updateNav();
+
+  // ── Hamburger
+  const hamburger = document.getElementById('nav-hamburger');
+  const drawer = document.getElementById('nav-drawer');
+  hamburger.addEventListener('click', () => {
+    const open = drawer.classList.toggle('open');
+    hamburger.classList.toggle('open', open);
+  });
+  function closeDrawer() {
+    drawer.classList.remove('open');
+    hamburger.classList.remove('open');
+  }
+  // close drawer on outside click
+  document.addEventListener('click', (e) => {
+    if (!nav.contains(e.target) && !drawer.contains(e.target)) closeDrawer();
+  });
+
+  // ── Intersection Observer: reveal on scroll
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); } });
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+  // ── Counter animation
+  function animateCount(el, target, prefix = '', suffix = '') {
+    const dur = 1600;
+    const start = performance.now();
+    const step = (now) => {
+      const p = Math.min((now - start) / dur, 1);
+      const eased = 1 - Math.pow(1 - p, 4);
+      el.textContent = prefix + Math.floor(eased * target).toLocaleString('en-IN') + suffix;
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  // ── Load public stats
+  (async () => {
+    try {
+      const data = await fetch(CONFIG.API_BASE + '/investor/public-stats').then(r => r.json());
+      if (data.success) {
+        const slotsEl = document.getElementById('c-slots');
+        const invEl = document.getElementById('c-investors');
+        const heroInvEl = document.getElementById('c-investors-hero');
+        const slotsIO = new IntersectionObserver(([e]) => {
+          if (e.isIntersecting) {
+            animateCount(slotsEl, data.totalSlots || 100);
+            animateCount(invEl, data.totalInvestors || 0);
+            slotsIO.disconnect();
+          }
+        });
+        if (slotsEl) slotsIO.observe(slotsEl);
+        if (heroInvEl) animateCount(heroInvEl, data.totalInvestors || 0);
+      }
+    } catch { /* stats are decorative — fail silently */ }
+  })();
+</script>
+</body>
+</html>

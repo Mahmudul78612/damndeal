@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Ads Services — Admin Login</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="brand-logo"><b>damn</b><span>deal</span><span class="tag">Ads</span></div>
+      <p class="sub" style="margin-top:.6rem">Admin Console — manage ads, advertisers & analytics</p>
+      <div id="alert"></div>
+      <label>Email</label>
+      <input id="email" type="email" placeholder="admin@adsservices.com" autofocus>
+      <label>Password</label>
+      <input id="password" type="password" placeholder="••••••••">
+      <button class="btn" id="btn" style="width:100%;justify-content:center;margin-top:1.2rem" onclick="doLogin()">Sign in</button>
+    </div>
+  </div>
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script>
+    requireGuest();
+    async function doLogin(){
+      const email=document.getElementById('email').value.trim();
+      const password=document.getElementById('password').value;
+      const btn=document.getElementById('btn');
+      if(!email||!password){ document.getElementById('alert').innerHTML='<div class="alert alert-err">Enter email & password</div>'; return; }
+      btn.disabled=true; btn.textContent='Signing in...';
+      try{ await login(email,password); location.href='dashboard.html'; }
+      catch(e){ document.getElementById('alert').innerHTML='<div class="alert alert-err">'+esc(e.message)+'</div>'; btn.disabled=false; btn.textContent='Sign in'; }
+    }
+    document.getElementById('password').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+  </script>
+</body>
+</html>

@@ -30,6 +30,12 @@ const bannerSchema = new mongoose.Schema(
       enum: ["ddgo", "damndeal"],
       default: "ddgo",
     },
+    regions: {
+      type: [String],
+      enum: ["IN", "US"],
+      default: ["IN"],
+      index: true,
+    },
     isActive: {
       type: Boolean,
       default: true,

@@ -61,7 +61,7 @@
       if (!allSubCategories.length) await loadSubCategories();
       if (!allProducts.length) await loadProducts();
       if (!allCategories.length) await loadCategories();
-      const data = await API.get("/admin/banners");
+      const data = await API.get("/admin/banners?region=all");
       const banners = data.banners || [];
 
       content.innerHTML = `
@@ -72,11 +72,14 @@
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">
           ${banners.map(b => {
             const subNames = (b.subCategories || []).map(s => typeof s === 'object' ? s.name : allSubCategories.find(x => x._id === s)?.name || s).filter(Boolean);
+            const regs = Array.isArray(b.regions) && b.regions.length ? b.regions : ['IN'];
+            const regBadges = regs.map(r => `<span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;margin-right:4px;color:#fff;background:${r==='US'?'#0EA5E9':'#10B981'}">${r}</span>`).join('');
             return `
             <div class="card">
               <div style="height:160px;background:#f3f4f6;border-radius:8px 8px 0 0;overflow:hidden;position:relative">
                 ${b.image ? `<img src="${imgSrc(b.image)}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'">` : '<div class="text-center text-muted" style="padding-top:60px">No image</div>'}
                 <span style="position:absolute;top:8px;right:8px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;color:#fff;background:${b.platform === 'damndeal' ? '#7C3AED' : '#0D7A30'}">${b.platform === 'damndeal' ? 'Online Store' : 'Quick Commerce'}</span>
+                <div style="position:absolute;top:8px;left:8px">${regBadges}</div>
               </div>
               <div class="card-body" style="padding:12px">
                 <div style="font-weight:600;margin-bottom:4px">${(b.title || 'Untitled').replace(/</g,'&lt;')}</div>
@@ -124,6 +127,14 @@
               <div class="form-row">
                 <div class="form-group"><label>Sort Order</label>
                   <input class="form-control" type="number" id="b-order" value="0">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Regions</label>
+                <div style="display:flex;gap:14px;padding:6px 0">
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="b-region-IN" value="IN" checked> 🇮🇳 IN</label>
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="b-region-US" value="US"> 🇺🇸 US (damndeal.com)</label>
                 </div>
               </div>
 
@@ -234,6 +245,9 @@
       document.getElementById('b-place').value = b.placement || 'home_top';
       document.getElementById('b-order').value = b.sortOrder || 0;
       document.getElementById('b-active').checked = b.isActive !== false;
+      const regs = Array.isArray(b.regions) && b.regions.length ? b.regions : ['IN'];
+      document.getElementById('b-region-IN').checked = regs.includes('IN');
+      document.getElementById('b-region-US').checked = regs.includes('US');
       document.getElementById('b-linkType').value = b.linkType || 'none';
       onLinkTypeChange(b.linkValue || '');
       const subs = (b.subCategories || []).map(s => typeof s === 'object' ? s._id : s);
@@ -260,6 +274,12 @@
     fd.append('sortOrder', document.getElementById('b-order').value);
     fd.append('isActive', document.getElementById('b-active').checked);
     if (fileInput.files[0]) fd.append('image', fileInput.files[0]);
+
+    const regions = [];
+    if (document.getElementById('b-region-IN').checked) regions.push('IN');
+    if (document.getElementById('b-region-US').checked) regions.push('US');
+    if (!regions.length) return showToast('Select at least one region', 'error');
+    fd.append('regions', JSON.stringify(regions));
 
     const subIds = [];
     for (let i = 1; i <= 4; i++) {

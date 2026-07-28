@@ -33,6 +33,11 @@ const SECRET_KEYS = new Set([
   // SMTP
   "smtp_pass",
   "smtp_user",
+  // Magic Club
+  "magicclub_api_key",
+  // Stripe (US / damndeal.com)
+  "us_stripe_secret_key",
+  "us_stripe_webhook_secret",
 ]);
 
 const PREFIX = "enc:v1:";

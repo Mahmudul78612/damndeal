@@ -148,6 +148,21 @@ a:hover { color: var(--primary-light); }
 }
 .btn-logout:hover { border-color: var(--danger); color: var(--danger); }
 
+.region-switcher {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+  transition: all var(--transition);
+}
+.region-switcher:hover { border-color: var(--primary); color: var(--primary); }
+.region-switcher:focus { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-bg); }
+
 /* Content */
 .content { flex: 1; padding: 24px; }
 

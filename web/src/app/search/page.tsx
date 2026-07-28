@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { api, imgUrl } from '@/lib/api';
+import { api, imgUrl, CURRENCY_SYMBOL } from "@/lib/api";
 import { Product } from '@/lib/types';
 import Image from 'next/image';
 import { Search as SearchIcon, X, Plus, Minus } from 'lucide-react';
@@ -127,9 +127,9 @@ function SearchPageInner() {
           )}
           <div className="flex items-center justify-between mt-1.5">
             <div>
-              <span className="text-sm font-bold text-gray-900">₹{p.sellingPrice}</span>
+              <span className="text-sm font-bold text-gray-900">{CURRENCY_SYMBOL}{p.sellingPrice}</span>
               {discount > 0 && (
-                <span className="text-[10px] text-gray-400 line-through ml-1">₹{p.mrp || p.price}</span>
+                <span className="text-[10px] text-gray-400 line-through ml-1">{CURRENCY_SYMBOL}{p.mrp || p.price}</span>
               )}
             </div>
             {p.stock > 0 && (

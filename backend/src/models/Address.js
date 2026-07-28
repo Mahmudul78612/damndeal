@@ -31,15 +31,26 @@ const addressSchema = new mongoose.Schema(
     },
     pincode: {
       type: String,
-      required: true,
+      default: null,
+    },
+    // US ZIP code (5 or 9 digit). Either pincode (IN) or zip (US) must exist.
+    zip: {
+      type: String,
+      default: null,
+    },
+    country: {
+      type: String,
+      enum: ["IN", "US"],
+      default: "IN",
+      index: true,
     },
     lat: {
       type: Number,
-      required: true,
+      default: null,
     },
     lng: {
       type: Number,
-      required: true,
+      default: null,
     },
     isDefault: {
       type: Boolean,
