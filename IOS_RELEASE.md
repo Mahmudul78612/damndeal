@@ -6,24 +6,36 @@ Sab compliance kaam ho chuka hai. Aapko Mac pe sirf ye steps karne hain.
 
 | | India app | US app |
 |---|---|---|
-| Folder | `webviewapp/` | `damndealcomapp/` |
+| Folder / zip | `webviewapp/` (`damndeal-india-ios.zip`) | `damndealcomapp/` (`damndeal-usa-ios.zip`) |
 | Bundle ID | `com.damndealappp.in` | `com.damndealcom.in` |
 | Display name | Damndeal | DamnDeal |
 | Version | 1.0.2 (build 3) | 1.0.0 (build 1) |
 | Website | damndeal.in | damndeal.com |
 | Firebase/FCM | Android-only (iOS pe auto-off) | Nahi hai |
+| Devices | **iPhone-only** (iPad nahi — iPad screenshots ki zaroorat NAHI) | **iPhone-only** |
 
 ## Pehli baar Mac pe (one-time setup)
 
 1. Flutter install karo (`flutter doctor` sab green ho, Xcode + CocoaPods ke saath).
 2. Apple Developer account ($99/yr) active ho aur Xcode me Sign in ho (Settings → Accounts).
 
+## Pendrive se Mac pe
+
+1. Dono zip Mac pe copy karo (e.g. `~/Desktop`) aur extract karo:
+   ```sh
+   cd ~/Desktop
+   unzip damndeal-india-ios.zip -d damndeal-india
+   unzip damndeal-usa-ios.zip -d damndeal-usa
+   ```
+2. Zip me sirf iOS-relevant code hai (lib/ios/assets/pubspec) — android folder,
+   keystore, credentials kuch nahi hai. `flutter pub get` baki sab regenerate kar dega.
+
 ## Har app ke liye build steps
 
 Terminal me (pehle India, phir US — same steps):
 
 ```sh
-cd webviewapp        # ya damndealcomapp
+cd damndeal-india/webviewapp        # ya damndeal-usa/damndealcomapp
 flutter pub get
 cd ios && pod install && cd ..
 open ios/Runner.xcworkspace   # .xcworkspace kholna, .xcodeproj NAHI
@@ -51,16 +63,37 @@ Xcode me:
    - Phone: `9876543210` — OTP: `600265` (fixed test OTP)
    - Notes me likho: "E-commerce app. Use the provided test phone number; OTP is fixed for review."
    - US app email/password login use karta hai — ek test account bana ke wahi do.
-6. Screenshots: 6.7" (iPhone 15 Pro Max) required. Simulator me app chala ke `Cmd+S` se lo.
+6. Screenshots: sirf **6.7" iPhone** (iPhone 15 Pro Max simulator) — 3 se 10 screenshots.
+   **iPad screenshots ki zaroorat NAHI** — app iPhone-only set hai. Simulator me app chala ke `Cmd+S` se lo.
 7. Privacy Policy URL: `https://damndeal.in/privacy-policy` / `https://damndeal.com/privacy-policy`
+
+## ⚠️ Apple reject hone ka sabse bada risk — Guideline 4.2 (Minimum Functionality)
+
+Apple website-wrapper apps ko kabhi-kabhi 4.2 pe reject karta hai ("just a website").
+Risk kam karne ke liye:
+
+- **Review Notes me ye likhna** (App Review Information → Notes):
+  > "This is our official native shopping app for our own e-commerce platform
+  > (we own the website and the brand). The app includes native features:
+  > custom splash screen, native share sheet, external payment app handoff,
+  > push notifications (Android parity), pull-to-refresh, and native navigation
+  > handling. We are the brand owner — not a third-party wrapper."
+- Account **Organization** type ho to best hai; Individual pe bhi chalega.
+- Agar phir bhi 4.2 reject aaye: reply karke appeal karo (brand owner ho, Play Store
+  pe same app live hai) — aksar appeal pe approve ho jata hai. Zaroorat pade to mujhe
+  bolna, native features (in-app notifications screen, offline page, quick actions)
+  add kar dunga.
 
 ## Kya kya already fix ho chuka hai (dobara mat chhedna)
 
 - ✅ Unique bundle IDs (pehle dono me duplicate tha — App Store reject ho jata)
 - ✅ `Podfile` dono me (`platform :ios, '13.0'`)
 - ✅ Info.plist: encryption-exempt key, camera/photo/mic/location usage descriptions, portrait-only
+- ✅ **iPhone-only** (`TARGETED_DEVICE_FAMILY = 1`) — iPad screenshots/support ki zaroorat nahi
 - ✅ India app ka Firebase iOS pe guarded — bina `GoogleService-Info.plist` ke bhi crash nahi hoga
-- ✅ App icons (21 sizes, no-alpha PNG — App Store safe)
+- ✅ App icons (21 sizes incl. 1024 marketing, no-alpha RGB PNG — App Store safe)
+- ✅ UPI/tel/whatsapp external links iOS pe url_launcher se khulte hain (`LSApplicationQueriesSchemes` set)
+- ✅ Min iOS 13.0 har jagah consistent (pbxproj + Podfile + AppFrameworkInfo.plist)
 
 ## Note: iOS pe push notifications (India app)
 
