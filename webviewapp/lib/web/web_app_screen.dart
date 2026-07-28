@@ -4,13 +4,17 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:quick_actions/quick_actions.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../main.dart' show firebaseSupported;
+import '../native/offers_screen.dart';
 
 const String kHomeUrl = 'https://damndeal.in/';
+const String kSiteOrigin = 'https://damndeal.in';
+const String kRegion = 'IN';
 const Color _homeStatusBarColor = Color(0xFF8B2E82);
 const Color _innerStatusBarColor = Colors.white;
 const double _scrollbarMaskWidth = 4;
@@ -168,6 +172,7 @@ class _WebAppScreenState extends State<WebAppScreen>
     _useTopInset = _shouldInsetForUrl(kHomeUrl);
     _applyStatusBarStyle(_useTopInset);
     _initFcm();
+    _initQuickActions();
 
     _controller = WebViewController()
       ..setUserAgent(_mobileUserAgent)
@@ -445,6 +450,45 @@ class _WebAppScreenState extends State<WebAppScreen>
     return Uri.decodeComponent(encoded);
   }
 
+  void _initQuickActions() {
+    const quickActions = QuickActions();
+    quickActions.initialize((type) {
+      HapticFeedback.mediumImpact();
+      switch (type) {
+        case 'orders':
+          _controller.loadRequest(Uri.parse('$kSiteOrigin/orders'));
+        case 'cart':
+          _controller.loadRequest(Uri.parse('$kSiteOrigin/cart'));
+        case 'offers':
+          _openOffers();
+      }
+    });
+    quickActions.setShortcutItems(const [
+      ShortcutItem(type: 'offers', localizedTitle: 'Offers & Updates'),
+      ShortcutItem(type: 'orders', localizedTitle: 'My Orders'),
+      ShortcutItem(type: 'cart', localizedTitle: 'My Cart'),
+    ]);
+  }
+
+  Future<void> _openOffers() async {
+    HapticFeedback.mediumImpact();
+    if (!mounted) {
+      return;
+    }
+    final link = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => const OffersScreen(
+          baseUrl: kSiteOrigin,
+          region: kRegion,
+          accent: _homeStatusBarColor,
+        ),
+      ),
+    );
+    if (link != null && link.isNotEmpty && mounted) {
+      await _controller.loadRequest(Uri.parse(link));
+    }
+  }
+
   Future<bool> _handleBack() async {
     if (await _controller.canGoBack()) {
       await _controller.goBack();
@@ -570,6 +614,29 @@ class _WebAppScreenState extends State<WebAppScreen>
                           child: ColoredBox(
                             color: Color(0x11FFFFFF),
                             child: Center(child: CircularProgressIndicator()),
+                          ),
+                        ),
+                      ),
+                    if (!_showSplash && !_hasError && !_useTopInset)
+                      Positioned(
+                        right: 14,
+                        bottom: 96,
+                        child: Material(
+                          color: Colors.white,
+                          shape: const CircleBorder(),
+                          elevation: 4,
+                          shadowColor: Colors.black38,
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: _openOffers,
+                            child: const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Icon(
+                                Icons.notifications_active_outlined,
+                                color: _homeStatusBarColor,
+                                size: 24,
+                              ),
+                            ),
                           ),
                         ),
                       ),

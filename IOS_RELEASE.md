@@ -75,9 +75,12 @@ Risk kam karne ke liye:
 - **Review Notes me ye likhna** (App Review Information → Notes):
   > "This is our official native shopping app for our own e-commerce platform
   > (we own the website and the brand). The app includes native features:
-  > custom splash screen, native share sheet, external payment app handoff,
-  > push notifications (Android parity), pull-to-refresh, and native navigation
-  > handling. We are the brand owner — not a third-party wrapper."
+  > a native Offers & Updates center (server-driven content, pull-to-refresh,
+  > haptic feedback — bell button on the home screen), iOS Home Screen Quick
+  > Actions (Offers / My Orders / My Cart via long-press on the app icon),
+  > custom splash screen, native share sheet, native offline screen with retry,
+  > external payment app handoff, and native navigation handling. We are the
+  > brand owner — not a third-party wrapper."
 - Account **Organization** type ho to best hai; Individual pe bhi chalega.
 - Agar phir bhi 4.2 reject aaye: reply karke appeal karo (brand owner ho, Play Store
   pe same app live hai) — aksar appeal pe approve ho jata hai. Zaroorat pade to mujhe
@@ -94,6 +97,10 @@ Risk kam karne ke liye:
 - ✅ App icons (21 sizes incl. 1024 marketing, no-alpha RGB PNG — App Store safe)
 - ✅ UPI/tel/whatsapp external links iOS pe url_launcher se khulte hain (`LSApplicationQueriesSchemes` set)
 - ✅ Min iOS 13.0 har jagah consistent (pbxproj + Podfile + AppFrameworkInfo.plist)
+- ✅ **Native features (4.2 protection)**: Offers & Updates screen (home pe bell
+  button → live banners/products natively, pull-to-refresh, haptics), Home Screen
+  Quick Actions (app icon long-press → Offers / My Orders / My Cart), native
+  offline screen — dono apps me
 
 ## Note: iOS pe push notifications (India app)
 
