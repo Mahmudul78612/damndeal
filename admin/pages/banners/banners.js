@@ -120,6 +120,7 @@
                     <option value="home_middle">Home Middle</option>
                     <option value="home_bottom">Home Bottom</option>
                     <option value="category_page">Category Page</option>
+                    <option value="app_offers">App — Offers Tab</option>
                     <option value="partner_page">Partner Page</option>
                   </select>
                 </div>

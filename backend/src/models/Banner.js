@@ -22,7 +22,7 @@ const bannerSchema = new mongoose.Schema(
     },
     placement: {
       type: String,
-      enum: ["home_top", "home_middle", "home_bottom", "home_square", "category_page", "partner_page"],
+      enum: ["home_top", "home_middle", "home_bottom", "home_square", "category_page", "partner_page", "app_offers"],
       default: "home_top",
     },
     platform: {

@@ -195,53 +195,66 @@ function resolveBannerLink(b) {
 }
 
 // GET /user/app-feed — server-driven feed for the native app "Offers & Updates" tab.
-// Returns a flat, ready-to-render list; the app does no section parsing.
+// Structured: banners (admin "app_offers" placement wins, else home banners),
+// deals (live Offers), featured products, fresh arrivals. Everything carries a link.
+// A deduped flat `items` list is kept for older app builds.
 async function getAppFeed(req, res) {
   const regionF = regionFilter(req);
   const platform = req.query.platform || "damndeal";
   const region = ((req && req.region) || "IN").toUpperCase();
   const currency = region === "US" ? "USD" : "INR";
-  const items = [];
+  const now = new Date();
+  const dateWindow = {
+    $and: [
+      { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
+      { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
+    ],
+  };
+
+  // 1) Banners — dedicated App Offers placement wins; fallback to home banners
+  const bannersOut = [];
   const pushBanner = (b, fallbackTitle) => {
     if (!b || !b.image) return;
-    items.push({
-      kind: "banner",
+    bannersOut.push({
       title: b.title || fallbackTitle || "",
-      subtitle: "",
       image: b.image,
       link: resolveBannerLink(b),
     });
   };
-
-  // 1a) Custom banners stored inside homepage layout sections (layout builder)
-  const bannerSections = await HomeSection.find({
-    isActive: true,
-    type: { $in: ["banner_carousel", "custom_banner"] },
-    ...regionF,
-    $or: [{ platform }, { platform: { $exists: false } }, { platform: null }],
-  }).sort({ sortOrder: 1 }).lean();
-  for (const s of bannerSections) {
-    const custom = Array.isArray(s.data && s.data.banners) ? s.data.banners : [];
-    for (const b of custom) pushBanner(b, s.title);
+  const appBanners = await Banner.find({
+    isActive: true, platform, placement: "app_offers", ...regionF, ...dateWindow,
+  }).sort({ sortOrder: 1 }).limit(10).lean();
+  if (appBanners.length) {
+    for (const b of appBanners) pushBanner(b, "");
+  } else {
+    const bannerSections = await HomeSection.find({
+      isActive: true,
+      type: { $in: ["banner_carousel", "custom_banner"] },
+      ...regionF,
+      $or: [{ platform }, { platform: { $exists: false } }, { platform: null }],
+    }).sort({ sortOrder: 1 }).lean();
+    for (const s of bannerSections) {
+      const custom = Array.isArray(s.data && s.data.banners) ? s.data.banners : [];
+      for (const b of custom) pushBanner(b, s.title);
+    }
+    const homeBanners = await Banner.find({
+      isActive: true,
+      platform,
+      placement: { $in: ["home_top", "home_middle", "home_bottom", "home_square"] },
+      ...regionF,
+      ...dateWindow,
+    }).sort({ sortOrder: 1 }).limit(20).lean();
+    for (const b of homeBanners) pushBanner(b, "");
   }
 
-  // 1b) Banner collection (classic banners), admin-ordered
-  const banners = await Banner.find({
-    isActive: true,
-    platform,
-    placement: { $in: ["home_top", "home_middle", "home_bottom", "home_square"] },
-    ...regionF,
-  }).sort({ sortOrder: 1 }).limit(20).lean();
-  for (const b of banners) pushBanner(b, "");
-
   // 2) Live limited-time deals (Offer model)
-  const now = new Date();
+  const deals = [];
   const offers = await Offer.find({
     isActive: true,
     startDate: { $lte: now },
     endDate: { $gte: now },
   })
-    .populate({ path: "products", select: "name images sellingPrice regions", options: { limit: 3 } })
+    .populate({ path: "products", select: "name images sellingPrice regions" })
     .sort({ createdAt: -1 })
     .limit(10)
     .lean();
@@ -251,40 +264,58 @@ async function getAppFeed(req, res) {
         (Array.isArray(x.regions) ? x.regions.includes(region) : true)
     );
     if (!p) continue;
-    items.push({
-      kind: "deal",
+    deals.push({
       title: o.title,
       subtitle: o.description || "Limited-time deal",
       image: p.images[0],
       link: `/product/${p._id}`,
       price: p.sellingPrice,
-      currency,
     });
   }
 
-  // 3) Featured products first, then newest — keeps the feed alive even with no banners
+  // 3) Featured products (admin-flagged) + fresh arrivals
   const prodFilter = { isActive: true, approvalStatus: "approved", stock: { $gt: 0 }, ...regionF };
-  const products = await Product.find(prodFilter)
-    .select("name images sellingPrice isFeatured")
-    .sort({ isFeatured: -1, createdAt: -1 })
-    .limit(12)
-    .lean();
-  for (const p of products) {
-    if (!Array.isArray(p.images) || !p.images.length) continue;
-    items.push({
-      kind: "product",
-      title: p.name,
-      subtitle: p.isFeatured ? "Featured" : "New arrival",
-      image: p.images[0],
-      link: `/product/${p._id}`,
-      price: p.sellingPrice,
-      currency,
-    });
-  }
+  const mapProduct = (p) => ({
+    id: p._id,
+    name: p.name,
+    image: (Array.isArray(p.images) && p.images[0]) || "",
+    price: p.sellingPrice,
+    mrp: typeof p.mrp === "number" && p.mrp > p.sellingPrice ? p.mrp : null,
+    link: `/product/${p._id}`,
+  });
+  const [featuredRaw, freshRaw] = await Promise.all([
+    Product.find({ ...prodFilter, isFeatured: true })
+      .select("name images sellingPrice mrp").sort({ createdAt: -1 }).limit(10).lean(),
+    Product.find(prodFilter)
+      .select("name images sellingPrice mrp").sort({ createdAt: -1 }).limit(14).lean(),
+  ]);
+  const featured = featuredRaw.map(mapProduct).filter((p) => p.image);
+  const featuredIds = new Set(featured.map((p) => String(p.id)));
+  const fresh = freshRaw
+    .map(mapProduct)
+    .filter((p) => p.image && !featuredIds.has(String(p.id)))
+    .slice(0, 10);
 
+  // Deduped flat list for backward compatibility with older app builds
+  const items = [];
+  for (const b of bannersOut) items.push({ kind: "banner", title: b.title, subtitle: "", image: b.image, link: b.link });
+  for (const d of deals) items.push({ kind: "deal", ...d, currency });
+  for (const p of [...featured, ...fresh]) {
+    items.push({ kind: "product", title: p.name, subtitle: "", image: p.image, link: p.link, price: p.price, currency });
+  }
   const seenImages = new Set();
   const deduped = items.filter((i) => i.image && !seenImages.has(i.image) && seenImages.add(i.image));
-  return res.json({ success: true, region, currency, items: deduped });
+
+  return res.json({
+    success: true,
+    region,
+    currency,
+    banners: bannersOut,
+    deals,
+    featured,
+    fresh,
+    items: deduped,
+  });
 }
 
 // GET /user/app-categories-page — server-driven native Categories tab:

@@ -1,14 +1,16 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
-/// Native "Offers & Updates" screen.
+/// Native "Offers & Updates" screen — fully server/admin-driven.
 ///
-/// Fetches the live homepage banners/offers from the DamnDeal API and renders
-/// them natively (pull-to-refresh, haptics, native navigation). Tapping a card
-/// pops back with the target URL so the main WebView can open it.
+/// Renders the structured feed from GET /user/app-feed:
+/// banner carousel (admin "App — Offers Tab" placement, else home banners),
+/// live deals, featured products and fresh arrivals. Every element is
+/// clickable and hands its web URL back to the shell.
 class OffersScreen extends StatefulWidget {
   const OffersScreen({
     super.key,
@@ -37,28 +39,43 @@ class OffersScreen extends StatefulWidget {
   State<OffersScreen> createState() => _OffersScreenState();
 }
 
-class _OfferItem {
-  const _OfferItem({
+class _FeedBanner {
+  const _FeedBanner({required this.image, required this.link});
+
+  final String image;
+  final String link;
+}
+
+class _FeedProduct {
+  const _FeedProduct({
     required this.title,
-    required this.section,
     required this.image,
     required this.link,
+    this.subtitle = '',
     this.price,
+    this.mrp,
   });
 
   final String title;
-  final String section;
+  final String subtitle;
   final String image;
   final String link;
-
-  /// Formatted price — non-null makes this render as a compact product row.
   final String? price;
+  final String? mrp;
 }
 
 class _OffersScreenState extends State<OffersScreen> {
   bool _loading = true;
   String? _error;
-  List<_OfferItem> _items = const [];
+  List<_FeedBanner> _banners = const [];
+  List<_FeedProduct> _deals = const [];
+  List<_FeedProduct> _featured = const [];
+  List<_FeedProduct> _fresh = const [];
+
+  final PageController _bannerController =
+      PageController(viewportFraction: 0.94);
+  Timer? _bannerTimer;
+  int _bannerPage = 0;
 
   @override
   void initState() {
@@ -66,146 +83,11 @@ class _OffersScreenState extends State<OffersScreen> {
     _fetch();
   }
 
-  Future<void> _fetch() async {
-    if (mounted) {
-      setState(() {
-        _loading = true;
-        _error = null;
-      });
-    }
-    try {
-      final items = await _fetchServerFeed();
-      if (!mounted) return;
-      if (items.isNotEmpty) {
-        setState(() {
-          _items = items;
-          _loading = false;
-        });
-        return;
-      }
-    } catch (_) {
-      // Fall through to the legacy home-section parser below.
-    }
-    await _fetchFromHome();
-  }
-
-  /// Preferred source: dedicated server-driven feed (GET /user/app-feed).
-  Future<List<_OfferItem>> _fetchServerFeed() async {
-    final res = await http.get(
-      Uri.parse('${widget.baseUrl}/proxy-api/user/app-feed?platform=damndeal'),
-      headers: {'x-region': widget.region},
-    ).timeout(const Duration(seconds: 15));
-    if (res.statusCode != 200) {
-      throw Exception('HTTP ${res.statusCode}');
-    }
-    final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-    if (decoded['success'] != true) {
-      throw Exception('feed unavailable');
-    }
-    final rawItems = (decoded['items'] as List?) ?? const [];
-    final items = <_OfferItem>[];
-    for (final raw in rawItems) {
-      if (raw is! Map) continue;
-      final image = (raw['image'] ?? '').toString();
-      if (image.isEmpty) continue;
-      final priceValue = raw['price'];
-      final currency = (raw['currency'] ?? '').toString();
-      String? price;
-      if (priceValue is num) {
-        final symbol = currency == 'USD' ? '\$' : '₹';
-        final rounded = priceValue == priceValue.roundToDouble()
-            ? priceValue.toInt().toString()
-            : priceValue.toStringAsFixed(2);
-        price = '$symbol$rounded';
-      }
-      final link = (raw['link'] ?? '').toString();
-      items.add(_OfferItem(
-        title: (raw['title'] ?? '').toString(),
-        section: (raw['subtitle'] ?? '').toString(),
-        image: _absolutize(image),
-        link: link.isEmpty ? '' : _absolutize(link),
-        price: price,
-      ));
-      if (items.length >= 40) break;
-    }
-    return items;
-  }
-
-  /// Fallback: parse the homepage sections (older servers without /app-feed).
-  Future<void> _fetchFromHome() async {
-    try {
-      final res = await http.get(
-        Uri.parse('${widget.baseUrl}/proxy-api/user/home?platform=damndeal'),
-        headers: {'x-region': widget.region},
-      ).timeout(const Duration(seconds: 15));
-      if (res.statusCode != 200) {
-        throw Exception('HTTP ${res.statusCode}');
-      }
-      final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-      final sections = (decoded['sections'] as List?) ?? const [];
-      final seen = <String>{};
-      final items = <_OfferItem>[];
-      for (final rawSection in sections) {
-        if (rawSection is! Map) continue;
-        final sectionTitle = (rawSection['title'] ?? '').toString();
-        final rawItems = (rawSection['items'] as List?) ?? const [];
-        var productsFromSection = 0;
-        for (final rawItem in rawItems) {
-          if (rawItem is! Map) continue;
-          var image = (rawItem['image'] ?? '').toString();
-          var title = (rawItem['title'] ?? '').toString();
-          var link = '';
-          String? price;
-          if (image.isNotEmpty) {
-            // Banner-style item.
-            link = _resolveLink(rawItem);
-          } else {
-            // Product-style item (name + images list + region price).
-            final images = rawItem['images'];
-            if (images is! List || images.isEmpty) continue;
-            if (productsFromSection >= 4) continue;
-            image = images.first.toString();
-            if (image.isEmpty) continue;
-            title = (rawItem['name'] ?? '').toString();
-            final id = (rawItem['_id'] ?? '').toString();
-            if (id.isNotEmpty) link = _absolutize('/product/$id');
-            final sp = rawItem['sellingPrice'];
-            if (sp is num) price = _formatPrice(sp);
-            productsFromSection++;
-          }
-          final absImage = _absolutize(image);
-          if (!seen.add(absImage)) continue;
-          items.add(_OfferItem(
-            title: title.isNotEmpty ? title : sectionTitle,
-            section: sectionTitle,
-            image: absImage,
-            link: link,
-            price: price,
-          ));
-          if (items.length >= 30) break;
-        }
-        if (items.length >= 30) break;
-      }
-      if (!mounted) return;
-      setState(() {
-        _items = items;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'Could not load offers. Check your connection and try again.';
-        _loading = false;
-      });
-    }
-  }
-
-  String _formatPrice(num value) {
-    final symbol = widget.region == 'IN' ? '₹' : '\$';
-    final rounded = value == value.roundToDouble()
-        ? value.toInt().toString()
-        : value.toStringAsFixed(2);
-    return '$symbol$rounded';
+  @override
+  void dispose() {
+    _bannerTimer?.cancel();
+    _bannerController.dispose();
+    super.dispose();
   }
 
   String _absolutize(String pathOrUrl) {
@@ -218,45 +100,112 @@ class _OffersScreenState extends State<OffersScreen> {
     return '${widget.baseUrl}/$pathOrUrl';
   }
 
-  /// Mirrors the web storefront's banner link resolution.
-  String _resolveLink(Map<dynamic, dynamic> item) {
-    final linkType = (item['linkType'] ?? '').toString();
-    final linkValue = (item['linkValue'] ??
-            item['categoryId'] ??
-            item['subCategoryId'] ??
-            item['productId'] ??
-            item['link'] ??
-            '')
-        .toString();
-    if (linkValue.isEmpty) return '';
-    switch (linkType) {
-      case 'category':
-        return _absolutize('/categories/$linkValue');
-      case 'subcategory':
-        return _absolutize('/subcategory/$linkValue');
-      case 'product':
-        return _absolutize('/product/$linkValue');
-      case 'url':
-        return _absolutize(linkValue);
-    }
-    if (linkValue.startsWith('/') ||
-        linkValue.startsWith('http://') ||
-        linkValue.startsWith('https://')) {
-      return _absolutize(linkValue);
-    }
-    return '';
+  String _formatPrice(num value, String currency) {
+    final symbol = currency == 'USD' ? '\$' : '₹';
+    final rounded = value == value.roundToDouble()
+        ? value.toInt().toString()
+        : value.toStringAsFixed(2);
+    return '$symbol$rounded';
   }
 
-  void _openItem(_OfferItem item) {
+  Future<void> _fetch() async {
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
+    try {
+      final res = await http.get(
+        Uri.parse('${widget.baseUrl}/proxy-api/user/app-feed?platform=damndeal'),
+        headers: {'x-region': widget.region},
+      ).timeout(const Duration(seconds: 15));
+      if (res.statusCode != 200) {
+        throw Exception('HTTP ${res.statusCode}');
+      }
+      final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+      if (decoded['success'] != true) {
+        throw Exception('feed unavailable');
+      }
+      final currency = (decoded['currency'] ?? '').toString();
+
+      final banners = <_FeedBanner>[];
+      for (final raw in (decoded['banners'] as List?) ?? const []) {
+        if (raw is! Map) continue;
+        final image = (raw['image'] ?? '').toString();
+        if (image.isEmpty) continue;
+        final link = (raw['link'] ?? '').toString();
+        banners.add(_FeedBanner(
+          image: _absolutize(image),
+          link: link.isEmpty ? '' : _absolutize(link),
+        ));
+      }
+
+      List<_FeedProduct> parseProducts(String key, {String titleKey = 'name'}) {
+        final out = <_FeedProduct>[];
+        for (final raw in (decoded[key] as List?) ?? const []) {
+          if (raw is! Map) continue;
+          final image = (raw['image'] ?? '').toString();
+          if (image.isEmpty) continue;
+          final link = (raw['link'] ?? '').toString();
+          final price = raw['price'];
+          final mrp = raw['mrp'];
+          out.add(_FeedProduct(
+            title: (raw[titleKey] ?? raw['title'] ?? '').toString(),
+            subtitle: (raw['subtitle'] ?? '').toString(),
+            image: _absolutize(image),
+            link: link.isEmpty ? '' : _absolutize(link),
+            price: price is num ? _formatPrice(price, currency) : null,
+            mrp: mrp is num ? _formatPrice(mrp, currency) : null,
+          ));
+        }
+        return out;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _banners = banners;
+        _deals = parseProducts('deals', titleKey: 'title');
+        _featured = parseProducts('featured');
+        _fresh = parseProducts('fresh');
+        _loading = false;
+      });
+      _startBannerAutoScroll();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Could not load offers. Check your connection and try again.';
+        _loading = false;
+      });
+    }
+  }
+
+  void _startBannerAutoScroll() {
+    _bannerTimer?.cancel();
+    if (_banners.length < 2) return;
+    _bannerTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted || !_bannerController.hasClients) return;
+      _bannerPage = (_bannerPage + 1) % _banners.length;
+      _bannerController.animateToPage(
+        _bannerPage,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  void _open(String link) {
+    if (link.isEmpty) return;
     HapticFeedback.selectionClick();
     if (widget.onOpenLink != null) {
-      if (item.link.isNotEmpty) {
-        widget.onOpenLink!(item.link);
-      }
+      widget.onOpenLink!(link);
       return;
     }
-    Navigator.of(context).pop(item.link.isNotEmpty ? item.link : null);
+    Navigator.of(context).pop(link);
   }
+
+  bool get _isEmpty =>
+      _banners.isEmpty && _deals.isEmpty && _featured.isEmpty && _fresh.isEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -280,31 +229,328 @@ class _OffersScreenState extends State<OffersScreen> {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_error != null) {
+    if (_error != null || _isEmpty) {
       return _buildMessage(
         context,
-        icon: Icons.wifi_off,
-        message: _error!,
-        actionLabel: 'Retry',
-      );
-    }
-    if (_items.isEmpty) {
-      return _buildMessage(
-        context,
-        icon: Icons.notifications_none,
-        message: 'No offers right now.\nPull down to refresh or check back soon!',
-        actionLabel: 'Refresh',
+        icon: _error != null ? Icons.wifi_off : Icons.notifications_none,
+        message: _error ??
+            'No offers right now.\nPull down to refresh or check back soon!',
+        actionLabel: _error != null ? 'Retry' : 'Refresh',
       );
     }
     return RefreshIndicator(
       color: widget.accent,
       onRefresh: _fetch,
-      child: ListView.separated(
+      child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(14),
-        itemCount: _items.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 12),
-        itemBuilder: (context, index) => _buildCard(context, _items[index]),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
+        children: [
+          if (_banners.isNotEmpty) ...[
+            _buildBannerCarousel(context),
+            const SizedBox(height: 18),
+          ],
+          if (_deals.isNotEmpty) ...[
+            _buildHeading('⚡ Live Deals'),
+            const SizedBox(height: 10),
+            ..._deals.map((d) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _buildDealCard(context, d),
+                )),
+            const SizedBox(height: 6),
+          ],
+          if (_featured.isNotEmpty) ...[
+            _buildHeading('★ Featured'),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 198,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _featured.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (context, index) => SizedBox(
+                  width: 132,
+                  child: _buildProductCard(context, _featured[index]),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+          ],
+          if (_fresh.isNotEmpty) ...[
+            _buildHeading('New Arrivals'),
+            const SizedBox(height: 10),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 0.74,
+              ),
+              itemCount: _fresh.length,
+              itemBuilder: (context, index) =>
+                  _buildProductCard(context, _fresh[index]),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeading(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontWeight: FontWeight.w800,
+        fontSize: 15.5,
+        color: Color(0xFF2B2B2B),
+      ),
+    );
+  }
+
+  Widget _buildBannerCarousel(BuildContext context) {
+    final width = MediaQuery.of(context).size.width - 28;
+    final height = width * 0.42;
+    if (_banners.length == 1) {
+      return _buildBannerImage(_banners.first, height);
+    }
+    return Column(
+      children: [
+        SizedBox(
+          height: height,
+          child: PageView.builder(
+            controller: _bannerController,
+            itemCount: _banners.length,
+            onPageChanged: (page) {
+              _bannerPage = page;
+              if (mounted) setState(() {});
+            },
+            itemBuilder: (context, index) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 3),
+              child: _buildBannerImage(_banners[index], height),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(
+            _banners.length,
+            (index) => AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: index == _bannerPage ? 16 : 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: index == _bannerPage
+                    ? widget.accent
+                    : Colors.grey.shade400,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBannerImage(_FeedBanner banner, double height) {
+    return GestureDetector(
+      onTap: () => _open(banner.link),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Image.network(
+          banner.image,
+          height: height,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          loadingBuilder: (context, child, progress) {
+            if (progress == null) return child;
+            return Container(
+              height: height,
+              color: const Color(0xFFEFECE6),
+              alignment: Alignment.center,
+              child: const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            );
+          },
+          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDealCard(BuildContext context, _FeedProduct deal) {
+    return GestureDetector(
+      onTap: () => _open(deal.link),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFEDEAE4)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AspectRatio(
+              aspectRatio: 16 / 7,
+              child: Image.network(
+                deal.image,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Container(
+                  color: const Color(0xFFEFECE6),
+                  alignment: Alignment.center,
+                  child: const Icon(
+                    Icons.local_offer_outlined,
+                    color: Color(0xFF8D8A85),
+                    size: 32,
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          deal.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                        if (deal.subtitle.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            deal.subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (deal.price != null) ...[
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: widget.accent,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        deal.price!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProductCard(BuildContext context, _FeedProduct product) {
+    return GestureDetector(
+      onTap: () => _open(product.link),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFEDEAE4)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: SizedBox(
+                width: double.infinity,
+                child: Image.network(
+                  product.image,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => Container(
+                    color: const Color(0xFFEFECE6),
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.shopping_bag_outlined,
+                      color: Color(0xFF8D8A85),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    product.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      height: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      if (product.price != null)
+                        Text(
+                          product.price!,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                            color: widget.accent,
+                          ),
+                        ),
+                      if (product.mrp != null) ...[
+                        const SizedBox(width: 5),
+                        Text(
+                          product.mrp!,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            color: Colors.grey.shade500,
+                            decoration: TextDecoration.lineThrough,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -348,186 +594,6 @@ class _OffersScreenState extends State<OffersScreen> {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProductRow(BuildContext context, _OfferItem item) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      elevation: 1.5,
-      shadowColor: Colors.black26,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () => _openItem(item),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: SizedBox(
-                  width: 68,
-                  height: 68,
-                  child: Image.network(
-                    item.image,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => Container(
-                      color: const Color(0xFFEFECE6),
-                      alignment: Alignment.center,
-                      child: const Icon(
-                        Icons.shopping_bag_outlined,
-                        color: Color(0xFF8D8A85),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13.5,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Text(
-                          item.price!,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 14.5,
-                            color: widget.accent,
-                          ),
-                        ),
-                        if (item.section.isNotEmpty) ...[
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              item.section,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 6),
-              Icon(Icons.arrow_forward_ios, size: 14, color: widget.accent),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCard(BuildContext context, _OfferItem item) {
-    if (item.price != null) {
-      return _buildProductRow(context, item);
-    }
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      elevation: 1.5,
-      shadowColor: Colors.black26,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () => _openItem(item),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(14)),
-              child: AspectRatio(
-                aspectRatio: 16 / 7,
-                child: Image.network(
-                  item.image,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return Container(
-                      color: const Color(0xFFEFECE6),
-                      alignment: Alignment.center,
-                      child: const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    );
-                  },
-                  errorBuilder: (_, _, _) => Container(
-                    color: const Color(0xFFEFECE6),
-                    alignment: Alignment.center,
-                    child: const Icon(
-                      Icons.local_offer_outlined,
-                      color: Color(0xFF8D8A85),
-                      size: 32,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.title.isNotEmpty ? item.title : 'Special offer',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14.5,
-                          ),
-                        ),
-                        if (item.section.isNotEmpty &&
-                            item.section != item.title) ...[
-                          const SizedBox(height: 3),
-                          Text(
-                            item.section,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    Icons.arrow_forward_ios,
-                    size: 14,
-                    color: widget.accent,
-                  ),
-                ],
-              ),
-            ),
-          ],
         ),
       ),
     );
