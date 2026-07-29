@@ -123,6 +123,63 @@ const String _hideScrollbarsScript = r"""
   window.__ddHideScroll = true;
 })();
 """;
+const String _hideWebNavScript = r"""
+(function() {
+  if (window.__ddHideWebNav) {
+    return;
+  }
+  var style = document.createElement('style');
+  style.setAttribute('data-dd-hide-nav', '1');
+  style.textContent = 'nav.fixed.bottom-0 { display: none !important; }';
+  (document.head || document.documentElement).appendChild(style);
+  window.__ddHideWebNav = true;
+})();
+""";
+const String _pullToRefreshScript = r"""
+(function() {
+  if (window.__ddPullRefresh) {
+    return;
+  }
+  window.__ddPullRefresh = true;
+
+  function atTop() {
+    var y = window.scrollY || document.documentElement.scrollTop || 0;
+    return y <= 0;
+  }
+
+  var startY = null;
+  var pulled = 0;
+  var active = false;
+
+  document.addEventListener('touchstart', function(e) {
+    if (e.touches.length === 1 && atTop()) {
+      startY = e.touches[0].clientY;
+      pulled = 0;
+      active = true;
+    } else {
+      active = false;
+      startY = null;
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchmove', function(e) {
+    if (!active || startY === null) {
+      return;
+    }
+    pulled = e.touches[0].clientY - startY;
+  }, { passive: true });
+
+  document.addEventListener('touchend', function() {
+    if (active && pulled > 140 && atTop() &&
+        window.PullBridge && window.PullBridge.postMessage) {
+      window.PullBridge.postMessage('refresh');
+    }
+    active = false;
+    startY = null;
+    pulled = 0;
+  }, { passive: true });
+})();
+""";
 
 class WebAppScreen extends StatefulWidget {
   const WebAppScreen({super.key});
@@ -150,6 +207,8 @@ class _WebAppScreenState extends State<WebAppScreen>
   bool _useTopInset = false;
   bool _showSplash = true;
   bool _hasLoadedOnce = false;
+  String _currentUrl = kHomeUrl;
+  bool _offersTab = false;
   final DateTime _splashStart = DateTime.now();
   static const Duration _minSplashDuration = Duration(seconds: 2);
   late final AnimationController _splashController;
@@ -185,6 +244,12 @@ class _WebAppScreenState extends State<WebAppScreen>
           _handleShareMessage(message.message);
         },
       )
+      ..addJavaScriptChannel(
+        'PullBridge',
+        onMessageReceived: (_) {
+          _handlePullRefresh();
+        },
+      )
       ..setNavigationDelegate(
         NavigationDelegate(
           onNavigationRequest: _handleNavigationRequest,
@@ -197,6 +262,7 @@ class _WebAppScreenState extends State<WebAppScreen>
               _hasError = false;
               _errorDescription = null;
               _progress = 0;
+              _currentUrl = url;
               _useTopInset = _shouldInsetForUrl(url);
             });
             _applyStatusBarStyle(_useTopInset);
@@ -225,6 +291,8 @@ class _WebAppScreenState extends State<WebAppScreen>
             _injectLocationObserver();
             _injectAlertSuppressor();
             _injectShareBridge();
+            _injectPullToRefresh();
+            _injectHideWebNav();
           },
           onWebResourceError: (error) {
             if (!mounted) {
@@ -281,6 +349,30 @@ class _WebAppScreenState extends State<WebAppScreen>
     }
   }
 
+  Future<void> _injectPullToRefresh() async {
+    try {
+      await _controller.runJavaScript(_pullToRefreshScript);
+    } catch (_) {
+      // Ignore injection failures on pages that block scripts.
+    }
+  }
+
+  Future<void> _injectHideWebNav() async {
+    try {
+      await _controller.runJavaScript(_hideWebNavScript);
+    } catch (_) {
+      // Ignore injection failures on pages that block scripts.
+    }
+  }
+
+  void _handlePullRefresh() {
+    if (!mounted || _isNavigating) {
+      return;
+    }
+    HapticFeedback.mediumImpact();
+    _controller.reload();
+  }
+
   bool _shouldIgnoreError(WebResourceError error) {
     if (error.isForMainFrame != true) {
       return true;
@@ -315,10 +407,11 @@ class _WebAppScreenState extends State<WebAppScreen>
       return;
     }
     final nextInset = _shouldInsetForUrl(url);
-    if (nextInset == _useTopInset) {
+    if (nextInset == _useTopInset && url == _currentUrl) {
       return;
     }
     setState(() {
+      _currentUrl = url;
       _useTopInset = nextInset;
     });
     _applyStatusBarStyle(nextInset);
@@ -458,26 +551,67 @@ class _WebAppScreenState extends State<WebAppScreen>
     ]);
   }
 
-  Future<void> _openOffers() async {
+  void _openOffers() {
     HapticFeedback.mediumImpact();
     if (!mounted) {
       return;
     }
-    final link = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => const OffersScreen(
-          baseUrl: kSiteOrigin,
-          region: kRegion,
-          accent: _homeStatusBarColor,
-        ),
-      ),
-    );
-    if (link != null && link.isNotEmpty && mounted) {
-      await _controller.loadRequest(Uri.parse(link));
+    setState(() {
+      _offersTab = true;
+    });
+  }
+
+  int? _tabForUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      return null;
     }
+    final path = uri.path;
+    if (path.isEmpty || path == '/') {
+      return 0;
+    }
+    if (path.startsWith('/categories') || path.startsWith('/subcategory')) {
+      return 1;
+    }
+    if (path.startsWith('/cart')) {
+      return 3;
+    }
+    if (path.startsWith('/account') || path.startsWith('/orders')) {
+      return 4;
+    }
+    return null;
+  }
+
+  void _onTabTap(int index) {
+    HapticFeedback.selectionClick();
+    if (index == 2) {
+      setState(() {
+        _offersTab = true;
+      });
+      return;
+    }
+    setState(() {
+      _offersTab = false;
+    });
+    const paths = <int, String>{1: '/categories', 3: '/cart', 4: '/account'};
+    final target = index == 0 ? kHomeUrl : '$kSiteOrigin${paths[index]}';
+    _controller.loadRequest(Uri.parse(target));
+  }
+
+  void _openOfferLink(String link) {
+    setState(() {
+      _offersTab = false;
+    });
+    _controller.loadRequest(Uri.parse(link));
   }
 
   Future<bool> _handleBack() async {
+    if (_offersTab) {
+      setState(() {
+        _offersTab = false;
+      });
+      return false;
+    }
     if (await _controller.canGoBack()) {
       await _controller.goBack();
       return false;
@@ -520,10 +654,14 @@ class _WebAppScreenState extends State<WebAppScreen>
 
   @override
   Widget build(BuildContext context) {
+    final activeTab = _offersTab ? 2 : _tabForUrl(_currentUrl);
     return WillPopScope(
       onWillPop: _handleBack,
       child: Scaffold(
         backgroundColor: _innerStatusBarColor,
+        bottomNavigationBar: !_showSplash && activeTab != null
+            ? _buildBottomNav(activeTab)
+            : null,
         body: SafeArea(
           top: false,
           child: Column(
@@ -569,29 +707,6 @@ class _WebAppScreenState extends State<WebAppScreen>
                           ),
                         ),
                       ),
-                    if (!_showSplash && !_hasError && !_useTopInset)
-                      Positioned(
-                        right: 14,
-                        bottom: 96,
-                        child: Material(
-                          color: Colors.white,
-                          shape: const CircleBorder(),
-                          elevation: 4,
-                          shadowColor: Colors.black38,
-                          child: InkWell(
-                            customBorder: const CircleBorder(),
-                            onTap: _openOffers,
-                            child: const Padding(
-                              padding: EdgeInsets.all(12),
-                              child: Icon(
-                                Icons.notifications_active_outlined,
-                                color: _homeStatusBarColor,
-                                size: 24,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
                     if (_showSplash)
                       Positioned.fill(
                         child: Container(
@@ -608,12 +723,70 @@ class _WebAppScreenState extends State<WebAppScreen>
                         ),
                       ),
                     if (_hasError) _buildErrorOverlay(context),
+                    if (_offersTab)
+                      Positioned.fill(
+                        child: OffersScreen(
+                          baseUrl: kSiteOrigin,
+                          region: kRegion,
+                          accent: _homeStatusBarColor,
+                          embedded: true,
+                          onOpenLink: _openOfferLink,
+                        ),
+                      ),
                   ],
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildBottomNav(int activeIndex) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+      ),
+      child: BottomNavigationBar(
+        currentIndex: activeIndex,
+        onTap: _onTabTap,
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        selectedItemColor: _homeStatusBarColor,
+        unselectedItemColor: const Color(0xFF9CA3AF),
+        selectedFontSize: 10.5,
+        unselectedFontSize: 10.5,
+        iconSize: 22,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.grid_view_outlined),
+            activeIcon: Icon(Icons.grid_view_rounded),
+            label: 'Categories',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.local_offer_outlined),
+            activeIcon: Icon(Icons.local_offer),
+            label: 'Offers',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.shopping_cart_outlined),
+            activeIcon: Icon(Icons.shopping_cart),
+            label: 'Cart',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            activeIcon: Icon(Icons.person),
+            label: 'Account',
+          ),
+        ],
       ),
     );
   }

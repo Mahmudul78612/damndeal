@@ -15,6 +15,8 @@ class OffersScreen extends StatefulWidget {
     required this.baseUrl,
     required this.region,
     required this.accent,
+    this.embedded = false,
+    this.onOpenLink,
   });
 
   /// Site origin without trailing slash, e.g. https://damndeal.in
@@ -24,6 +26,12 @@ class OffersScreen extends StatefulWidget {
   final String region;
 
   final Color accent;
+
+  /// True when shown as a tab inside the main shell (no back button, and
+  /// taps go through [onOpenLink] instead of popping the route).
+  final bool embedded;
+
+  final ValueChanged<String>? onOpenLink;
 
   @override
   State<OffersScreen> createState() => _OffersScreenState();
@@ -181,6 +189,12 @@ class _OffersScreenState extends State<OffersScreen> {
 
   void _openItem(_OfferItem item) {
     HapticFeedback.selectionClick();
+    if (widget.onOpenLink != null) {
+      if (item.link.isNotEmpty) {
+        widget.onOpenLink!(item.link);
+      }
+      return;
+    }
     Navigator.of(context).pop(item.link.isNotEmpty ? item.link : null);
   }
 
@@ -191,6 +205,7 @@ class _OffersScreenState extends State<OffersScreen> {
       appBar: AppBar(
         backgroundColor: widget.accent,
         foregroundColor: Colors.white,
+        automaticallyImplyLeading: !widget.embedded,
         title: const Text(
           'Offers & Updates',
           style: TextStyle(fontWeight: FontWeight.w700),

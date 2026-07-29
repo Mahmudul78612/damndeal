@@ -75,8 +75,9 @@ Risk kam karne ke liye:
 - **Review Notes me ye likhna** (App Review Information → Notes):
   > "This is our official native shopping app for our own e-commerce platform
   > (we own the website and the brand). The app includes native features:
-  > a native Offers & Updates center (server-driven content, pull-to-refresh,
-  > haptic feedback — bell button on the home screen), iOS Home Screen Quick
+  > a native bottom tab bar (Home / Categories / Offers / Cart / Account),
+  > a fully native Offers & Updates tab (server-driven content, pull-to-refresh,
+  > haptic feedback), pull-to-refresh on the main pages, iOS Home Screen Quick
   > Actions (Offers / My Orders / My Cart via long-press on the app icon),
   > custom splash screen, native share sheet, native offline screen with retry,
   > external payment app handoff, and native navigation handling. We are the
@@ -97,10 +98,11 @@ Risk kam karne ke liye:
 - ✅ App icons (21 sizes incl. 1024 marketing, no-alpha RGB PNG — App Store safe)
 - ✅ UPI/tel/whatsapp external links iOS pe url_launcher se khulte hain (`LSApplicationQueriesSchemes` set)
 - ✅ Min iOS 13.0 har jagah consistent (pbxproj + Podfile + AppFrameworkInfo.plist)
-- ✅ **Native features (4.2 protection)**: Offers & Updates screen (home pe bell
-  button → live banners/products natively, pull-to-refresh, haptics), Home Screen
-  Quick Actions (app icon long-press → Offers / My Orders / My Cart), native
-  offline screen — dono apps me
+- ✅ **Native features (4.2 protection)**: native bottom tab bar (Home / Categories /
+  Offers / Cart / Account — website ka nav app me hide hota hai), pura native
+  Offers & Updates tab (live banners/products, pull-to-refresh, haptics),
+  main pages pe bhi pull-to-refresh, Home Screen Quick Actions (app icon
+  long-press → Offers / My Orders / My Cart), native offline screen — dono apps me
 
 ## Note: iOS pe push notifications (India app)
 
