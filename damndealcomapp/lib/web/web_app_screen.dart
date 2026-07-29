@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../native/categories_screen.dart';
 import '../native/offers_screen.dart';
 
 const String kHomeUrl = 'https://damndeal.com/';
@@ -208,7 +209,10 @@ class _WebAppScreenState extends State<WebAppScreen>
   bool _showSplash = true;
   bool _hasLoadedOnce = false;
   String _currentUrl = kHomeUrl;
-  bool _offersTab = false;
+
+  /// Native tab index currently shown over the WebView
+  /// (1 = Categories, 2 = Offers); null = WebView visible.
+  int? _nativeTab;
   final DateTime _splashStart = DateTime.now();
   static const Duration _minSplashDuration = Duration(seconds: 2);
   late final AnimationController _splashController;
@@ -557,7 +561,7 @@ class _WebAppScreenState extends State<WebAppScreen>
       return;
     }
     setState(() {
-      _offersTab = true;
+      _nativeTab = 2;
     });
   }
 
@@ -584,31 +588,31 @@ class _WebAppScreenState extends State<WebAppScreen>
 
   void _onTabTap(int index) {
     HapticFeedback.selectionClick();
-    if (index == 2) {
+    if (index == 1 || index == 2) {
       setState(() {
-        _offersTab = true;
+        _nativeTab = index;
       });
       return;
     }
     setState(() {
-      _offersTab = false;
+      _nativeTab = null;
     });
-    const paths = <int, String>{1: '/categories', 3: '/cart', 4: '/account'};
+    const paths = <int, String>{3: '/cart', 4: '/account'};
     final target = index == 0 ? kHomeUrl : '$kSiteOrigin${paths[index]}';
     _controller.loadRequest(Uri.parse(target));
   }
 
   void _openOfferLink(String link) {
     setState(() {
-      _offersTab = false;
+      _nativeTab = null;
     });
     _controller.loadRequest(Uri.parse(link));
   }
 
   Future<bool> _handleBack() async {
-    if (_offersTab) {
+    if (_nativeTab != null) {
       setState(() {
-        _offersTab = false;
+        _nativeTab = null;
       });
       return false;
     }
@@ -654,7 +658,7 @@ class _WebAppScreenState extends State<WebAppScreen>
 
   @override
   Widget build(BuildContext context) {
-    final activeTab = _offersTab ? 2 : _tabForUrl(_currentUrl);
+    final activeTab = _nativeTab ?? _tabForUrl(_currentUrl);
     return WillPopScope(
       onWillPop: _handleBack,
       child: Scaffold(
@@ -723,7 +727,16 @@ class _WebAppScreenState extends State<WebAppScreen>
                         ),
                       ),
                     if (_hasError) _buildErrorOverlay(context),
-                    if (_offersTab)
+                    if (_nativeTab == 1)
+                      Positioned.fill(
+                        child: CategoriesScreen(
+                          baseUrl: kSiteOrigin,
+                          region: kRegion,
+                          accent: _homeStatusBarColor,
+                          onOpenLink: _openOfferLink,
+                        ),
+                      ),
+                    if (_nativeTab == 2)
                       Positioned.fill(
                         child: OffersScreen(
                           baseUrl: kSiteOrigin,

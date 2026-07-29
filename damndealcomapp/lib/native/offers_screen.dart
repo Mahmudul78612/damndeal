@@ -74,6 +74,66 @@ class _OffersScreenState extends State<OffersScreen> {
       });
     }
     try {
+      final items = await _fetchServerFeed();
+      if (!mounted) return;
+      if (items.isNotEmpty) {
+        setState(() {
+          _items = items;
+          _loading = false;
+        });
+        return;
+      }
+    } catch (_) {
+      // Fall through to the legacy home-section parser below.
+    }
+    await _fetchFromHome();
+  }
+
+  /// Preferred source: dedicated server-driven feed (GET /user/app-feed).
+  Future<List<_OfferItem>> _fetchServerFeed() async {
+    final res = await http.get(
+      Uri.parse('${widget.baseUrl}/proxy-api/user/app-feed?platform=damndeal'),
+      headers: {'x-region': widget.region},
+    ).timeout(const Duration(seconds: 15));
+    if (res.statusCode != 200) {
+      throw Exception('HTTP ${res.statusCode}');
+    }
+    final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+    if (decoded['success'] != true) {
+      throw Exception('feed unavailable');
+    }
+    final rawItems = (decoded['items'] as List?) ?? const [];
+    final items = <_OfferItem>[];
+    for (final raw in rawItems) {
+      if (raw is! Map) continue;
+      final image = (raw['image'] ?? '').toString();
+      if (image.isEmpty) continue;
+      final priceValue = raw['price'];
+      final currency = (raw['currency'] ?? '').toString();
+      String? price;
+      if (priceValue is num) {
+        final symbol = currency == 'USD' ? '\$' : '₹';
+        final rounded = priceValue == priceValue.roundToDouble()
+            ? priceValue.toInt().toString()
+            : priceValue.toStringAsFixed(2);
+        price = '$symbol$rounded';
+      }
+      final link = (raw['link'] ?? '').toString();
+      items.add(_OfferItem(
+        title: (raw['title'] ?? '').toString(),
+        section: (raw['subtitle'] ?? '').toString(),
+        image: _absolutize(image),
+        link: link.isEmpty ? '' : _absolutize(link),
+        price: price,
+      ));
+      if (items.length >= 40) break;
+    }
+    return items;
+  }
+
+  /// Fallback: parse the homepage sections (older servers without /app-feed).
+  Future<void> _fetchFromHome() async {
+    try {
       final res = await http.get(
         Uri.parse('${widget.baseUrl}/proxy-api/user/home?platform=damndeal'),
         headers: {'x-region': widget.region},

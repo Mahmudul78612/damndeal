@@ -3,6 +3,7 @@ const Banner = require("../../../models/Banner");
 const Category = require("../../../models/Category");
 const SubCategory = require("../../../models/SubCategory");
 const Product = require("../../../models/Product");
+const Offer = require("../../../models/Offer");
 const { regionFilter } = require("../../../utils/region");
 
 // GET /user/home — app home page content
@@ -178,6 +179,113 @@ async function getHomePage(req, res) {
   return res.json({ success: true, sections: result });
 }
 
+// GET /user/app-feed — server-driven feed for the native app "Offers & Updates" tab.
+// Returns a flat, ready-to-render list; the app does no section parsing.
+async function getAppFeed(req, res) {
+  const regionF = regionFilter(req);
+  const platform = req.query.platform || "damndeal";
+  const region = ((req && req.region) || "IN").toUpperCase();
+  const currency = region === "US" ? "USD" : "INR";
+  const items = [];
+
+  const resolveBannerLink = (b) => {
+    const type = b.linkType || (b.data && b.data.linkType) || "";
+    const value = String(
+      b.linkValue || (b.data && b.data.linkValue) || b.categoryId || b.subCategoryId || b.productId || b.link || ""
+    );
+    if (!value) return "";
+    if (type === "category") return `/categories/${value}`;
+    if (type === "subcategory") return `/subcategory/${value}`;
+    if (type === "product") return `/product/${value}`;
+    if (type === "url") return value;
+    if (value.startsWith("/") || /^https?:\/\//i.test(value)) return value;
+    return "";
+  };
+  const pushBanner = (b, fallbackTitle) => {
+    if (!b || !b.image) return;
+    items.push({
+      kind: "banner",
+      title: b.title || fallbackTitle || "",
+      subtitle: "",
+      image: b.image,
+      link: resolveBannerLink(b),
+    });
+  };
+
+  // 1a) Custom banners stored inside homepage layout sections (layout builder)
+  const bannerSections = await HomeSection.find({
+    isActive: true,
+    type: { $in: ["banner_carousel", "custom_banner"] },
+    ...regionF,
+    $or: [{ platform }, { platform: { $exists: false } }, { platform: null }],
+  }).sort({ sortOrder: 1 }).lean();
+  for (const s of bannerSections) {
+    const custom = Array.isArray(s.data && s.data.banners) ? s.data.banners : [];
+    for (const b of custom) pushBanner(b, s.title);
+  }
+
+  // 1b) Banner collection (classic banners), admin-ordered
+  const banners = await Banner.find({
+    isActive: true,
+    platform,
+    placement: { $in: ["home_top", "home_middle", "home_bottom", "home_square"] },
+    ...regionF,
+  }).sort({ sortOrder: 1 }).limit(20).lean();
+  for (const b of banners) pushBanner(b, "");
+
+  // 2) Live limited-time deals (Offer model)
+  const now = new Date();
+  const offers = await Offer.find({
+    isActive: true,
+    startDate: { $lte: now },
+    endDate: { $gte: now },
+  })
+    .populate({ path: "products", select: "name images sellingPrice regions", options: { limit: 3 } })
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .lean();
+  for (const o of offers) {
+    const p = (o.products || []).find(
+      (x) => x && Array.isArray(x.images) && x.images.length &&
+        (Array.isArray(x.regions) ? x.regions.includes(region) : true)
+    );
+    if (!p) continue;
+    items.push({
+      kind: "deal",
+      title: o.title,
+      subtitle: o.description || "Limited-time deal",
+      image: p.images[0],
+      link: `/product/${p._id}`,
+      price: p.sellingPrice,
+      currency,
+    });
+  }
+
+  // 3) Featured products first, then newest — keeps the feed alive even with no banners
+  const prodFilter = { isActive: true, approvalStatus: "approved", stock: { $gt: 0 }, ...regionF };
+  const products = await Product.find(prodFilter)
+    .select("name images sellingPrice isFeatured")
+    .sort({ isFeatured: -1, createdAt: -1 })
+    .limit(12)
+    .lean();
+  for (const p of products) {
+    if (!Array.isArray(p.images) || !p.images.length) continue;
+    items.push({
+      kind: "product",
+      title: p.name,
+      subtitle: p.isFeatured ? "Featured" : "New arrival",
+      image: p.images[0],
+      link: `/product/${p._id}`,
+      price: p.sellingPrice,
+      currency,
+    });
+  }
+
+  const seenImages = new Set();
+  const deduped = items.filter((i) => i.image && !seenImages.has(i.image) && seenImages.add(i.image));
+  return res.json({ success: true, region, currency, items: deduped });
+}
+
 // GET /user/banners/:id/products — get products linked to a banner
 async function getBannerProducts(req, res) {
   const banner = await Banner.findById(req.params.id);
@@ -197,4 +305,4 @@ async function getBannerProducts(req, res) {
   return res.json({ success: true, banner: { title: banner.title, image: banner.image }, products: ordered });
 }
 
-module.exports = { getHomePage, getBannerProducts };
+module.exports = { getHomePage, getBannerProducts, getAppFeed };
