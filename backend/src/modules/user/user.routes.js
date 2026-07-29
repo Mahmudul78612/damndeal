@@ -28,6 +28,7 @@ const router = express.Router();
 // Public (no auth needed)
 router.get("/home", home.getHomePage);
 router.get("/app-feed", home.getAppFeed);
+router.get("/app-categories-page", home.getAppCategoriesPage);
 const desktopHome = require("./controllers/desktopHome.controller");
 router.get("/desktop-home", desktopHome.getDesktopHome);
 router.get("/shops", shop.getShops);

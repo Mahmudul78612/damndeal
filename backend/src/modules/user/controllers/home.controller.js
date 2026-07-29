@@ -179,6 +179,21 @@ async function getHomePage(req, res) {
   return res.json({ success: true, sections: result });
 }
 
+// Shared: resolve a banner (collection doc or layout-builder object) to a web path.
+function resolveBannerLink(b) {
+  const type = b.linkType || (b.data && b.data.linkType) || "";
+  const value = String(
+    b.linkValue || (b.data && b.data.linkValue) || b.categoryId || b.subCategoryId || b.productId || b.link || ""
+  );
+  if (!value) return "";
+  if (type === "category") return `/categories/${value}`;
+  if (type === "subcategory") return `/subcategory/${value}`;
+  if (type === "product") return `/product/${value}`;
+  if (type === "url") return value;
+  if (value.startsWith("/") || /^https?:\/\//i.test(value)) return value;
+  return "";
+}
+
 // GET /user/app-feed — server-driven feed for the native app "Offers & Updates" tab.
 // Returns a flat, ready-to-render list; the app does no section parsing.
 async function getAppFeed(req, res) {
@@ -187,20 +202,6 @@ async function getAppFeed(req, res) {
   const region = ((req && req.region) || "IN").toUpperCase();
   const currency = region === "US" ? "USD" : "INR";
   const items = [];
-
-  const resolveBannerLink = (b) => {
-    const type = b.linkType || (b.data && b.data.linkType) || "";
-    const value = String(
-      b.linkValue || (b.data && b.data.linkValue) || b.categoryId || b.subCategoryId || b.productId || b.link || ""
-    );
-    if (!value) return "";
-    if (type === "category") return `/categories/${value}`;
-    if (type === "subcategory") return `/subcategory/${value}`;
-    if (type === "product") return `/product/${value}`;
-    if (type === "url") return value;
-    if (value.startsWith("/") || /^https?:\/\//i.test(value)) return value;
-    return "";
-  };
   const pushBanner = (b, fallbackTitle) => {
     if (!b || !b.image) return;
     items.push({
@@ -286,6 +287,60 @@ async function getAppFeed(req, res) {
   return res.json({ success: true, region, currency, items: deduped });
 }
 
+// GET /user/app-categories-page — server-driven native Categories tab:
+// admin banner (placement "category_page") + categories + recent + recommended.
+async function getAppCategoriesPage(req, res) {
+  const regionF = regionFilter(req);
+  const platform = req.query.platform || "damndeal";
+  const region = ((req && req.region) || "IN").toUpperCase();
+  const currency = region === "US" ? "USD" : "INR";
+  const now = new Date();
+
+  const [banners, categories] = await Promise.all([
+    Banner.find({
+      isActive: true,
+      platform,
+      placement: "category_page",
+      ...regionF,
+      $and: [
+        { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
+        { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
+      ],
+    }).sort({ sortOrder: 1 }).limit(5).lean(),
+    Category.find({ isActive: true, ...regionF }).sort({ sortOrder: 1, name: 1 }).lean(),
+  ]);
+
+  const prodFilter = { isActive: true, approvalStatus: "approved", stock: { $gt: 0 }, ...regionF };
+  const [recentRaw, recommendedRaw] = await Promise.all([
+    Product.find(prodFilter).select("name images sellingPrice mrp").sort({ createdAt: -1 }).limit(10).lean(),
+    Product.find(prodFilter).select("name images sellingPrice mrp").sort({ isFeatured: -1, rating: -1, createdAt: -1 }).limit(14).lean(),
+  ]);
+
+  const mapProduct = (p) => ({
+    id: p._id,
+    name: p.name,
+    image: (Array.isArray(p.images) && p.images[0]) || "",
+    price: p.sellingPrice,
+    mrp: typeof p.mrp === "number" && p.mrp > p.sellingPrice ? p.mrp : null,
+  });
+  const recent = recentRaw.map(mapProduct).filter((p) => p.image);
+  const recentIds = new Set(recent.map((p) => String(p.id)));
+  let recommended = recommendedRaw.map(mapProduct).filter((p) => p.image && !recentIds.has(String(p.id)));
+  if (recommended.length < 4) {
+    recommended = recommendedRaw.map(mapProduct).filter((p) => p.image);
+  }
+
+  return res.json({
+    success: true,
+    region,
+    currency,
+    banners: banners.map((b) => ({ title: b.title || "", image: b.image, link: resolveBannerLink(b) })),
+    categories: categories.map((c) => ({ id: c._id, name: c.name, icon: c.icon || c.image || "" })),
+    recent,
+    recommended: recommended.slice(0, 10),
+  });
+}
+
 // GET /user/banners/:id/products — get products linked to a banner
 async function getBannerProducts(req, res) {
   const banner = await Banner.findById(req.params.id);
@@ -305,4 +360,4 @@ async function getBannerProducts(req, res) {
   return res.json({ success: true, banner: { title: banner.title, image: banner.image }, products: ordered });
 }
 
-module.exports = { getHomePage, getBannerProducts, getAppFeed };
+module.exports = { getHomePage, getBannerProducts, getAppFeed, getAppCategoriesPage };
