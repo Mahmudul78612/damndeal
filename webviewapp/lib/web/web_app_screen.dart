@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -722,6 +723,13 @@ class _WebAppScreenState extends State<WebAppScreen>
                 Container(
                   height: MediaQuery.of(context).padding.top,
                   color: _innerStatusBarColor,
+                )
+              else if (Platform.isIOS)
+                // iPhone notch: keep the site below the status bar; the purple
+                // matches the site's own header so it blends seamlessly.
+                Container(
+                  height: MediaQuery.of(context).padding.top,
+                  color: _homeStatusBarColor,
                 ),
               Expanded(
                 child: Stack(
