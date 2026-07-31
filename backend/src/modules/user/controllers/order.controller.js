@@ -10,6 +10,7 @@ const cjService = require("../../../services/cj.service");
 const { notifyOrderPlaced, notifyOrderCancelled } = require("../../../services/notification.service");
 const magicClub = require("../../../services/magicclub.service");
 const { refundPaidOrder } = require("../../../services/refund.service");
+const { checkOrderAllowed } = require("../../../services/orderGuard.service");
 const crypto = require("crypto");
 
 function generateOrderNumber() {
@@ -147,6 +148,12 @@ async function placeOrder(req, res) {
 
   if (!partnerId || !rawItems?.length || !addressId) {
     return res.status(400).json({ success: false, message: "partnerId, items, addressId required" });
+  }
+
+  // Anti-abuse: duplicate orders, burst ordering, datacenter/VPN IPs
+  const blockMessage = await checkOrderAllowed(req, userId, rawItems, addressId);
+  if (blockMessage) {
+    return res.status(429).json({ success: false, message: blockMessage });
   }
 
   // Get delivery address

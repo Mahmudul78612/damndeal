@@ -33,7 +33,7 @@ async function listOffers(req, res) {
   const skip = (Number(page) - 1) * Number(limit);
   const [offers, total] = await Promise.all([
     Offer.find(filter)
-      .populate("partner", "name phone")
+      .populate("partner", "name")
       .populate("products", "name images price sellingPrice")
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -48,7 +48,7 @@ async function listOffers(req, res) {
 // GET /user/offers/:id — single offer details
 async function getOffer(req, res) {
   const offer = await Offer.findById(req.params.id)
-    .populate("partner", "name phone")
+    .populate("partner", "name")
     .populate("products", "name images price sellingPrice stock unit gstPercent")
     .lean();
 

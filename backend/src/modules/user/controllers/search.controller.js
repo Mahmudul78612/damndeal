@@ -12,8 +12,9 @@ async function searchProducts(req, res) {
     return res.status(400).json({ success: false, message: "Search query (q) must be at least 2 characters" });
   }
 
-  const pageNum = parseInt(page, 10);
-  const limitNum = parseInt(limit, 10);
+  const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+  // Cap page size — stops one-request catalog dumps by scrapers
+  const limitNum = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
   const skip = (pageNum - 1) * limitNum;
 
   // Step 1: If location provided, find nearby partner IDs first
@@ -89,8 +90,9 @@ module.exports = { searchProducts, browseProducts };
 // GET /user/products?category=xxx&subCategory=xxx&_id=xxx&page=1&limit=20
 async function browseProducts(req, res) {
   const { page = 1, limit = 20, category, subCategory, sortBy, _id } = req.query;
-  const pageNum = parseInt(page, 10);
-  const limitNum = parseInt(limit, 10);
+  const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+  // Cap page size — stops one-request catalog dumps by scrapers
+  const limitNum = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
   const skip = (pageNum - 1) * limitNum;
 
   const filter = { isActive: true, approvalStatus: "approved", stock: { $gt: 0 }, ...regionFilter(req) };

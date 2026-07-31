@@ -53,13 +53,40 @@ const otpLimiter = rateLimit({
 app.use("/api/auth/send-otp", otpLimiter);
 app.use("/api/auth/verify-otp", otpLimiter);
 
-// General API rate limiter
+const ipcheck = require("./services/ipcheck.service");
+const realClientIp = (req) =>
+  req.headers["x-real-ip"] ||
+  (req.headers["x-forwarded-for"] || "").split(",").pop().trim() ||
+  req.ip;
+
+// Aggressive cap for datacenter/VPS/proxy IPs — scrapers rent servers,
+// real users on ISP networks never enter this bucket.
+const datacenterLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  keyGenerator: realClientIp,
+  validate: false,
+  message: { success: false, message: "Too many requests" },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    const ip = realClientIp(req);
+    return !ip || ipcheck.isPrivateIp(ip) || !ipcheck.isDatacenterIp(ip);
+  },
+});
+app.use("/api", datacenterLimiter);
+
+// General API rate limiter (per real client IP; internal SSR calls from
+// localhost are skipped so the website itself is never throttled)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: process.env.NODE_ENV === "development" ? 1000 : 500,
   message: { success: false, message: "Too many requests" },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: realClientIp,
+  validate: false,
+  skip: (req) => ipcheck.isPrivateIp(realClientIp(req)),
 });
 app.use("/api", apiLimiter);
 
