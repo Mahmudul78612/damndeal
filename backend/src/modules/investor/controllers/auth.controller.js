@@ -18,7 +18,7 @@ async function sendOtp(req, res) {
 
   const clientIp =
     req.headers["x-real-ip"] ||
-    (req.headers["x-forwarded-for"] || "").split(",")[0].trim() ||
+    (req.headers["x-forwarded-for"] || "").split(",").pop().trim() ||
     req.ip;
   const result = await otpService.sendOtp(phone, clientIp);
   if (!result.success) return res.status(429).json(result);
