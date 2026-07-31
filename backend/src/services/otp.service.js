@@ -16,8 +16,15 @@ async function getRedisClient() {
 }
 
 const OTP_EXPIRY = 300; // 5 minutes
-const OTP_COOLDOWN = 60; // 1 minute between resends
 const MAX_ATTEMPTS = 5;
+
+// ── Anti-abuse limits (progressive backoff, industry standard) ──
+// Send #1 free → #2 after 30s → #3 after 60s → #4 after 120s.
+// A 5th send within 24h is blocked for the rest of that 24h window.
+const OTP_PROGRESSIVE_COOLDOWNS = [30, 60, 120]; // seconds, after send 1/2/3+
+const OTP_MAX_SENDS_PER_DAY = 4;
+const OTP_IP_MAX_PER_DAY = 10;
+const ONE_DAY = 24 * 60 * 60;
 
 function generateOtp() {
   return crypto.randomInt(100000, 999999).toString();
@@ -35,7 +42,25 @@ function cooldownKey(phone) {
   return `otp_cooldown:${phone}`;
 }
 
-async function sendOtp(phone) {
+function sendsKey(phone) {
+  return `otp_sends:${phone}`;
+}
+
+function ipKey(ip) {
+  return `otp_ip:${ip}`;
+}
+
+// Reject numbers that can never receive an Indian OTP (saves SMS credits):
+// wrong length/prefix, all-same-digit (9999999999) or the two obvious sequences.
+function isBogusIndianNumber(phone) {
+  const local = phone.replace(/^\+?91/, "");
+  if (!/^[6-9]\d{9}$/.test(local)) return true;
+  if (/^(\d)\1{9}$/.test(local)) return true;
+  if (local === "1234567890" || local === "0123456789") return true;
+  return false;
+}
+
+async function sendOtp(phone, clientIp) {
   const redis = await getRedisClient();
 
   // --- Whitelisted test phone bypass (dev + Play/App Store review accounts) ---
@@ -50,7 +75,34 @@ async function sendOtp(phone) {
     return { success: true, message: "OTP sent successfully" };
   }
 
-  // Check cooldown
+  // 0) Obviously-invalid number — never burns an SMS credit
+  if (isBogusIndianNumber(phone)) {
+    return { success: false, message: "Please enter a valid mobile number" };
+  }
+
+  // 1) Per-IP daily cap (stops number-rotation abuse from one connection)
+  if (clientIp) {
+    const ipCount = parseInt((await redis.get(ipKey(clientIp))) || "0", 10);
+    if (ipCount >= OTP_IP_MAX_PER_DAY) {
+      return {
+        success: false,
+        message: "Too many OTP requests from this network today. Please try again tomorrow.",
+      };
+    }
+  }
+
+  // 2) Per-number daily cap — 5th request within 24h is blocked
+  const sendsSoFar = parseInt((await redis.get(sendsKey(phone))) || "0", 10);
+  if (sendsSoFar >= OTP_MAX_SENDS_PER_DAY) {
+    const ttl = await redis.ttl(sendsKey(phone));
+    const hours = Math.max(1, Math.ceil((ttl > 0 ? ttl : ONE_DAY) / 3600));
+    return {
+      success: false,
+      message: `OTP limit reached for this number. Please try again after ${hours} hour${hours > 1 ? "s" : ""}.`,
+    };
+  }
+
+  // 3) Progressive cooldown between resends (30s → 60s → 120s)
   const onCooldown = await redis.get(cooldownKey(phone));
   if (onCooldown) {
     const ttl = await redis.ttl(cooldownKey(phone));
@@ -66,8 +118,21 @@ async function sendOtp(phone) {
   await redis.setEx(otpKey(phone), OTP_EXPIRY, otp);
   // Reset attempts
   await redis.del(attemptKey(phone));
-  // Set cooldown
-  await redis.setEx(cooldownKey(phone), OTP_COOLDOWN, "1");
+
+  // Count this send (24h rolling window) + set the next progressive cooldown
+  const sendCount = await redis.incr(sendsKey(phone));
+  if (sendCount === 1) {
+    await redis.expire(sendsKey(phone), ONE_DAY);
+  }
+  if (clientIp) {
+    const ipCount = await redis.incr(ipKey(clientIp));
+    if (ipCount === 1) {
+      await redis.expire(ipKey(clientIp), ONE_DAY);
+    }
+  }
+  const nextCooldown =
+    OTP_PROGRESSIVE_COOLDOWNS[Math.min(sendCount - 1, OTP_PROGRESSIVE_COOLDOWNS.length - 1)];
+  await redis.setEx(cooldownKey(phone), nextCooldown, "1");
 
   // --- Send OTP via Fast2SMS WhatsApp ---
   const fast2smsKey = process.env.FAST2SMS_API_KEY;
