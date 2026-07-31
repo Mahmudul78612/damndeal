@@ -2,13 +2,16 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:permission_handler/permission_handler.dart';
 import 'package:quick_actions/quick_actions.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import '../main.dart' show firebaseSupported;
 import '../native/categories_screen.dart';
@@ -332,6 +335,30 @@ class _WebAppScreenState extends State<WebAppScreen>
         ),
       )
       ..loadRequest(Uri.parse(kHomeUrl));
+    _setupGeolocation();
+  }
+
+  /// Lets the website's "use my current location" work inside the app.
+  /// Android WebView needs an explicit geolocation prompt handler backed by
+  /// the app's runtime location permission; iOS WKWebView prompts on its own.
+  void _setupGeolocation() {
+    if (kIsWeb || !Platform.isAndroid) {
+      return;
+    }
+    final platformController = _controller.platform;
+    if (platformController is! AndroidWebViewController) {
+      return;
+    }
+    platformController.setGeolocationPermissionsPromptCallbacks(
+      onShowPrompt: (request) async {
+        final status = await Permission.location.request();
+        final allowed = status.isGranted || status.isLimited;
+        return GeolocationPermissionsResponse(
+          allow: allowed,
+          retain: allowed,
+        );
+      },
+    );
   }
 
   Future<void> _injectScrollbarStyle() async {

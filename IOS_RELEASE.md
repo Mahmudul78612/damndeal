@@ -65,7 +65,8 @@ Xcode me:
    - US app email/password login use karta hai — ek test account bana ke wahi do.
 6. Screenshots: sirf **6.7" iPhone** (iPhone 15 Pro Max simulator) — 3 se 10 screenshots.
    **iPad screenshots ki zaroorat NAHI** — app iPhone-only set hai. Simulator me app chala ke `Cmd+S` se lo.
-7. Privacy Policy URL: `https://damndeal.in/privacy-policy` / `https://damndeal.com/privacy-policy`
+7. Privacy Policy URL: `https://damndeal.in/legal/privacy` / `https://damndeal.com/legal/privacy`
+   (verified working — `/privacy-policy` wala purana path 404 deta hai, use mat karna)
 
 ## ⚠️ Apple reject hone ka sabse bada risk — Guideline 4.2 (Minimum Functionality)
 
