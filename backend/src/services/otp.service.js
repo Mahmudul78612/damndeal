@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const https = require("https");
 const { createClient } = require("redis");
+const ipcheck = require("./ipcheck.service");
 
 let redisClient;
 
@@ -78,6 +79,35 @@ async function sendOtp(phone, clientIp) {
   // 0) Obviously-invalid number — never burns an SMS credit
   if (isBogusIndianNumber(phone)) {
     return { success: false, message: "Please enter a valid mobile number" };
+  }
+
+  // 0.5) Network trust — datacenter/VPS/proxy IPs and non-Indian IPs can't
+  // request OTPs (bots rent cloud servers; real users are on ISP networks).
+  // Unknown IP/country fails open so no genuine user is ever blocked by a gap.
+  if (clientIp && !ipcheck.isPrivateIp(clientIp)) {
+    if (ipcheck.isDatacenterIp(clientIp)) {
+      console.log(`[OTP-BLOCK] datacenter IP ${clientIp} tried OTP for ${phone}`);
+      return {
+        success: false,
+        message:
+          "OTP cannot be sent over VPN/proxy or server networks. Please switch to your mobile data or home Wi-Fi and try again.",
+      };
+    }
+    const allowedCountries = (process.env.OTP_ALLOWED_COUNTRIES || "IN")
+      .split(",")
+      .map((s) => s.trim().toUpperCase())
+      .filter(Boolean);
+    if (allowedCountries.length && !allowedCountries.includes("ALL")) {
+      const country = ipcheck.countryOf(clientIp);
+      if (country && !allowedCountries.includes(country)) {
+        console.log(`[OTP-BLOCK] foreign IP ${clientIp} (${country}) tried OTP for ${phone}`);
+        return {
+          success: false,
+          message:
+            "OTP is available only from India. If you are using a VPN, please turn it off and try again.",
+        };
+      }
+    }
   }
 
   // 1) Per-IP daily cap (stops number-rotation abuse from one connection)
