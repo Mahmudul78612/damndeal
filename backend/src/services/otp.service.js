@@ -229,7 +229,8 @@ async function verifyOtp(phone, otp) {
 // Fast2SMS WhatsApp OTP sender (Simple API - GET method)
 function sendFast2SmsWhatsApp(apiKey, phone, otp) {
   return new Promise((resolve, reject) => {
-    const messageId = process.env.FAST2SMS_MESSAGE_ID || "16945";
+    // Approved WhatsApp authentication template "new_authv" (Fast2SMS message id)
+    const messageId = process.env.FAST2SMS_MESSAGE_ID || "27300";
     const phoneNumberId = process.env.FAST2SMS_PHONE_NUMBER_ID || "1100495616475226";
 
     const params = new URLSearchParams({
