@@ -1,5 +1,6 @@
 const express = require("express");
 const { authenticate, authorize } = require("../../middleware/auth.middleware");
+const { attachStaff, requirePermission } = require("../../middleware/permission.middleware");
 const { uploadCouponImages, optimizeImages } = require("../../middleware/upload.middleware");
 const pub = require("./public.controller");
 const vendor = require("./vendor.controller");
@@ -51,7 +52,13 @@ router.post("/upload", authenticate, uploadCouponImages, optimizeImages(1600), (
 });
 
 /* ── Admin ── */
-const adm = [authenticate, authorize("admin")];
+// Full admins, plus staff holding the Coupon Marketplace permission
+const adm = [
+  authenticate,
+  authorize("admin", "staff"),
+  attachStaff,
+  requirePermission("manage_coupon_market"),
+];
 router.get("/admin/dashboard", ...adm, h(admin.dashboard));
 router.get("/admin/categories", ...adm, h(admin.listCategories));
 router.post("/admin/categories", ...adm, h(admin.createCategory));

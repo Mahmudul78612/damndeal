@@ -53,56 +53,85 @@ function buildLayout(activePageId) {
 
   const navItems = [
     { group: "Main", items: [
-      { id: "dashboard", label: "Dashboard", icon: "📊", href: basePath + "/pages/dashboard/dashboard.html" },
-      { id: "analytics", label: "Analytics", icon: "📉", href: basePath + "/pages/analytics/analytics.html" },
+      { id: "dashboard", label: "Dashboard", icon: "📊", href: basePath + "/pages/dashboard/dashboard.html", perm: "view_dashboard" },
+      { id: "analytics", label: "Analytics", icon: "📉", href: basePath + "/pages/analytics/analytics.html", perm: "view_analytics" },
     ]},
     { group: "Catalog", items: [
-      { id: "categories", label: "Categories", icon: "📁", href: basePath + "/pages/categories/categories.html" },
-      { id: "products", label: "Products", icon: "📦", href: basePath + "/pages/products/products.html" },
-      { id: "reviews", label: "Reviews", icon: "⭐", href: basePath + "/pages/reviews/reviews.html" },
-      { id: "cj-products", label: "CJ Dropshipping", icon: "🌐", href: basePath + "/pages/cj-products/cj-products.html" },
-      { id: "offers", label: "Offers", icon: "🏷️", href: basePath + "/pages/offers/offers.html" },
-      { id: "coupons", label: "Coupons", icon: "🎟️", href: basePath + "/pages/coupons/coupons.html" },
-      { id: "coupon-market", label: "Coupon Marketplace", icon: "🎫", href: basePath + "/pages/coupon-market/coupon-market.html" },
-      { id: "banners", label: "Banners", icon: "🖼️", href: basePath + "/pages/banners/banners.html" },
+      { id: "categories", label: "Categories", icon: "📁", href: basePath + "/pages/categories/categories.html", perm: "manage_categories" },
+      { id: "products", label: "Products", icon: "📦", href: basePath + "/pages/products/products.html", perm: "manage_products" },
+      { id: "reviews", label: "Reviews", icon: "⭐", href: basePath + "/pages/reviews/reviews.html", perm: "manage_reviews" },
+      { id: "cj-products", label: "CJ Dropshipping", icon: "🌐", href: basePath + "/pages/cj-products/cj-products.html", perm: "manage_cj" },
+      { id: "offers", label: "Offers", icon: "🏷️", href: basePath + "/pages/offers/offers.html", perm: "manage_offers" },
+      { id: "coupons", label: "Coupons", icon: "🎟️", href: basePath + "/pages/coupons/coupons.html", perm: "manage_coupons" },
+      { id: "coupon-market", label: "Coupon Marketplace", icon: "🎫", href: basePath + "/pages/coupon-market/coupon-market.html", perm: "manage_coupon_market" },
+      { id: "banners", label: "Banners", icon: "🖼️", href: basePath + "/pages/banners/banners.html", perm: "manage_banners" },
     ]},
     { group: "Business", items: [
-      { id: "partners", label: "Partners", icon: "🏪", href: basePath + "/pages/partners/partners.html" },
-      { id: "kyc", label: "KYC Requests", icon: "📋", href: basePath + "/pages/kyc/kyc.html" },
-      { id: "orders", label: "Orders", icon: "🛒", href: basePath + "/pages/orders/orders.html" },
-      { id: "shipping", label: "Shipping", icon: "🚚", href: basePath + "/pages/shipping/shipping.html" },
-      { id: "returns", label: "Returns", icon: "↩️", href: basePath + "/pages/returns/returns.html" },
-      { id: "payouts", label: "Payouts", icon: "💰", href: basePath + "/pages/payouts/payouts.html" },
+      { id: "partners", label: "Partners", icon: "🏪", href: basePath + "/pages/partners/partners.html", perm: "manage_partners" },
+      { id: "kyc", label: "KYC Requests", icon: "📋", href: basePath + "/pages/kyc/kyc.html", perm: "manage_kyc" },
+      { id: "orders", label: "Orders", icon: "🛒", href: basePath + "/pages/orders/orders.html", perm: "manage_orders" },
+      { id: "shipping", label: "Shipping", icon: "🚚", href: basePath + "/pages/shipping/shipping.html", perm: "manage_shipping" },
+      { id: "returns", label: "Returns", icon: "↩️", href: basePath + "/pages/returns/returns.html", perm: "manage_returns" },
+      { id: "payouts", label: "Payouts", icon: "💰", href: basePath + "/pages/payouts/payouts.html", perm: "manage_payouts" },
     ]},
     { group: "Users", items: [
-      { id: "delivery-boys", label: "Delivery Boys", icon: "🚴", href: basePath + "/pages/delivery-boys/delivery-boys.html" },
-      { id: "staff", label: "Staff", icon: "👥", href: basePath + "/pages/staff/staff.html" },
-      { id: "wallets", label: "Wallets", icon: "👛", href: basePath + "/pages/wallets/wallets.html" },
+      { id: "delivery-boys", label: "Delivery Boys", icon: "🚴", href: basePath + "/pages/delivery-boys/delivery-boys.html", perm: "manage_delivery" },
+      { id: "staff", label: "Staff", icon: "👥", href: basePath + "/pages/staff/staff.html", perm: "manage_staff" },
+      { id: "wallets", label: "Wallets", icon: "👛", href: basePath + "/pages/wallets/wallets.html", perm: "manage_wallets" },
     ]},
     { group: "Engagement", items: [
-      { id: "tickets", label: "Support Tickets", icon: "🎫", href: basePath + "/pages/tickets/tickets.html" },
-      { id: "subscriptions", label: "Subscriptions", icon: "⭐", href: basePath + "/pages/subscriptions/subscriptions.html" },
-      { id: "notifications", label: "Notifications", icon: "🔔", href: basePath + "/pages/notifications/notifications.html" },
-      { id: "magic-pools", label: "Magic Pools", icon: "🎡", href: basePath + "/pages/magic-pools/magic-pools.html" },
-      { id: "investors", label: "Investors", icon: "💼", href: basePath + "/pages/investors/investors.html" },
+      { id: "tickets", label: "Support Tickets", icon: "🎫", href: basePath + "/pages/tickets/tickets.html", perm: "manage_tickets" },
+      { id: "subscriptions", label: "Subscriptions", icon: "⭐", href: basePath + "/pages/subscriptions/subscriptions.html", perm: "manage_subscriptions" },
+      { id: "notifications", label: "Notifications", icon: "🔔", href: basePath + "/pages/notifications/notifications.html", perm: "manage_notifications" },
+      { id: "magic-pools", label: "Magic Pools", icon: "🎡", href: basePath + "/pages/magic-pools/magic-pools.html", perm: "manage_magic_pools" },
+      { id: "investors", label: "Investors", icon: "💼", href: basePath + "/pages/investors/investors.html", perm: "manage_investors" },
     ]},
     { group: "System", items: [
-      { id: "reports", label: "Reports", icon: "📈", href: basePath + "/pages/reports/reports.html" },
-      { id: "ddgo-settings", label: "Quick Commerce Settings", icon: "🟢", href: basePath + "/pages/ddgo-settings/ddgo-settings.html" },
-      { id: "settings", label: "Settings", icon: "⚙️", href: basePath + "/pages/settings/settings.html" },
-      { id: "home-sections", label: "Home Layouts", icon: "🏠", href: basePath + "/pages/home-sections/home-sections.html" },
-      { id: "app-customization", label: "App Customization", icon: "🎨", href: basePath + "/pages/app-customization/app-customization.html" },
+      { id: "reports", label: "Reports", icon: "📈", href: basePath + "/pages/reports/reports.html", perm: "view_reports" },
+      { id: "ddgo-settings", label: "Quick Commerce Settings", icon: "🟢", href: basePath + "/pages/ddgo-settings/ddgo-settings.html", perm: "manage_settings" },
+      { id: "settings", label: "Settings", icon: "⚙️", href: basePath + "/pages/settings/settings.html", perm: "manage_settings" },
+      { id: "home-sections", label: "Home Layouts", icon: "🏠", href: basePath + "/pages/home-sections/home-sections.html", perm: "manage_homepage" },
+      { id: "app-customization", label: "App Customization", icon: "🎨", href: basePath + "/pages/app-customization/app-customization.html", perm: "manage_homepage" },
     ]},
   ];
 
+  // Staff only see the sections they hold a permission for (admins see all).
+  const me = getMe();
+  const canSee = (item) => {
+    if (!me || me.isAdmin !== false) return true;
+    if (!item.perm) return true;
+    return (me.permissions || []).includes(item.perm);
+  };
+
   let navHTML = "";
   for (const group of navItems) {
+    const visible = group.items.filter(canSee);
+    if (!visible.length) continue;
     navHTML += `<div class="nav-group"><div class="nav-group-label">${group.group}</div>`;
-    for (const item of group.items) {
+    for (const item of visible) {
       const active = item.id === activePageId ? " active" : "";
       navHTML += `<a class="nav-item${active}" href="${item.href}"><span class="icon">${item.icon}</span>${item.label}</a>`;
     }
     navHTML += `</div>`;
+  }
+
+  // Staff deep-linking into a page they cannot open → bounce to their first
+  // allowed section (the API rejects them anyway; this avoids a broken screen).
+  const currentNav = navItems.flatMap((g) => g.items).find((i) => i.id === activePageId);
+  if (currentNav && !canSee(currentNav)) {
+    const fallback = navItems.flatMap((g) => g.items).find(canSee);
+    showToast("You do not have permission to open that section", "error");
+    if (fallback) {
+      window.location.replace(fallback.href);
+    } else {
+      document.body.innerHTML =
+        `<div style="padding:60px;text-align:center;font-family:Inter,sans-serif">
+           <div style="font-size:42px">🔒</div>
+           <h2>No sections assigned</h2>
+           <p style="color:#6b7280">Your account has no permissions yet. Please contact your administrator.</p>
+         </div>`;
+    }
+    return;
   }
 
   if (sidebar) {
@@ -123,9 +152,16 @@ function buildLayout(activePageId) {
   const logoutBtn = document.getElementById("btn-logout");
   if (logoutBtn) logoutBtn.addEventListener("click", logout);
 
-  // Region switcher (Phase 2 — IN / US storefront)
+  // Region switcher (IN / US storefront) — staff only get their allowed stores
   const regionSel = document.getElementById("region-switcher");
   if (regionSel) {
+    const allowedRegions = me && me.isAdmin === false && (me.regions || []).length
+      ? me.regions
+      : ["IN", "US"];
+    [...regionSel.options].forEach((opt) => {
+      if (!allowedRegions.includes(opt.value)) opt.remove();
+    });
+    if (!allowedRegions.includes(getRegion())) setRegion(allowedRegions[0]);
     regionSel.value = getRegion();
     regionSel.addEventListener("change", function () {
       setRegion(this.value);
@@ -134,8 +170,32 @@ function buildLayout(activePageId) {
     });
   }
 
+  // Refresh permissions in the background so changes apply on the next page load
+  refreshMe();
+
   // Apply admin sidebar branding (logo / brand name from settings)
   applyAdminBranding();
+}
+
+// ---- Signed-in identity + permissions (staff role-based access) ----
+function getMe() {
+  try { return JSON.parse(localStorage.getItem("dd_me") || "null"); } catch { return null; }
+}
+
+async function refreshMe() {
+  try {
+    const data = await API.get("/admin/me");
+    if (data && data.me) {
+      const prev = getMe();
+      localStorage.setItem("dd_me", JSON.stringify(data.me));
+      // Permissions changed while the page was open — rebuild the menu
+      if (prev && JSON.stringify(prev.permissions) !== JSON.stringify(data.me.permissions)) {
+        window.location.reload();
+      }
+    }
+  } catch {
+    // Offline or token expired — keep the cached copy; API layer handles 401s
+  }
 }
 
 // ---- Region helpers (Phase 2) ----

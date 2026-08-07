@@ -1,4 +1,5 @@
 const User = require("../../models/User");
+const Staff = require("../../models/Staff");
 const { sendOtp, verifyOtp } = require("../../services/otp.service");
 const { verifyIdToken } = require("../../services/firebase.service");
 const { generateTokens, verifyRefreshToken } = require("../../services/token.service");
@@ -14,10 +15,12 @@ async function handleSendOtp(req, res) {
 
   const { phone } = req.body;
 
-  // Admin login restricted to allowed numbers only
+  // Admin panel login: allowed for ADMIN_PHONES, or for an active staff member
   if (req.clientRole === "admin") {
     const allowedAdmins = (process.env.ADMIN_PHONES || "").split(",").map((p) => p.trim()).filter(Boolean);
-    if (allowedAdmins.length > 0 && !allowedAdmins.includes(phone)) {
+    const isAdminPhone = allowedAdmins.length === 0 || allowedAdmins.includes(phone);
+    const isStaffPhone = isAdminPhone ? false : !!(await Staff.findOne({ phone, isActive: true }).select("_id").lean());
+    if (!isAdminPhone && !isStaffPhone) {
       return res.status(403).json({ success: false, message: "This phone number is not authorized for admin access" });
     }
   }
@@ -38,13 +41,41 @@ async function handleVerifyOtp(req, res) {
   const result = await verifyOtp(phone, otp);
   if (!result.success) return res.status(401).json(result);
 
-  const role = req.clientRole || "user";
+  let role = req.clientRole || "user";
+  let staffDoc = null;
+
+  // Admin panel: a phone that belongs to a staff member logs in as staff,
+  // never as admin (ADMIN_PHONES stay full admins).
+  if (role === "admin") {
+    const allowedAdmins = (process.env.ADMIN_PHONES || "").split(",").map((p) => p.trim()).filter(Boolean);
+    const isAdminPhone = allowedAdmins.length === 0 || allowedAdmins.includes(phone);
+    if (!isAdminPhone) {
+      staffDoc = await Staff.findOne({ phone, isActive: true });
+      if (!staffDoc) {
+        return res.status(403).json({ success: false, message: "This phone number is not authorized for admin access" });
+      }
+      role = "staff";
+    }
+  }
+
   let user = await User.findOne({ phone, role });
 
   let isNewUser = false;
   if (!user) {
-    user = await User.create({ phone, role });
+    user = await User.create({
+      phone,
+      role,
+      name: staffDoc?.name || null,
+      email: staffDoc?.email || null,
+      isProfileComplete: !!staffDoc,
+    });
     isNewUser = true;
+  }
+
+  // Keep the staff record pointed at the account that actually logs in
+  if (staffDoc && String(staffDoc.user) !== String(user._id)) {
+    staffDoc.user = user._id;
+    await staffDoc.save();
   }
 
   user.lastLogin = new Date();
@@ -57,7 +88,12 @@ async function handleVerifyOtp(req, res) {
     success: true,
     isNewUser,
     isProfileComplete: user.isProfileComplete,
-    user: { id: user._id, phone: user.phone, name: user.name, email: user.email, role: user.role },
+    user: {
+      id: user._id, phone: user.phone, name: user.name, email: user.email, role: user.role,
+      ...(staffDoc
+        ? { permissions: staffDoc.permissions || [], regions: staffDoc.regions || [], roleName: staffDoc.roleName }
+        : {}),
+    },
     ...tokens,
   });
 }

@@ -50,5 +50,6 @@ function logout() {
   localStorage.removeItem(CONFIG.TOKEN_KEY);
   localStorage.removeItem(CONFIG.REFRESH_KEY);
   localStorage.removeItem(CONFIG.USER_KEY);
+  localStorage.removeItem("dd_me");
   window.location.href = ADMIN_BASE + "/index.html";
 }

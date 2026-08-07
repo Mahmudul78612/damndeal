@@ -108,6 +108,19 @@
             localStorage.setItem(CONFIG.TOKEN_KEY, data.accessToken);
             localStorage.setItem(CONFIG.REFRESH_KEY, data.refreshToken);
             localStorage.setItem(CONFIG.USER_KEY, JSON.stringify(data.user));
+
+            // Role-based access: cache permissions/regions for the sidebar
+            const isAdmin = data.user.role === "admin";
+            localStorage.setItem("dd_me", JSON.stringify({
+              name: data.user.name, phone: data.user.phone, role: data.user.role,
+              isAdmin,
+              permissions: isAdmin ? [] : (data.user.permissions || []),
+              regions: data.user.regions && data.user.regions.length ? data.user.regions : ["IN", "US"],
+            }));
+            // Staff limited to one store: preselect it
+            if (!isAdmin && data.user.regions && data.user.regions.length === 1) {
+              localStorage.setItem("dd_region", data.user.regions[0]);
+            }
             window.location.href = "pages/dashboard/dashboard.html";
           } else {
             showError(data.message || "Invalid OTP");

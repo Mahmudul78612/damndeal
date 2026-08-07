@@ -1,5 +1,6 @@
 const express = require("express");
 const { authenticate, authorize } = require("../../middleware/auth.middleware");
+const { attachStaff, requirePermission } = require("../../middleware/permission.middleware");
 const { uploadBanner, uploadCategoryImage, uploadCustomizationImage, uploadProductImages, uploadPromoImages, uploadSettingImage, uploadDesktopBanners, uploadHomeSectionBanners, uploadMagicPoolImages, uploadCsvFile, optimizeImages } = require("../../middleware/upload.middleware");
 
 // Controllers
@@ -31,6 +32,46 @@ const userReview = require("./controllers/userReview.controller");
 
 const router = express.Router();
 router.use(authenticate, authorize("admin", "staff"));
+router.use(attachStaff);
+
+// ── Role-based access (staff only; role "admin" passes everything) ──
+// Guards are mounted per path prefix so every current and future method under
+// a module is covered automatically.
+const P = requirePermission;
+router.use("/dashboard", P("view_dashboard"));
+router.use("/analytics", P("view_analytics"));
+router.use("/categories", P("manage_categories"));
+router.use("/subcategories", P("manage_categories"));
+router.use("/products", P("manage_products"));
+router.use("/user-reviews", P("manage_reviews"));
+router.use("/cj", P("manage_cj"));
+router.use("/offers", P("manage_offers"));
+router.use("/coupons", P("manage_coupons"));
+router.use("/banners", P("manage_banners"));
+router.use("/partners", P("manage_partners"));
+router.use("/kyc", P("manage_kyc"));
+router.use("/orders", P("manage_orders"));
+router.use("/shipping", P("manage_shipping"));
+router.use("/returns", P("manage_returns"));
+router.use("/payouts", P("manage_payouts"));
+router.use("/delivery-boys", P("manage_delivery"));
+router.use("/staff", P("manage_staff"));
+router.use("/wallets", P("manage_wallets"));
+router.use("/tickets", P("manage_tickets"));
+router.use("/subscriptions", P("manage_subscriptions"));
+router.use("/notifications", P("manage_notifications"));
+router.use("/magic-pools", P("manage_magic_pools"));
+router.use("/investors", P("manage_investors"));
+router.use("/reports", P("view_reports"));
+router.use("/settings", P("manage_settings"));
+router.use("/home-sections", P("manage_homepage"));
+router.use("/desktop-home-sections", P("manage_homepage"));
+router.use("/app-customization", P("manage_homepage"));
+
+// Who am I + permission catalog (no permission needed — every signed-in
+// admin/staff must be able to load their own menu)
+router.get("/me", staff.getMe);
+router.get("/permissions", staff.getPermissionCatalog);
 
 // Dashboard
 router.get("/dashboard", dashboard.getDashboard);
