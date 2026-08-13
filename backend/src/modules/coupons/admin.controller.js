@@ -144,7 +144,7 @@ async function updateCampaign(req, res) {
 /* ── Spin settings (AppSettings-backed) ── */
 const AppSettings = require("../../models/AppSettings");
 async function getSpinSettings(req, res) {
-  const rows = await AppSettings.find({ key: { $in: ["coupon_spin_enabled", "coupon_spin_cooldown_hours"] } }).lean();
+  const rows = await AppSettings.find({ key: { $in: ["coupon_spin_enabled", "coupon_spin_cooldown_hours", "coupon_max_per_user_day", "coupon_max_per_user_active"] } }).lean();
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   const inSpinCount = await CouponCampaign.countDocuments({ inSpin: true, status: "active" });
   return res.json({
@@ -152,17 +152,35 @@ async function getSpinSettings(req, res) {
     enabled: map.coupon_spin_enabled !== false && map.coupon_spin_enabled !== "false",
     cooldownHours: Number(map.coupon_spin_cooldown_hours) > 0 ? Number(map.coupon_spin_cooldown_hours) : 24,
     inSpinCount,
+    maxPerUserDay: Number(map.coupon_max_per_user_day) > 0 ? Number(map.coupon_max_per_user_day) : 0,
+    maxPerUserActive: Number(map.coupon_max_per_user_active) > 0 ? Number(map.coupon_max_per_user_active) : 0,
   });
 }
 async function updateSpinSettings(req, res) {
-  const { enabled, cooldownHours } = req.body;
+  const { enabled, cooldownHours, maxPerUserDay, maxPerUserActive } = req.body;
   if (enabled !== undefined) {
     await AppSettings.findOneAndUpdate({ key: "coupon_spin_enabled" }, { key: "coupon_spin_enabled", value: !!enabled }, { upsert: true });
   }
   if (cooldownHours !== undefined) {
     await AppSettings.findOneAndUpdate({ key: "coupon_spin_cooldown_hours" }, { key: "coupon_spin_cooldown_hours", value: Number(cooldownHours) || 24 }, { upsert: true });
   }
-  await writeAudit(req, { action: "coupon.spin.settings", module: "coupons", targetType: "AppSettings", targetLabel: "Spin & Win", after: { enabled, cooldownHours } });
+  // Marketplace-wide claim rules (0 = unlimited). These cap how many coupons
+  // one person may take across the whole marketplace, on top of each
+  // campaign's own perUserLimit.
+  const rules = { coupon_max_per_user_day: maxPerUserDay, coupon_max_per_user_active: maxPerUserActive };
+  for (const [key, v] of Object.entries(rules)) {
+    if (v === undefined) continue;
+    await AppSettings.findOneAndUpdate(
+      { key },
+      { key, value: Math.max(0, parseInt(v, 10) || 0) },
+      { upsert: true }
+    );
+  }
+  await writeAudit(req, {
+    action: "coupon.rules.update", module: "coupons", targetType: "AppSettings",
+    targetLabel: "Spin & claim rules",
+    after: { enabled, cooldownHours, maxPerUserDay, maxPerUserActive },
+  });
   return res.json({ success: true });
 }
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { Campaign, Claim } from '@/lib/types';
@@ -14,6 +15,39 @@ import { X, Copy, Check, ExternalLink, QrCode, CalendarClock, BadgeCheck } from 
 
 const INK = '#1B1530';   // deep purple ink — QR modules
 const NOTCH = 13;        // notch radius (px)
+
+/**
+ * Which campaigns has this user already claimed?
+ *
+ * Fetched once per session and shared by every button on the page, so a
+ * coupon the user already holds says so instead of offering to claim it
+ * again. Failures are swallowed: the button just falls back to Claim.
+ */
+let claimedIdsPromise: Promise<Set<string>> | null = null;
+function loadClaimedIds(): Promise<Set<string>> {
+  if (!claimedIdsPromise) {
+    claimedIdsPromise = (async (): Promise<Set<string>> => {
+      const ids = new Set<string>();
+      try {
+        const r = await api.get('/coupons/my-claims');
+        for (const c of (r.items || []) as any[]) {
+          if (c.status === 'cancelled') continue;
+          ids.add(String(c.campaign?._id || c.campaign));
+        }
+      } catch {
+        // Not signed in, offline, or the call failed — fall back to "Claim".
+      }
+      return ids;
+    })();
+  }
+  return claimedIdsPromise;
+}
+/** Called after a fresh claim so other buttons update without a refetch. */
+function rememberClaimed(id: string) {
+  if (claimedIdsPromise) {
+    claimedIdsPromise = claimedIdsPromise.then((set) => { set.add(String(id)); return set; });
+  }
+}
 
 const up = (p?: string) => (p ? (p.startsWith('http') ? p : `/uploads/${p.replace(/^\/?uploads\//, '')}`) : '');
 
@@ -60,6 +94,8 @@ export default function ClaimButton({ campaign, compact = false, big = false }: 
   const [qr, setQr] = useState('');
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
+  const [held, setHeld] = useState(false);   // already claimed in an earlier visit
+  const [mounted, setMounted] = useState(false);
 
   const soldOut = (campaign.claimedCount || 0) >= (campaign.totalQuota || 0);
 
@@ -67,6 +103,16 @@ export default function ClaimButton({ campaign, compact = false, big = false }: 
     const d = campaign.endAt ? new Date(campaign.endAt) : null;
     return d && !isNaN(d.getTime()) ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   })();
+
+  useEffect(() => { setMounted(true); }, []);
+
+  // Already-claimed lookup — one shared request per session
+  useEffect(() => {
+    if (!isLoggedIn) { setHeld(false); return; }
+    let alive = true;
+    loadClaimedIds().then((ids) => { if (alive) setHeld(ids.has(String(campaign._id))); });
+    return () => { alive = false; };
+  }, [isLoggedIn, campaign._id]);
 
   // Esc closes the ticket
   useEffect(() => {
@@ -83,6 +129,8 @@ export default function ClaimButton({ campaign, compact = false, big = false }: 
       const res = await api.post('/coupons/claim', { campaignId: campaign._id });
       setClaim(res.claim);
       setAlready(!!res.alreadyClaimed);
+      setHeld(true);
+      rememberClaimed(campaign._id);
       setOpen(true);
       try {
         const QRCode = (await import('qrcode')).default;
@@ -113,11 +161,13 @@ export default function ClaimButton({ campaign, compact = false, big = false }: 
 
   return (
     <>
-      <button onClick={doClaim} disabled={loading || soldOut} className={btnCls}>
-        <span className="relative z-10">{soldOut ? 'Sold Out' : loading ? 'Claiming…' : '🎟️ Claim Coupon'}</span>
+      <button onClick={doClaim} disabled={loading || (soldOut && !held)} className={btnCls}>
+        <span className="relative z-10">
+          {loading ? 'Opening…' : held ? '✓ View your coupon' : soldOut ? 'Sold Out' : '🎟️ Claim Coupon'}
+        </span>
       </button>
 
-      {open && (
+      {open && mounted && createPortal(
         <div role="dialog" aria-modal="true"
           className="fixed inset-0 z-[110] flex items-center justify-center px-4 py-6 overflow-y-auto">
           <div className="fixed inset-0 bg-[#150E2B]/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
@@ -235,7 +285,8 @@ export default function ClaimButton({ campaign, compact = false, big = false }: 
               </div>
             </div>
           ) : null}
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

@@ -282,10 +282,61 @@ async function claimForUser(c, userId, region) {
   }
 }
 
+/**
+ * Marketplace-wide claim rules, set by the admin.
+ *
+ * These sit ON TOP of each campaign's own perUserLimit: a campaign decides how
+ * many of ITS coupons one person may hold, these decide how many coupons a
+ * person may hold across the whole marketplace. 0 or blank means unlimited.
+ */
+async function claimRules() {
+  const rows = await AppSettings.find({
+    key: { $in: ["coupon_max_per_user_day", "coupon_max_per_user_active"] },
+  }).lean();
+  const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  const num = (v) => (Number(v) > 0 ? Number(v) : 0);
+  return {
+    perDay: num(map.coupon_max_per_user_day),
+    activeTotal: num(map.coupon_max_per_user_active),
+  };
+}
+
 /* POST /api/coupons/claim { campaignId } */
 async function claim(req, res) {
   const blocked = await checkClaimAllowed(req, req.user.userId);
   if (blocked) return res.status(429).json({ success: false, message: blocked });
+
+  // Marketplace rules — checked before anything is reserved. A coupon the user
+  // already holds is exempt, so re-opening it always works.
+  const rules = await claimRules();
+  if (rules.perDay || rules.activeTotal) {
+    const holds = await CouponClaim.exists({
+      campaign: req.body.campaignId, user: req.user.userId, status: { $ne: "cancelled" },
+    });
+    if (!holds) {
+      if (rules.perDay) {
+        const since = new Date(Date.now() - 24 * 3600 * 1000);
+        const today = await CouponClaim.countDocuments({
+          user: req.user.userId, createdAt: { $gte: since }, status: { $ne: "cancelled" },
+        });
+        if (today >= rules.perDay) {
+          return res.status(429).json({
+            success: false, code: "DAILY_LIMIT",
+            message: `You can claim ${rules.perDay} coupon${rules.perDay > 1 ? "s" : ""} a day. Come back tomorrow!`,
+          });
+        }
+      }
+      if (rules.activeTotal) {
+        const active = await CouponClaim.countDocuments({ user: req.user.userId, status: "claimed" });
+        if (active >= rules.activeTotal) {
+          return res.status(429).json({
+            success: false, code: "ACTIVE_LIMIT",
+            message: `You already hold ${active} unused coupons. Redeem some before claiming more.`,
+          });
+        }
+      }
+    }
+  }
 
   const c = await CouponCampaign.findById(req.body.campaignId);
   const out = await claimForUser(c, req.user.userId, R(req));

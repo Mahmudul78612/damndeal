@@ -561,6 +561,26 @@
     const eligible = campaigns.filter((c) => c.status === "active");
     return `
       <div class="card" style="padding:16px;margin-bottom:14px">
+        <h3 style="margin:0 0 4px;font-size:15px">🎟️ Claim rules (whole marketplace)</h3>
+        <p style="margin:0 0 12px;font-size:12.5px;color:#777">
+          How many coupons ONE customer may take across every brand. This sits on top of each
+          coupon's own per-user limit. Leave 0 for unlimited.
+        </p>
+        <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+          <label style="font-size:13px">Max per user / day:
+            <input class="form-control" id="cmMaxDay" type="number" min="0" value="${spin.maxPerUserDay || 0}" style="width:90px;display:inline-block">
+          </label>
+          <label style="font-size:13px">Max unused coupons held:
+            <input class="form-control" id="cmMaxActive" type="number" min="0" value="${spin.maxPerUserActive || 0}" style="width:90px;display:inline-block">
+          </label>
+          <button class="btn btn-primary" onclick="cmSpinSave()">💾 Save rules</button>
+        </div>
+        <p style="margin:10px 0 0;font-size:12px;color:#888">
+          A coupon the customer already holds is never blocked by these — re-opening it always works.
+        </p>
+      </div>
+
+      <div class="card" style="padding:16px;margin-bottom:14px">
         <h3 style="margin:0 0 10px;font-size:15px">🎡 Wheel settings</h3>
         <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
           <label style="font-size:14px;font-weight:600"><input type="checkbox" id="cmSpinOn" ${spin.enabled ? "checked" : ""}> Spin & Win enabled</label>
@@ -586,8 +606,10 @@
       await API.put("/coupons/admin/spin-settings", {
         enabled: document.getElementById("cmSpinOn").checked,
         cooldownHours: parseInt(document.getElementById("cmSpinCd").value) || 24,
+        maxPerUserDay: parseInt(document.getElementById("cmMaxDay").value) || 0,
+        maxPerUserActive: parseInt(document.getElementById("cmMaxActive").value) || 0,
       });
-      showToast("Spin settings saved", "success"); loadAll();
+      showToast("Settings saved", "success"); loadAll();
     } catch (e) { showToast(e.message, "error"); }
   };
 
