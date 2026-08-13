@@ -83,7 +83,10 @@ const couponCampaignSchema = new mongoose.Schema(
     description: { type: String, default: "" },
     instructions: { type: String, default: "" }, // how-to-redeem steps (one per line)
     terms: { type: String, default: "" },
-    bannerImage: { type: String, default: "" },
+    // Two crops on purpose: the same photo cannot look right both as a wide
+    // hero band and as a 3:4 tile, so the merchant supplies each.
+    bannerImage: { type: String, default: "" },  // wide  1200x450 (8:3)  — cards, rows, detail hero
+    tileImage: { type: String, default: "" },    // tall   900x1200 (3:4) — tile grid, spin, showcase
     // Online brands: customer clicks through with code; offline: show QR at counter.
     isOnline: { type: Boolean, default: false },
     redirectUrl: { type: String, default: "" },

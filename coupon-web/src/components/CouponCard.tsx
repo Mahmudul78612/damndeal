@@ -29,9 +29,10 @@ export function CouponTile({ c }: { c: Campaign }) {
   return (
     <Link href={`/c/${c.slug}`} className="group block">
       <div className="relative aspect-[3/4] rounded-2xl overflow-hidden shadow-[0_4px_16px_-6px_rgba(42,27,94,0.25)] group-hover:shadow-[0_14px_30px_-8px_rgba(42,27,94,0.4)] group-hover:-translate-y-1 transition-all duration-200">
-        {c.bannerImage ? (
+        {(c.tileImage || c.bannerImage) ? (
+          // Prefer the 3:4 crop here; fall back to the wide one for older coupons.
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={up(c.bannerImage)} alt={c.title} className="w-full h-full object-cover group-hover:scale-[1.05] transition-transform duration-300" />
+          <img src={up(c.tileImage || c.bannerImage)} alt={c.title} className="w-full h-full object-cover group-hover:scale-[1.05] transition-transform duration-300" />
         ) : (
           <div className="w-full h-full brand-grad relative flex flex-col items-center justify-center gap-2 p-3">
             <BrandMark name={c.vendor?.businessName} logo={c.vendor?.logo} size={54} ring />

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, CURRENCY_SYMBOL } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
+import ImageCropUpload, { COUPON_IMAGE_SPECS } from '@/components/ImageCropUpload';
 import { Category } from '@/lib/types';
 import {
   LayoutDashboard, TicketPlus, ScanLine, KeyRound, Package2, Check, X,
@@ -309,7 +310,7 @@ function CreateCampaign({ credits, onCreated }: { credits: number; onCreated: ()
   const [states, setStates] = useState<string[]>([]);
   const [form, setForm] = useState<any>({
     title: '', category: '', offerType: 'percent', offerValue: '', offerText: '',
-    description: '', instructions: '', terms: '', bannerImage: '',
+    description: '', instructions: '', terms: '', bannerImage: '', tileImage: '',
     isOnline: false, redirectUrl: '', totalQuota: 50, perUserLimit: 1,
     endAt: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
     nationwide: false, locStates: [] as string[], city: '', lat: null as number | null, lng: null as number | null, radiusKm: 10,
@@ -389,9 +390,9 @@ function CreateCampaign({ credits, onCreated }: { credits: number; onCreated: ()
   const Preview = () => (
     <div className="w-[150px] shrink-0">
       <div className="relative aspect-[3/4] rounded-2xl overflow-hidden shadow-lg">
-        {form.bannerImage ? (
+        {(form.tileImage || form.bannerImage) ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={up(form.bannerImage)} alt="" className="w-full h-full object-cover" />
+          <img src={up(form.tileImage || form.bannerImage)} alt="" className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full brand-grad flex flex-col items-center justify-center gap-1 p-2">
             <span className="text-white font-extrabold text-[15px] text-center leading-tight drop-shadow">{form.offerText || 'YOUR OFFER'}</span>
@@ -479,17 +480,37 @@ function CreateCampaign({ credits, onCreated }: { credits: number; onCreated: ()
         {/* STEP 3 — Creative */}
         {step === 2 && (
           <div className="fade-up">
-            <p className="font-extrabold text-[16px] mb-1">Creative — banner lagao</p>
-            <p className="text-[12.5px] text-gray-400 mb-4">A 3:4 portrait image looks best in the tile grid. Large photos are compressed automatically. Skip it and a branded gradient is used.</p>
+            <p className="font-extrabold text-[16px] mb-1">Creative — two crops</p>
+            <p className="text-[12.5px] text-gray-400 mb-4">
+              Your coupon is shown in two shapes, so each one gets its own crop. Upload once and drag to
+              position — we save it at the exact size. Skip either and a branded gradient is used instead.
+            </p>
             <div className="flex gap-6 items-start flex-wrap">
-              <div className="flex-1 min-w-[220px]">
-                <label className={labelCls}>Banner image</label>
-                <input type="file" accept="image/*" className="text-sm" onChange={(e) => e.target.files?.[0] && uploadBanner(e.target.files[0])} />
+              <div className="flex-1 min-w-[240px] space-y-5">
+                <ImageCropUpload
+                  value={form.bannerImage}
+                  spec={COUPON_IMAGE_SPECS.banner}
+                  upload={(fd) => api.upload('/coupons/upload', fd)}
+                  imgSrc={up}
+                  onUploaded={(p) => { set('bannerImage', p); setMsg({ ok: true, text: 'Wide banner saved ✓' }); }}
+                />
                 {form.bannerImage && (
-                  <button onClick={() => set('bannerImage', '')} className="block mt-2 text-[11.5px] font-bold text-red-500">✕ Remove banner</button>
+                  <button onClick={() => set('bannerImage', '')} className="-mt-3 block text-[11.5px] font-bold text-red-500">✕ Remove wide banner</button>
                 )}
-                <p className="text-[11px] text-gray-400 mt-3 leading-relaxed">
-                  Tip: apna product/shop ki photo + bada offer text wala banner sabse zyada clicks laata hai.
+
+                <ImageCropUpload
+                  value={form.tileImage}
+                  spec={COUPON_IMAGE_SPECS.tile}
+                  upload={(fd) => api.upload('/coupons/upload', fd)}
+                  imgSrc={up}
+                  onUploaded={(p) => { set('tileImage', p); setMsg({ ok: true, text: 'Tile image saved ✓' }); }}
+                />
+                {form.tileImage && (
+                  <button onClick={() => set('tileImage', '')} className="-mt-3 block text-[11.5px] font-bold text-red-500">✕ Remove tile image</button>
+                )}
+
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  Tip: a photo of your product or shop with large offer text gets the most clicks.
                 </p>
               </div>
               <Preview />

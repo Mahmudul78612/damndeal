@@ -130,7 +130,7 @@ async function searchCampaigns(req, res) {
 /* PUT /admin/campaigns/:id — direct field updates (inSpin, endAt, quota, etc.) */
 async function updateCampaign(req, res) {
   const allowed = {};
-  for (const k of ["inSpin", "endAt", "totalQuota", "regions", "title", "description", "instructions", "terms", "offerText", "bannerImage"]) {
+  for (const k of ["inSpin", "endAt", "totalQuota", "regions", "title", "description", "instructions", "terms", "offerText", "bannerImage", "tileImage"]) {
     if (req.body[k] !== undefined) allowed[k] = req.body[k];
   }
   const prev = await CouponCampaign.findById(req.params.id).lean();

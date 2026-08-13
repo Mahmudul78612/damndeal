@@ -103,7 +103,7 @@ async function createCampaign(req, res) {
   const vendor = await requireVendor(req, res); if (!vendor) return;
   const {
     title, category, offerType = "percent", offerValue = 0, offerText,
-    description = "", instructions = "", terms = "", bannerImage = "", isOnline = false, redirectUrl = "",
+    description = "", instructions = "", terms = "", bannerImage = "", tileImage = "", isOnline = false, redirectUrl = "",
     totalQuota = 50, perUserLimit = 1, endAt, location = {},
     scope, outlets = [],
   } = req.body;
@@ -158,7 +158,7 @@ async function createCampaign(req, res) {
     vendor: vendor._id, title: String(title).trim(),
     slug: await uniqueSlug(CouponCampaign, slugify(`${vendor.businessName}-${title}`)),
     category, offerType, offerValue, offerText: String(offerText).trim(),
-    description, instructions, terms, bannerImage, isOnline: !!isOnline, redirectUrl,
+    description, instructions, terms, bannerImage, tileImage, isOnline: !!isOnline, redirectUrl,
     totalQuota: quota, perUserLimit: Math.max(1, parseInt(perUserLimit) || 1),
     location: finalLoc,
     scope: effectiveScope,
@@ -190,7 +190,7 @@ async function updateCampaign(req, res) {
   const { action } = req.body;
   if (action === "pause" && c.status === "active") c.status = "paused";
   else if (action === "resume" && c.status === "paused") c.status = "active";
-  const editable = ["description", "instructions", "terms", "bannerImage", "redirectUrl", "endAt"];
+  const editable = ["description", "instructions", "terms", "bannerImage", "tileImage", "redirectUrl", "endAt"];
   for (const k of editable) if (req.body[k] !== undefined) c[k] = req.body[k];
   await c.save();
   return res.json({ success: true, campaign: c });

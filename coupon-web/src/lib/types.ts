@@ -36,6 +36,7 @@ export interface Campaign {
   description?: string;
   terms?: string;
   bannerImage?: string;
+  tileImage?: string;
   isOnline?: boolean;
   redirectUrl?: string;
   claimedCount: number;

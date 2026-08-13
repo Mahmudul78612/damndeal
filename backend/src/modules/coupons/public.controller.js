@@ -57,7 +57,7 @@ async function locFilter(req) {
   return { $or: or };
 }
 
-const CAMPAIGN_CARD = "title slug offerText offerType offerValue bannerImage isOnline claimedCount totalQuota endAt featured category";
+const CAMPAIGN_CARD = "title slug offerText offerType offerValue bannerImage tileImage isOnline claimedCount totalQuota endAt featured category";
 const VENDOR_CARD = "businessName slug logo isVerifiedBadge";
 
 /* ── Homepage sections (data schema v2 — see coupon.models.js) ────────────── */
