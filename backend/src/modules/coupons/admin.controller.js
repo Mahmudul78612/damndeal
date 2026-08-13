@@ -9,6 +9,7 @@ const {
   CouponCategory, CouponVendor, CouponCampaign, CouponClaim, CouponSection, CouponPackOrder,
 } = require("../../models/coupon.models");
 const { writeAudit, diff } = require("../../services/audit.service");
+const billing = require("../../services/couponBilling.service");
 
 const slugify = (s) =>
   String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 60) ||
@@ -296,13 +297,19 @@ async function decidePackOrder(req, res) {
   if (!order) return res.status(404).json({ success: false, message: "Not found" });
   if (order.status !== "pending") return res.status(409).json({ success: false, message: "Already decided" });
   if (action === "paid") {
-    order.status = "paid"; order.paymentRef = paymentRef; order.approvedBy = req.user.userId;
-    await CouponVendor.updateOne(
-      { _id: order.vendor },
-      { $inc: { claimCredits: order.claims, totalCreditsPurchased: order.claims } }
-    );
-  } else if (action === "reject") order.status = "rejected";
-  await order.save();
+    // Route through the same idempotent grant the gateways use, so a manual
+    // approval after a webhook already landed cannot credit the account twice.
+    order.paymentRef = paymentRef;
+    order.approvedBy = req.user.userId;
+    await order.save();
+    const out = await billing.grantCredits(order._id, { gateway: order.gateway || "manual" });
+    if (out.alreadyGranted) {
+      return res.json({ success: true, order, message: "Already paid — credits were granted earlier." });
+    }
+  } else if (action === "reject") {
+    order.status = "rejected";
+    await order.save();
+  }
   await writeAudit(req, {
     action: `coupon.packorder.${action}`,
     module: "coupons",

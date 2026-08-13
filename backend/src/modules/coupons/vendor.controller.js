@@ -13,6 +13,9 @@ const { CouponDailyStat } = require("../../models/couponAnalytics.models");
 const { CouponOutlet } = require("../../models/couponOrg.models");
 const { deriveLocation, refreshBrandCampaigns } = require("../../services/couponTargeting.service");
 const { outletInScope, resolveBrand } = require("../../middleware/couponAuth.middleware");
+const billing = require("../../services/couponBilling.service");
+const { renderInvoicePdf } = require("../../services/couponInvoice.service");
+const { CouponOrg } = require("../../models/couponOrg.models");
 const mongoose = require("mongoose");
 const isId = (v) => !!v && mongoose.Types.ObjectId.isValid(String(v));
 
@@ -166,6 +169,8 @@ async function createCampaign(req, res) {
   });
   vendor.claimCredits -= quota;
   await vendor.save();
+  // Nudge before they run out mid-campaign, not after
+  billing.lowCreditWarning(vendor).catch(() => {});
   return res.status(201).json({ success: true, campaign, message: "Submitted for review" });
 }
 
@@ -451,15 +456,65 @@ async function buyPack(req, res) {
   const cat = await CouponCategory.findById(req.body.categoryId);
   const pack = cat?.packs?.find((p) => p.claims === Number(req.body.claims));
   if (!cat || !pack) return res.status(400).json({ success: false, message: "Pack not found" });
+  const price = region === "US" ? pack.priceUSD : pack.priceINR;
+  const { taxPercent, taxAmount, totalAmount } = await billing.priceBreakdown(price, region);
+
   const order = await CouponPackOrder.create({
-    vendor: vendor._id, category: cat._id, claims: pack.claims,
-    price: region === "US" ? pack.priceUSD : pack.priceINR,
-    currency: region === "US" ? "USD" : "INR", region,
+    vendor: vendor._id, org: vendor.org || null, category: cat._id, claims: pack.claims,
+    price, currency: region === "US" ? "USD" : "INR", region,
+    taxPercent, taxAmount, totalAmount,
   });
-  return res.status(201).json({
-    success: true, order,
-    message: "Pack order placed — our team will contact you to complete payment, then credits are added instantly.",
-  });
+
+  // Open the gateway straight away. Credits are added only when the payment is
+  // confirmed by webhook/signature — never here, and never on the return page.
+  const origin = req.headers.origin || (region === "US" ? "https://coupon.damndeal.com" : "https://coupon.damndeal.in");
+  try {
+    const checkout = await billing.startCheckout(order, {
+      successUrl: `${origin}/business/billing?paid=${order._id}`,
+      cancelUrl: `${origin}/business/billing?cancelled=1`,
+    });
+    return res.status(201).json({ success: true, order, checkout });
+  } catch (e) {
+    // Gateway not configured / temporarily down — keep the order so the team
+    // can still settle it manually rather than losing the intent.
+    console.error("[BILLING] checkout start failed:", e.message);
+    return res.status(201).json({
+      success: true, order, checkout: null,
+      message: "Order created. Online payment is unavailable right now — our team will contact you to complete it.",
+    });
+  }
+}
+
+/* POST /api/coupons/vendor/packs/:id/confirm — Razorpay client callback.
+   The signature is verified server-side before a single credit is granted. */
+async function confirmPack(req, res) {
+  const vendor = await requireVendor(req, res); if (!vendor) return;
+  const order = await CouponPackOrder.findOne({ _id: req.params.id, vendor: vendor._id });
+  if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+  if (order.status === "paid") return res.json({ success: true, alreadyPaid: true, order });
+
+  try {
+    await billing.confirmRazorpay(order, {
+      razorpayPaymentId: req.body.razorpay_payment_id,
+      razorpaySignature: req.body.razorpay_signature,
+    });
+  } catch (e) {
+    return res.status(400).json({ success: false, message: e.message });
+  }
+  const fresh = await CouponPackOrder.findById(order._id).lean();
+  return res.json({ success: true, order: fresh, message: `${fresh.claims} credits added.` });
+}
+
+/* GET /api/coupons/vendor/packs/:id/invoice — PDF, paid orders only */
+async function packInvoice(req, res) {
+  const vendor = await requireVendor(req, res); if (!vendor) return;
+  const order = await CouponPackOrder.findOne({ _id: req.params.id, vendor: vendor._id })
+    .populate("category", "name").lean();
+  if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+  if (order.status !== "paid") return res.status(400).json({ success: false, message: "Invoice is available once the payment is complete." });
+
+  const org = vendor.org ? await CouponOrg.findById(vendor.org).lean() : null;
+  return renderInvoicePdf(res, { order, vendor, org });
 }
 
 /* GET /api/coupons/vendor/pack-orders */
@@ -473,4 +528,5 @@ module.exports = {
   register, me, updateMe, createCampaign, myCampaigns, updateCampaign, stats, analytics,
   verifyCode, redeemCode, rotateApiKey, packs, buyPack, myPackOrders,
   listOutlets, createOutlet, updateOutlet, deleteOutlet, bulkOutlets,
+  confirmPack, packInvoice,
 };

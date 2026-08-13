@@ -43,6 +43,33 @@ async function createCheckoutSession(order, successUrl, cancelUrl, currency = "u
   return { url: session.url, sessionId: session.id };
 }
 
+/**
+ * Hosted Checkout for anything that is not a storefront order (coupon credit
+ * packs today). Kept separate from createCheckoutSession so the order flow's
+ * metadata contract stays untouched.
+ */
+async function createCheckoutSessionGeneric({ name, amount, currency = "usd", successUrl, cancelUrl, metadata = {} }) {
+  const stripe = await _getStripe();
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    line_items: [
+      {
+        price_data: {
+          currency,
+          product_data: { name },
+          unit_amount: Math.round(amount * 100),
+        },
+        quantity: 1,
+      },
+    ],
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    metadata,
+    payment_intent_data: { metadata },
+  });
+  return { url: session.url, sessionId: session.id };
+}
+
 async function retrieveSession(sessionId) {
   const stripe = await _getStripe();
   return stripe.checkout.sessions.retrieve(sessionId);
@@ -65,4 +92,4 @@ async function refundPayment(paymentIntentId, amountUSD) {
   return { refundId: refund.id, status: refund.status };
 }
 
-module.exports = { createPaymentIntent, createCheckoutSession, retrieveSession, verifyWebhookSignature, refundPayment };
+module.exports = { createPaymentIntent, createCheckoutSession, createCheckoutSessionGeneric, retrieveSession, verifyWebhookSignature, refundPayment };

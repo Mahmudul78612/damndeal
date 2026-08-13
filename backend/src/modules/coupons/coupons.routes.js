@@ -53,6 +53,8 @@ router.post("/vendor/redeem", authenticate, attachCouponMember, requireCouponPer
 router.post("/vendor/api-key", authenticate, attachCouponMember, requireCouponPermission("manage_api"), h(vendor.rotateApiKey));
 router.get("/vendor/packs", authenticate, h(vendor.packs));
 router.post("/vendor/packs", authenticate, attachCouponMember, requireCouponPermission("manage_billing"), h(vendor.buyPack));
+router.post("/vendor/packs/:id/confirm", authenticate, attachCouponMember, requireCouponPermission("manage_billing"), h(vendor.confirmPack));
+router.get("/vendor/packs/:id/invoice", authenticate, attachCouponMember, requireCouponPermission("manage_billing"), h(vendor.packInvoice));
 router.get("/vendor/pack-orders", authenticate, h(vendor.myPackOrders));
 
 /* ── Business portal: team accounts, invites, credentials ── */

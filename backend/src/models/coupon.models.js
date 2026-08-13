@@ -248,9 +248,25 @@ const couponPackOrderSchema = new mongoose.Schema(
     price: { type: Number, required: true },
     currency: { type: String, enum: ["INR", "USD"], default: "INR" },
     region: { type: String, enum: ["IN", "US"], default: "IN" },
-    status: { type: String, enum: ["pending", "paid", "rejected"], default: "pending", index: true },
+    status: { type: String, enum: ["pending", "paid", "rejected", "failed"], default: "pending", index: true },
     paymentRef: { type: String, default: "" },
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+
+    /* ── Real payments (roadmap phase 4) ──
+       Credits are granted ONLY from a verified gateway callback, never from a
+       browser redirect, and `creditsGrantedAt` makes that grant idempotent so
+       a replayed webhook cannot double-credit an account. */
+    org: { type: mongoose.Schema.Types.ObjectId, ref: "CouponOrg", default: null, index: true },
+    gateway: { type: String, enum: [null, "razorpay", "stripe", "manual"], default: null },
+    gatewayOrderId: { type: String, default: null, index: true },  // rzp order / stripe session
+    gatewayPaymentId: { type: String, default: null },
+    taxPercent: { type: Number, default: 0 },
+    taxAmount: { type: Number, default: 0 },
+    totalAmount: { type: Number, default: 0 },   // price + tax, what was charged
+    creditsGrantedAt: { type: Date, default: null },
+    paidAt: { type: Date, default: null },
+    invoiceNumber: { type: String, default: null, index: true },
+    autoTopUp: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

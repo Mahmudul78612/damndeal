@@ -5,6 +5,7 @@
  * returns to the success page.
  */
 const stripeService = require("../../../services/stripe.service");
+const couponBilling = require("../../../services/couponBilling.service");
 const Order = require("../../../models/Order");
 const Payment = require("../../../models/Payment");
 const User = require("../../../models/User");
@@ -23,11 +24,25 @@ async function stripeWebhook(req, res) {
     if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
       const session = event.data.object;
       if (session.payment_status === "paid") {
-        await _markPaid(session.metadata?.orderId, session.payment_intent, session.id);
+        // Coupon credit packs and storefront orders share this endpoint;
+        // the metadata says which one this payment belongs to.
+        if (session.metadata?.packOrderId) {
+          await couponBilling.grantCredits(session.metadata.packOrderId, {
+            gatewayPaymentId: session.payment_intent, gateway: "stripe",
+          });
+        } else {
+          await _markPaid(session.metadata?.orderId, session.payment_intent, session.id);
+        }
       }
     } else if (event.type === "payment_intent.succeeded") {
       const intent = event.data.object;
-      await _markPaid(intent.metadata?.orderId, intent.id, null);
+      if (intent.metadata?.packOrderId) {
+        await couponBilling.grantCredits(intent.metadata.packOrderId, {
+          gatewayPaymentId: intent.id, gateway: "stripe",
+        });
+      } else {
+        await _markPaid(intent.metadata?.orderId, intent.id, null);
+      }
     }
   } catch (e) {
     console.error("[STRIPE WEBHOOK] handler error:", e.message);
