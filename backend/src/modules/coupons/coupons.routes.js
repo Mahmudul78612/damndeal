@@ -65,6 +65,8 @@ router.post("/admin/categories", ...adm, h(admin.createCategory));
 router.put("/admin/categories/:id", ...adm, h(admin.updateCategory));
 router.delete("/admin/categories/:id", ...adm, h(admin.deleteCategory));
 router.get("/admin/campaigns", ...adm, h(admin.listCampaigns));
+// keep above any GET /admin/campaigns/:id route — "search" must not be read as an id
+router.get("/admin/campaigns/search", ...adm, h(admin.searchCampaigns));
 router.post("/admin/campaigns/:id/moderate", ...adm, h(admin.moderateCampaign));
 router.put("/admin/campaigns/:id", ...adm, h(admin.updateCampaign));
 router.get("/admin/spin-settings", ...adm, h(admin.getSpinSettings));

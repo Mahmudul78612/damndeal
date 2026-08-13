@@ -133,18 +133,50 @@ const couponClaimSchema = new mongoose.Schema(
 couponClaimSchema.index({ campaign: 1, user: 1 });
 
 /* ── Section (admin-customizable homepage, like home-sections) ────────────── */
+/**
+ * `data` is Mixed on purpose — the admin homepage builder writes a small config
+ * blob per section. Schema v2 keys (all optional, every reader MUST default):
+ *
+ *   ── content source (coupon-listing sections) ──
+ *   source        'auto' | 'manual'      manual = admin hand-picked coupons
+ *   campaignIds   [ObjectId]             used when source === 'manual', order preserved
+ *   categoryId    ObjectId | null        auto filter
+ *   vendorId      ObjectId | null        auto filter
+ *   sort          'newest' | 'popular' | 'ending' | 'discount'
+ *   limit         Number                 default 12 (sponsored 6), capped at 30
+ *
+ *   ── presentation ──
+ *   cardStyle     'ticket' | 'tile' | 'list' | 'compact'   (legacy: data.style)
+ *   columns       2 | 3 | 4 | 5          desktop columns, default 3
+ *   bg            'white' | 'band' | 'gradient'
+ *
+ *   ── banner sections ──
+ *   banners       [{ image, link, title, badge }]
+ *   bannerStyle   'plain' | 'coupon' | 'rounded'   ('coupon' = ticket frame)
+ *   aspect        '16:9' | '3:1' | '3:4' | '1:1'
+ *   autoplay      Boolean
+ *
+ *   ── legacy keys that stay supported ──
+ *   text, link, bgColor (top_strip), image (banner_single), style (→ cardStyle)
+ *
+ * BACK-COMPAT: rows created before v2 have none of these keys. Defaults are
+ * source 'auto', cardStyle (data.style || 'ticket'), columns 3, bg 'white',
+ * bannerStyle 'rounded', aspect '16:9'.
+ */
 const couponSectionSchema = new mongoose.Schema(
   {
     type: {
       type: String,
       enum: [
-        "top_strip",     // announcement bar: { text, link, bgColor }
-        "hero_banner",   // banners: [{ image, link, title }]
-        "category_rail", // auto categories row
-        "sponsored",     // auto: featured campaigns { limit }
-        "coupon_grid",   // auto: all coupons { limit, categoryId? , title }
-        "brand_row",     // auto: vendors row { limit, title }
-        "banner_single", // { image, link }
+        "top_strip",      // announcement bar: { text, link, bgColor }
+        "hero_banner",    // banners: [{ image, link, title, badge }]
+        "category_rail",  // auto categories row
+        "sponsored",      // featured campaigns { limit }
+        "coupon_grid",    // coupons { source, campaignIds|categoryId|vendorId, sort, limit }
+        "brand_row",      // vendors row { limit, title }
+        "banner_single",  // { image, link } / banners[0]
+        "banner_grid",    // banners: [{ image, link, title, badge }] laid out as a grid
+        "countdown_deal", // coupons ending soonest (future endAt only)
       ],
       required: true,
     },

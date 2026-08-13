@@ -6,12 +6,12 @@ import { useAuth } from '@/context/AuthContext';
 import { Category } from '@/lib/types';
 import {
   LayoutDashboard, TicketPlus, ScanLine, KeyRound, Package2, Check, X,
-  Copy, RefreshCw, PauseCircle, PlayCircle, BadgePercent,
+  Copy, RefreshCw, PauseCircle, PlayCircle, BadgePercent, Store, Camera,
 } from 'lucide-react';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-type Tab = 'dashboard' | 'campaigns' | 'create' | 'verify' | 'api' | 'packs';
+type Tab = 'dashboard' | 'campaigns' | 'create' | 'verify' | 'api' | 'packs' | 'profile';
 
 export default function VendorPortal() {
   const { isLoggedIn, loading: authLoading, openLoginModal } = useAuth();
@@ -49,6 +49,7 @@ export default function VendorPortal() {
     { k: 'verify', label: 'Verify Code', icon: <ScanLine size={16} /> },
     { k: 'api', label: 'API Key', icon: <KeyRound size={16} /> },
     { k: 'packs', label: 'Buy Packs', icon: <Package2 size={16} /> },
+    { k: 'profile', label: 'Business Profile', icon: <Store size={16} /> },
   ];
 
   const active = tabs.find((t) => t.k === tab);
@@ -74,8 +75,22 @@ export default function VendorPortal() {
           <div className="bg-white rounded-2xl border border-[#F0E9FA] shadow-[0_2px_12px_-6px_rgba(91,33,182,0.12)] overflow-hidden">
             <div className="relative p-4 pb-3.5 border-b border-gray-50">
               <div className="absolute top-0 left-0 right-0 h-1 brand-grad" />
-              <p className="font-extrabold text-[15px] text-ink truncate mt-1">{vendor.businessName}</p>
-              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+              <div className="flex items-center gap-2.5 mt-1.5">
+                <button onClick={() => setTab('profile')} title="Change business photo"
+                  className="relative shrink-0 group rounded-full">
+                  <VendorAvatar name={vendor.businessName} logo={vendor.logo} size={46} />
+                  <span className="absolute -bottom-0.5 -right-0.5 w-[19px] h-[19px] rounded-full bg-white grid place-items-center shadow-[0_1px_5px_rgba(42,27,94,0.25)] text-primary group-hover:bg-primary group-hover:text-white transition">
+                    <Camera size={11} />
+                  </span>
+                </button>
+                <div className="min-w-0">
+                  <p className="font-extrabold text-[15px] text-ink truncate">{vendor.businessName}</p>
+                  <button onClick={() => setTab('profile')} className="text-[10.5px] font-extrabold text-primary hover:underline">
+                    {vendor.logo ? 'Edit profile' : 'Add a photo'}
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                 <span className="text-[10px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary-light text-primary">
                   {vendor.claimCredits?.toLocaleString()} credits
                 </span>
@@ -117,6 +132,7 @@ export default function VendorPortal() {
           {tab === 'verify' && <Verify />}
           {tab === 'api' && <ApiKey vendor={vendor} onRotated={loadVendor} />}
           {tab === 'packs' && <Packs onOrdered={loadVendor} />}
+          {tab === 'profile' && <BusinessProfile vendor={vendor} onUpdated={(v) => (v ? setVendor(v) : loadVendor())} />}
         </main>
       </div>
     </div>
@@ -131,6 +147,27 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
 }
 const inputCls = 'w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
 const labelCls = 'block text-[12px] font-bold text-gray-500 mb-1.5 mt-4 first:mt-0';
+
+/** Uploaded file name → servable image URL. */
+const up = (p?: string) => (p ? (p.startsWith('http') ? p : `/uploads/${p.replace(/^\/?uploads\//, '')}`) : '');
+
+/** Circular business photo with a brand-gradient ring; first letter of the name when empty. */
+function VendorAvatar({ name, logo, size = 46 }: { name?: string; logo?: string; size?: number }) {
+  const letter = (name || '').trim().charAt(0).toUpperCase() || '?';
+  return (
+    <span className="block rounded-full brand-grad p-[2.5px] shrink-0" style={{ width: size, height: size }}>
+      {logo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={up(logo)} alt={name || 'Business photo'} className="w-full h-full rounded-full object-cover bg-white block" />
+      ) : (
+        <span className="w-full h-full rounded-full bg-white text-primary font-extrabold grid place-items-center"
+          style={{ fontSize: Math.round(size * 0.44) }}>
+          {letter}
+        </span>
+      )}
+    </span>
+  );
+}
 
 /* ── Onboarding ── */
 function Onboard({ onDone }: { onDone: () => void }) {
@@ -354,7 +391,7 @@ function CreateCampaign({ credits, onCreated }: { credits: number; onCreated: ()
       <div className="relative aspect-[3/4] rounded-2xl overflow-hidden shadow-lg">
         {form.bannerImage ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={`/uploads/${form.bannerImage.replace(/^\/?uploads\//, '')}`} alt="" className="w-full h-full object-cover" />
+          <img src={up(form.bannerImage)} alt="" className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full brand-grad flex flex-col items-center justify-center gap-1 p-2">
             <span className="text-white font-extrabold text-[15px] text-center leading-tight drop-shadow">{form.offerText || 'YOUR OFFER'}</span>
@@ -725,6 +762,159 @@ function Packs({ onOrdered }: { onOrdered: () => void }) {
           </div>
         </Card>
       )}
+    </div>
+  );
+}
+
+/* ── Business profile — photo + details ── */
+function BusinessProfile({ vendor, onUpdated }: { vendor: any; onUpdated: (v: any) => void }) {
+  const [form, setForm] = useState({
+    businessName: vendor.businessName || '',
+    description: vendor.description || '',
+    website: vendor.website || '',
+    phone: vendor.phone || '',
+    email: vendor.email || '',
+    address: vendor.address || '',
+    state: vendor.state || '',
+    city: vendor.city || '',
+  });
+  const [logo, setLogo] = useState<string>(vendor.logo || '');
+  const [states, setStates] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [photoMsg, setPhotoMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    import('@/lib/states').then((m) => import('@/lib/api').then((a) => setStates(m.statesFor(a.getRegion()))));
+  }, []);
+
+  /* Upload → save straight away, so the photo is live everywhere the moment it lands. */
+  const uploadLogo = async (file: File) => {
+    if (file.size > 8 * 1024 * 1024) {
+      setPhotoMsg({ ok: false, text: 'Image is too large — please pick one under 8 MB.' });
+      return;
+    }
+    setUploading(true);
+    setPhotoMsg({ ok: true, text: 'Uploading photo…' });
+    try {
+      const fd = new FormData(); fd.append('images', file);
+      const r = await api.upload('/coupons/upload', fd);
+      if (r.files?.[0]) {
+        setLogo(r.files[0]);
+        const saved = await api.put('/coupons/vendor/me', { logo: r.files[0] });
+        onUpdated(saved.vendor);
+        setPhotoMsg({ ok: true, text: 'Photo updated ✓' });
+      } else setPhotoMsg({ ok: false, text: 'Upload failed — please try another image.' });
+    } catch (e: any) { setPhotoMsg({ ok: false, text: e.message || 'Upload failed' }); }
+    setUploading(false);
+  };
+
+  const removeLogo = async () => {
+    setUploading(true); setPhotoMsg(null);
+    try {
+      const saved = await api.put('/coupons/vendor/me', { logo: '' });
+      setLogo(''); onUpdated(saved.vendor);
+      setPhotoMsg({ ok: true, text: 'Photo removed' });
+    } catch (e: any) { setPhotoMsg({ ok: false, text: e.message || 'Could not remove photo' }); }
+    setUploading(false);
+  };
+
+  const save = async () => {
+    if (!form.businessName.trim()) { setMsg({ ok: false, text: 'Business name is required' }); return; }
+    setSaving(true); setMsg(null);
+    try {
+      const saved = await api.put('/coupons/vendor/me', { ...form, logo });
+      onUpdated(saved.vendor);
+      setMsg({ ok: true, text: 'Profile saved ✓' });
+    } catch (e: any) { setMsg({ ok: false, text: e.message || 'Could not save — please try again' }); }
+    setSaving(false);
+  };
+
+  const picker = (
+    <input type="file" accept="image/*" className="hidden" disabled={uploading}
+      onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) uploadLogo(f); }} />
+  );
+
+  return (
+    <div className="max-w-3xl space-y-4">
+      {/* Photo */}
+      <Card>
+        <p className="font-extrabold text-[16px] mb-1">Business photo</p>
+        <p className="text-[12.5px] text-gray-400 mb-4">
+          Yeh logo har coupon card, aapke brand page aur customers ke saved coupons pe dikhta hai. Square photo sabse achhi lagti hai — badi photos apne aap compress ho jaati hain.
+        </p>
+        <div className="flex items-center gap-5 flex-wrap">
+          <label className="relative shrink-0 cursor-pointer group" title="Upload a new photo">
+            <VendorAvatar name={form.businessName || vendor.businessName} logo={logo} size={104} />
+            <span className="absolute inset-[2.5px] rounded-full bg-ink/45 text-white grid place-items-center opacity-0 group-hover:opacity-100 transition">
+              <Camera size={24} />
+            </span>
+            {uploading && (
+              <span className="absolute inset-[2.5px] rounded-full bg-white/80 grid place-items-center text-[10.5px] font-extrabold text-primary">
+                Uploading…
+              </span>
+            )}
+            {picker}
+          </label>
+          <div className="min-w-[180px]">
+            <label className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white font-extrabold text-[13px] transition ${uploading ? 'opacity-50 cursor-default' : 'cursor-pointer hover:bg-primary-dark'}`}>
+              <Camera size={15} /> {logo ? 'Change photo' : 'Upload photo'}
+              {picker}
+            </label>
+            {logo && !uploading && (
+              <button onClick={removeLogo} className="block mt-2 text-[11.5px] font-bold text-red-500">✕ Remove photo</button>
+            )}
+            <p className="text-[11px] text-gray-400 mt-2.5 leading-relaxed">JPG or PNG · up to 8 MB.<br />Saves as soon as it uploads.</p>
+          </div>
+        </div>
+        {photoMsg && <p className={`text-sm mt-4 font-bold ${photoMsg.ok ? 'text-emerald-600' : 'text-red-500'}`}>{photoMsg.text}</p>}
+      </Card>
+
+      {/* Details */}
+      <Card>
+        <p className="font-extrabold text-[16px] mb-1">Business details</p>
+        <p className="text-[12.5px] text-gray-400 mb-4">Customers yeh info aapke brand page pe dekhte hain.</p>
+
+        <label className={labelCls}>Business name *</label>
+        <input className={inputCls} value={form.businessName} onChange={(e) => set('businessName', e.target.value)} placeholder="e.g. Brew & Co Café" />
+
+        <label className={labelCls}>Short description</label>
+        <textarea className={inputCls} rows={2} value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="What do you do?" />
+
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className={labelCls}>Phone</label><input className={inputCls} value={form.phone} onChange={(e) => set('phone', e.target.value)} /></div>
+          <div><label className={labelCls}>Email</label><input className={inputCls} value={form.email} onChange={(e) => set('email', e.target.value)} /></div>
+        </div>
+
+        <label className={labelCls}>Website</label>
+        <input className={inputCls} value={form.website} onChange={(e) => set('website', e.target.value)} placeholder="https://" />
+
+        <label className={labelCls}>Address / area</label>
+        <input className={inputCls} value={form.address} onChange={(e) => set('address', e.target.value)} />
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>State</label>
+            <select className={inputCls} value={form.state} onChange={(e) => set('state', e.target.value)}>
+              <option value="">Select…</option>
+              {states.map((s) => <option key={s} value={s}>{s}</option>)}
+              {form.state && !states.includes(form.state) && <option value={form.state}>{form.state}</option>}
+            </select>
+          </div>
+          <div><label className={labelCls}>City</label><input className={inputCls} value={form.city} onChange={(e) => set('city', e.target.value)} placeholder="e.g. Patiala" /></div>
+        </div>
+
+        {msg && <p className={`text-sm mt-4 font-bold ${msg.ok ? 'text-emerald-600' : 'text-red-500'}`}>{msg.text}</p>}
+
+        <div className="flex items-center gap-3 mt-6 pt-4 border-t border-gray-100">
+          <button onClick={save} disabled={saving || uploading} className="btn-claim px-8 py-2.5 text-[13.5px] disabled:opacity-50">
+            <span className="relative z-10">{saving ? 'Saving…' : 'Save changes'}</span>
+          </button>
+          <span className="text-[11.5px] text-gray-400">Changes go live immediately.</span>
+        </div>
+      </Card>
     </div>
   );
 }

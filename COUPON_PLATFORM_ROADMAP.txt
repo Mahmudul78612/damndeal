@@ -1,0 +1,521 @@
+================================================================================
+ DAMNDEAL COUPON MARKETPLACE — ENTERPRISE ROADMAP
+ Written: 13 Aug 2026 | Owner: Mahmudul | Author: architecture audit of live code
+ Sites: coupon.damndeal.in (IN) · coupon.damndeal.com (US)
+================================================================================
+
+HOW TO USE THIS FILE
+  Work top to bottom. Each PHASE is independent enough to ship on its own and
+  leaves the product working. Say "do PHASE 2 task 3" and it is unambiguous.
+  Every claim below was verified against the real code — the proving file is
+  named in brackets. Nothing here is guesswork.
+
+
+================================================================================
+ 1. HONEST VERDICT
+================================================================================
+
+What is genuinely good today:
+  - The consumer side is strong: brand-accurate UI, geo/state targeting that
+    actually works, spin & win, claim + QR, region isolation IN/US, SSR-fast.
+  - Quota taking is race-safe [public.controller.js:214 — atomic $expr update].
+  - Claim codes are DB-unique [coupon.models.js couponClaimSchema.code unique].
+  - Admin can already rebuild the homepage layout without a deploy.
+
+What it is NOT:
+  It is a well-built SINGLE-MERCHANT marketplace. It is not a multi-location
+  business platform. The whole model assumes:
+      one company = one login = one shop = one address.
+  [coupon.models.js: CouponVendor.user is `unique: true`; the address is flat
+   fields state/city/lat/lng on the vendor itself.]
+
+  That single assumption is what blocks every enterprise deal:
+  - A chain with 40 outlets must create 40 separate accounts with 40 phones.
+  - A company with 2 brands must create 2 unrelated accounts.
+  - Redemption records WHAT was redeemed, never WHERE or BY WHOM
+    [CouponClaim has no outlet/staff field].
+  - Every employee shares one phone number to log in. No cashier role, no
+    manager, no audit of who did what.
+  - Billing is a human process: the vendor asks, you mark it paid by hand
+    [CouponPackOrder.status flipped manually in admin.controller.js].
+
+  Add three hard defects found while auditing:
+  - Double redemption is possible. redeemCode() reads status, then saves —
+    two cashiers scanning the same code at the same second both succeed
+    [vendor.controller.js:186-189, non-atomic read-then-save].
+  - Per-user claim limit can be beaten by parallel requests: countDocuments()
+    then create() with no lock [public.controller.js:207-223].
+  - Merchant API keys are stored in plaintext and the code says so
+    [coupon.models.js: apiKey "stored as-is v1"]. One DB leak = every
+    merchant's POS integration compromised.
+
+  Verdict: the foundation is good and worth keeping. The data model must grow
+  a hierarchy, the merchant side needs its own real account system, and three
+  correctness bugs must be fixed before any brand with more than one shop can
+  be onboarded. That is roughly 6 focused phases of work, not a rewrite.
+
+
+================================================================================
+ 2. TARGET ARCHITECTURE — ORGANIZATION → BRAND → OUTLET
+================================================================================
+
+  RECOMMENDED SHAPE (deliberately keeps the live collection names):
+
+      CouponOrg                (the COMPANY — billing + people live here)
+        │  name, legalName, gstin/taxId, billingEmail, plan, credits,
+        │  region, status, ownerUser
+        │
+        ├── CouponMember[]     (people who can act for this org)
+        │      user, role, scope { brands:[], outlets:[] }, invitedBy, status
+        │
+        └── CouponVendor[]     (= BRAND. Already exists. Gains `org` ref.)
+               │  businessName, slug, logo, description, categories, apiKey
+               │  (public identity — /brands/[slug] URLs keep working)
+               │
+               └── CouponOutlet[]   (the LOCATIONS — new collection)
+                      brand, org, name, code, address, state, city,
+                      point {2dsphere}, phone, hours, isActive
+
+      CouponCampaign  gains:  org, brand(existing `vendor`),
+                              scope: 'all_outlets'|'selected'|'online',
+                              outlets: [ObjectId]
+      CouponClaim     gains:  org, redeemedOutlet, redeemedBy(member),
+                              billValue, redeemedVia already exists
+
+  WHY THIS SHAPE AND NOT A RENAME
+    CouponVendor already IS a brand: it has slug, logo, description,
+    categories and public /brands/[slug] pages. Renaming it would break live
+    URLs, campaigns, claims and API keys. Adding an org ABOVE it and outlets
+    BELOW it gives the full hierarchy with near-zero migration risk.
+
+  MIGRATION FOR LIVE DATA (zero downtime, reversible)
+    For every existing CouponVendor V:
+      1. create CouponOrg  O  (name = V.businessName, ownerUser = V.user,
+                               credits = V.claimCredits, region from V)
+      2. create CouponMember (user = V.user, org = O, role = 'owner')
+      3. create CouponOutlet (brand = V, org = O, name = 'Main',
+                              address/state/city/lat/lng copied from V,
+                              point built from lat/lng)
+      4. set V.org = O
+      5. backfill Campaign.org, Campaign.scope='all_outlets'
+      6. backfill Claim.org
+    Old fields stay on CouponVendor untouched (read-only legacy) so a rollback
+    is just ignoring the new refs. Run as a one-shot script with a --dry-run
+    flag; print counts before and after.
+
+  INDEXES TO ADD WITH IT
+    CouponOutlet: { brand: 1, isActive: 1 }, { point: '2dsphere' },
+                  { org: 1 }, { state: 1, city: 1 }
+    CouponMember: { user: 1, org: 1 } unique, { org: 1, role: 1 }
+    CouponCampaign: { org: 1, status: 1 }, { outlets: 1 }
+    CouponClaim: { redeemedOutlet: 1, redeemedAt: -1 }, { org: 1, status: 1 },
+                 { user: 1, createdAt: -1 }   (my-coupons page)
+    CouponOrg: { ownerUser: 1 }, { region: 1, status: 1 }
+
+
+================================================================================
+ 3. AUTH DECISION — WHERE MERCHANT LOGIN BELONGS
+================================================================================
+
+  RECOMMENDATION (do this):
+    a) Keep the consumer site as-is (phone OTP, shoppers).
+    b) Give merchants their own portal at  /business  in the same Next app,
+       with its own layout, its own auth context and its own session key.
+       Later point business.coupon.damndeal.in at it with one nginx rewrite —
+       no second deployment, no second build.
+    c) Merchant auth methods: email + password (primary, with bcrypt — the
+       repo already has bcryptjs), phone OTP as a secondary convenience,
+       and TOTP 2FA optional per member. SSO/SAML is NOT needed yet — no
+       customer will ask before you have 20 paying brands.
+    d) Members join by INVITE, never by self-registration into an existing org.
+       Owner enters email/phone + role + scope → invite token (7-day expiry)
+       → invitee sets a password → member is active.
+
+  WHY NOT KEEP IT ON THE CONSUMER SITE
+    - A business account needs multiple humans. Consumer login is one phone =
+      one identity; there is no way to express "3 people, different powers".
+    - Cashiers must log in on a shared till device. Sending an OTP to the
+      owner's personal phone every shift is unworkable.
+    - Session lifetimes differ: shoppers want to stay logged in, a till should
+      time out. Same cookie/app = same policy.
+    - Business users judge you by their console. A distinct portal reads as a
+      product; a tab on a shopping site reads as a side feature.
+
+  VENDOR ROLES (mirror the admin-side pattern already built at
+  backend/src/config/permissions.js — do not invent a second system)
+    owner       everything: billing, members, brands, outlets, campaigns
+    manager     campaigns + redemption + analytics, scoped to brands/outlets
+    marketer    campaigns + analytics. No billing. No redemption.
+    cashier     redemption ONLY, locked to their outlet(s)
+    accountant  billing, invoices, reports. No campaign edit.
+  Scope enforcement rule: a cashier scanning a code for another outlet must be
+  refused, and the refusal must be logged.
+
+  WHAT CHANGES IN CODE
+    - new: backend/src/config/couponPermissions.js  (role → permission map)
+    - new: backend/src/middleware/couponAuth.middleware.js (attachMember +
+           requireCouponPermission + outlet scope check) — same shape as the
+           existing permission.middleware.js
+    - vendor.controller.js: every handler resolves the acting MEMBER, not the
+      single vendor.user
+    - coupon-web: new /business route tree; existing /vendor redirects there.
+
+
+================================================================================
+ 4. THE GAP LIST
+================================================================================
+
+--- DATA MODEL -----------------------------------------------------------------
+ D1 [BLOCKER]  No company/brand/outlet hierarchy. One vendor = one address.
+               Proof: coupon.models.js CouponVendor {state,city,lat,lng},
+               user unique:true.  Fix: section 2 of this file.
+ D2 [BLOCKER]  Redemption is not attributed. CouponClaim has no outlet, no
+               staff, no bill value → per-outlet reporting is impossible and
+               fraud cannot be traced.  Fix: add redeemedOutlet/redeemedBy/
+               billValue with the hierarchy.
+ D3 [BLOCKER]  No vendor team members. CouponVendor.user is a single unique
+               ObjectId → credentials get shared.  Fix: CouponMember.
+ D4 [IMPROVE]  Campaigns cannot target a subset of outlets; targeting is only
+               nationwide/states/city/radius entered by hand.
+ D5 [IMPROVE]  No campaign scheduling (startAt), drafts, or duplication.
+
+--- AUTH & SECURITY -------------------------------------------------------------
+ A1 [BLOCKER]  Merchant login is consumer phone OTP on the consumer site.
+               No email/password, no 2FA, no invites.  Fix: section 3.
+ A2 [BLOCKER]  API keys stored in PLAINTEXT — the model literally comments
+               "stored as-is v1" [coupon.models.js apiKey]. A DB dump exposes
+               every merchant integration.  Fix: store sha256 hash + a short
+               display prefix; show the full key once at creation.
+ A3 [BLOCKER]  Double redemption race: redeemCode() checks status then saves
+               [vendor.controller.js:186-189]. Two simultaneous scans both
+               succeed.  Fix: single atomic findOneAndUpdate guarded on
+               status:'claimed'; treat 0 matched as "already redeemed".
+ A4 [BLOCKER]  Per-user claim limit race: countDocuments() then create()
+               [public.controller.js:207-223].  Fix: unique compound index on
+               {campaign,user,seq} or a claim-slot document taken atomically.
+ A5 [IMPROVE]  Quota leak: claimedCount is incremented before the Claim is
+               created; if create() throws the quota is lost forever.
+               Fix: decrement on failure (try/catch) or create-then-increment.
+ A6 [IMPROVE]  API keys have no scopes, no rotation history, no per-outlet
+               keys, no rate limit of their own [verifyApi.controller.js].
+ A7 [IMPROVE]  No session list / revoke / "log out everywhere" for merchants.
+ A8 [IMPROVE]  Claim endpoint has no abuse guard, while orders and OTP now do
+               [compare services/orderGuard.service.js + ipcheck.service.js].
+               Claim farming and catalog scraping are open.
+
+--- MERCHANT OPERATIONS ----------------------------------------------------------
+ M1 [BLOCKER]  No merchant analytics at all. No impressions, views or clicks
+               are recorded anywhere — only claimedCount/redeemedCount
+               counters. A merchant cannot see a funnel, so they cannot
+               justify paying.  Fix: CouponEvent collection + daily rollup.
+ M2 [BLOCKER]  Redemption requires internet at the till. No offline mode, no
+               queued sync.  Fix: signed offline-verifiable codes + a queue.
+ M3 [IMPROVE]  Onboarding a 40-outlet brand is 40 manual signups. Needs CSV
+               bulk import of outlets and campaigns.
+ M4 [IMPROVE]  No merchant notifications (coupon claimed, credits low,
+               campaign approved/rejected, expiring soon) — email + WhatsApp
+               already exist on the platform and are unused here.
+ M5 [IMPROVE]  Rejected campaigns cannot be revised and resubmitted; the
+               merchant gets a status, not a reason.
+
+--- ADMIN / PLATFORM OPERATIONS ---------------------------------------------------
+ P1 [BLOCKER]  ZERO audit log. Nothing records who approved a campaign, who
+               changed pack pricing, who edited a vendor's credits. With staff
+               accounts now live this is also a compliance problem.
+               Fix: AuditLog collection + middleware on every admin mutation.
+ P2 [IMPROVE]  Moderation is approve/reject only. No reason, no revision
+               request, no bulk action, no re-review when a merchant edits an
+               approved campaign.
+ P3 [IMPROVE]  No "view as merchant" impersonation for support (read-only,
+               logged) — support currently cannot see what the merchant sees.
+ P4 [IMPROVE]  No platform reporting: redemption value, GMV influenced,
+               revenue per category/region, merchant retention.
+ P5 [IMPROVE]  Homepage layout has no preview, no scheduling, no versioning
+               and no rollback. A bad edit is live instantly for everyone.
+
+--- BILLING ------------------------------------------------------------------------
+ B1 [BLOCKER]  Packs are approved by hand [CouponPackOrder.status]. No
+               gateway, even though Stripe (US) and Razorpay (IN) are already
+               wired into this very backend.
+ B2 [BLOCKER]  No invoices. Indian merchants need a GST invoice to expense
+               this; pdfkit is already a dependency and unused here.
+ B3 [IMPROVE]  No auto top-up, no subscription plans, no spend caps.
+ B4 [IMPROVE]  No consolidated billing across a company's outlets/brands —
+               which is exactly what a chain will ask for.
+
+--- SCALE & DATA -----------------------------------------------------------------
+ S1 [IMPROVE]  Home page rebuilds every section on every request with no
+               caching. At 50k views/day this is the first thing to fall over.
+ S2 [IMPROVE]  Missing indexes for real query patterns (claims by user for
+               my-coupons, claims by vendor+status, campaigns by vendor).
+               Listed in section 2.
+ S3 [IMPROVE]  Analytics will be impossible to compute retroactively — events
+               that are never written can never be recovered. The event model
+               (M1) should land EARLY even if dashboards come later.
+ S4 [IMPROVE]  No observability: no error tracking, no slow-query log, no
+               alert when claims or redemptions suddenly drop to zero.
+
+
+================================================================================
+ 5. ROADMAP — DO THESE IN ORDER
+================================================================================
+
+--------------------------------------------------------------------------------
+PHASE 0 — SAFETY NET + CORRECTNESS FIXES        (effort: S, ships in: 1 day)
+--------------------------------------------------------------------------------
+  Goal: stop the bleeding and make it safe to change things.
+  Why now: never run a data migration on a system with no audit trail and
+           known write races.
+
+  Tasks:
+   1. Fix double redemption [vendor.controller.js redeemCode]: replace
+      read-then-save with one atomic CouponClaim.findOneAndUpdate(
+      { code, status:'claimed' }, { $set:{ status:'redeemed', redeemedAt,
+      redeemedVia } }, { new:true }); 0 matched → 409 already redeemed.
+      Apply the same fix in verifyApi.controller.js if it redeems.
+   2. Fix per-user claim race [public.controller.js claimForUser]: add a
+      unique index {campaign:1,user:1,slot:1} and take the slot atomically,
+      or wrap the check+create so a duplicate key error returns alreadyClaimed.
+   3. Fix quota leak: if CouponClaim.create() throws, $inc claimedCount by -1.
+   4. Hash API keys: store sha256(key) + keyPrefix (first 10 chars) for
+      display; verifyApi compares hashes. Rotate all existing keys once and
+      email the merchants (there are few today — do it now, not later).
+   5. Add AuditLog model + writeAudit() helper; call it from every admin
+      mutation in coupons/admin.controller.js (moderate, pricing, credits,
+      vendor edit, section edit). Fields: actor, actorRole, action, target,
+      before, after, ip, at.
+   6. Add abuse guards to the claim + spin endpoints, reusing the pattern in
+      services/orderGuard.service.js (per-user per-hour cap, datacenter-IP
+      block via ipcheck.service.js).
+
+  Done when: two parallel redeems of one code produce exactly one success;
+  two parallel claims respect perUserLimit; admin actions appear in AuditLog;
+  API keys in the DB are unreadable.
+
+--------------------------------------------------------------------------------
+PHASE 1 — EVENT TRACKING                        (effort: S, ships in: 1 day)
+--------------------------------------------------------------------------------
+  Goal: start recording what happens, before we need the dashboards.
+  Why now: events not written today are lost forever. Cheapest phase, highest
+           long-term value.
+
+  Tasks:
+   1. New model CouponEvent { type:'impression'|'view'|'click'|'claim'|
+      'redeem', campaign, brand, org, outlet, user, region, source, at }
+      with index {campaign:1,type:1,at:-1} and a TTL of 400 days on raw rows.
+   2. Fire impression/view events from public.controller.js (list/detail/home)
+      — batched, non-blocking, never in the request's critical path.
+   3. New model CouponDailyStat (pre-aggregated per campaign per day) and a
+      node-cron job to roll up yesterday's events at 02:00.
+   4. Expose GET /coupons/vendor/stats returning the funnel for a date range.
+
+  Done when: opening a coupon page writes a view event; the rollup job fills
+  yesterday's row; the vendor stats endpoint returns real numbers.
+
+--------------------------------------------------------------------------------
+PHASE 2 — ORGANIZATION / BRAND / OUTLET          (effort: L, ships in: 3-4 days)
+--------------------------------------------------------------------------------
+  Goal: one company, many brands, many outlets. THE headline capability.
+  Why now: everything enterprise depends on this shape existing.
+
+  Tasks:
+   1. Models: CouponOrg, CouponOutlet, CouponMember exactly as in section 2,
+      with the listed indexes. Add org/scope/outlets to CouponCampaign and
+      org/redeemedOutlet/redeemedBy/billValue to CouponClaim.
+   2. Migration script scripts/migrate-coupon-orgs.js with --dry-run: creates
+      Org + owner Member + 'Main' Outlet per existing vendor, backfills refs.
+      Print before/after counts. Run dry first, then live, then verify counts.
+   3. Campaign targeting by outlet: scope 'all_outlets' | 'selected' | 'online'.
+      When outlets are selected, DERIVE the geo targeting from those outlets'
+      points instead of asking the merchant to type coordinates.
+   4. public.controller.js: location filtering must consider outlet points,
+      not just campaign.location. Keep the existing nationwide/state paths.
+   5. Detail page shows "Available at N outlets" with a list + map link.
+   6. Outlet CRUD in the merchant portal, plus CSV bulk import
+      (name, code, address, state, city, lat, lng, phone).
+
+  Done when: one login manages 2 brands and 10 outlets; a campaign limited to
+  3 outlets only appears to users near those 3; existing live vendors still
+  work untouched.
+
+--------------------------------------------------------------------------------
+PHASE 3 — MERCHANT PORTAL + TEAM ACCOUNTS        (effort: L, ships in: 3-4 days)
+--------------------------------------------------------------------------------
+  Goal: a real business console with real people and real roles.
+  Why now: outlets are useless if only one person can log in.
+
+  Tasks:
+   1. couponPermissions.js (owner/manager/marketer/cashier/accountant) +
+      couponAuth.middleware.js (attachMember, requireCouponPermission,
+      outlet-scope check) — same shape as the admin-side system already built.
+   2. Merchant auth: email + password (bcryptjs), phone OTP secondary,
+      optional TOTP 2FA. Separate session key from the consumer app.
+   3. Invite flow: owner invites (email/phone + role + scope) → token, 7-day
+      expiry → invitee sets password → member active. Resend + revoke.
+   4. New /business route tree in coupon-web with its own layout, sidebar and
+      auth context. /vendor redirects to it. Sidebar hides what the role
+      cannot use (mirror the admin sidebar filtering already built).
+   5. Cashier screen: full-screen scanner, one big result, works one-handed,
+      locked to the member's outlet.
+   6. nginx: point business.coupon.damndeal.in at the same app (one rewrite).
+
+  Done when: an owner invites a cashier; the cashier logs in, sees only the
+  scanner, redeems at their outlet, and is refused at another outlet — with
+  both events recorded.
+
+--------------------------------------------------------------------------------
+PHASE 4 — BILLING ON A REAL GATEWAY              (effort: M, ships in: 2 days)
+--------------------------------------------------------------------------------
+  Goal: merchants pay by card; you stop doing manual accounting.
+  Why now: needed before the first paying enterprise customer, and it is much
+           easier once orgs exist to bill.
+
+  Tasks:
+   1. Pack checkout through the EXISTING gateways: Razorpay for IN orgs,
+      Stripe Checkout for US orgs. Reuse the webhook plumbing already in
+      backend/src/modules/user/controllers/webhook.controller.js.
+   2. Idempotent credit grant on webhook (never on client redirect). Handle
+      failed/duplicate/late payments the way the order flow already does.
+   3. Invoice PDF with pdfkit: sequential number, org legal name + GSTIN,
+      tax breakdown, downloadable from the portal and emailed on payment.
+   4. Auto top-up: when credits fall below a threshold, charge the saved
+      payment method (opt-in, with a monthly cap).
+   5. Consolidated org-level billing (all brands/outlets on one balance) and
+      a low-credits warning in the portal + email.
+
+  Done when: a merchant buys a pack with a card, credits appear only after the
+  webhook, and a GST invoice PDF downloads with the right numbers.
+
+--------------------------------------------------------------------------------
+PHASE 5 — MERCHANT ANALYTICS + NOTIFICATIONS     (effort: M, ships in: 2 days)
+--------------------------------------------------------------------------------
+  Goal: merchants can see their money working, and hear from the platform.
+  Why now: the events from Phase 1 are now weeks deep — dashboards have data.
+
+  Tasks:
+   1. Portal dashboard: funnel (views → claims → redemptions), redemption rate,
+      time series, per-campaign table, PER-OUTLET leaderboard.
+   2. Redemption value: capture bill amount at redeem time (optional field on
+      the cashier screen) so ROI can be shown.
+   3. CSV export of claims/redemptions per date range.
+   4. Notifications (reuse nodemailer + Fast2SMS already configured):
+      campaign approved/rejected with reason, credits low, campaign expiring
+      in 3 days, daily redemption summary.
+   5. Consumer-side reminder: "your coupon expires tomorrow" push/email.
+
+  Done when: a merchant opens the dashboard and can answer "which outlet
+  performed best last week" without contacting support.
+
+--------------------------------------------------------------------------------
+PHASE 6 — ENTERPRISE ADMIN CONSOLE               (effort: M, ships in: 2 days)
+--------------------------------------------------------------------------------
+  Goal: run the platform like an operator, not by hand.
+  Why now: volume from the phases above makes manual ops impossible.
+
+  Tasks:
+   1. Moderation queue: reason templates, request-revision state, bulk
+      approve/reject, auto re-review when an approved campaign is edited.
+   2. Audit log viewer (from Phase 0 data): filter by actor/action/target.
+   3. Support tools: find any claim by code/phone, resolve disputes, refund a
+      claim, blocklist a user, read-only "view as merchant".
+   4. Org management: plan, credits adjustment (audited), suspend with reason.
+   5. Platform reporting: redemption value, revenue by category/region,
+      merchant retention, top brands.
+   6. Layout builder: preview before publish, schedule, version history with
+      one-click rollback, per-region layouts.
+
+  Done when: a staff member with only the coupon permission can run a full day
+  of moderation and support without touching the database.
+
+--------------------------------------------------------------------------------
+PHASE 7 — OFFLINE REDEMPTION + POS               (effort: L, ships in: 3 days)
+--------------------------------------------------------------------------------
+  Goal: the till keeps working when the internet does not.
+  Why now: this is the #1 objection from restaurant and retail chains.
+
+  Tasks:
+   1. Signed codes: embed campaign+claim+expiry in an HMAC-signed payload so a
+      device can verify validity offline without a server round trip.
+   2. Cashier PWA: offline queue of redemptions, synced when back online, with
+      conflict resolution (server wins; duplicates flagged for review).
+   3. Partner API v2: scoped keys, per-outlet keys, webhook signing, retries,
+      rate limits, and a sandbox key for integration testing.
+   4. Public integration docs page with copy-paste examples.
+
+  Done when: a device in airplane mode redeems 5 coupons and they appear
+  correctly after reconnecting, with duplicates rejected.
+
+--------------------------------------------------------------------------------
+PHASE 8 — SCALE & OBSERVABILITY                  (effort: S, ships in: 1 day)
+--------------------------------------------------------------------------------
+  Goal: stay fast and know when something breaks.
+
+  Tasks:
+   1. Cache the home payload per region+location bucket (60s) and invalidate
+      on section/campaign change.
+   2. Add every missing index from section 2; verify with explain() on the
+      real queries.
+   3. Slow-query logging and an error tracker.
+   4. Alert when claims or redemptions drop to zero for an hour.
+
+  Done when: home page p95 under 200ms with cache warm; every hot query uses
+  an index.
+
+
+================================================================================
+ 6. QUICK WINS (each under a day — pick any time)
+================================================================================
+  Q1  Finish the homepage renderer so the new admin placement controls
+      actually take effect (cardStyle/columns/bg/bannerStyle/aspect are saved
+      by the builder but coupon-web/src/app/page.tsx still ignores them).
+  Q2  Coupon-style framing for banner images + the premium ticket QR polish.
+  Q3  Campaign startAt (scheduled publishing) — one field, big merchant value.
+  Q4  Duplicate-campaign button in the portal.
+  Q5  "Expiring soon" and "Ending today" badges on cards.
+  Q6  Reason text on rejection, shown to the merchant.
+  Q7  Coupon-site Hindi strings → English on the .com region (still pending).
+  Q8  Sitemap + Search Console for both coupon domains.
+
+
+================================================================================
+ 7. NOT BUILDING YET (and why)
+================================================================================
+  - SSO / SAML: nobody will ask until ~20 paying brands. Weeks of work.
+  - Native merchant app: the cashier PWA (Phase 7) covers the real need.
+  - Multi-currency beyond INR/USD: no demand.
+  - Marketplace-wide loyalty points: different product; do not blur scope.
+  - Real-time bidding for placement: needs far more traffic to matter.
+
+
+================================================================================
+ 8. DECISIONS ONLY THE OWNER CAN MAKE
+================================================================================
+  1. Merchant portal location:
+       (a) /business in the same app, later a subdomain   [RECOMMENDED]
+       (b) keep it inside the consumer site
+       (c) a separate deployed app now
+     Recommendation (a): all of the benefit, one nginx line, no second deploy.
+
+  2. Do individual OUTLETS get their own logins?
+       (a) yes — cashier members scoped to an outlet   [RECOMMENDED]
+       (b) no — only brand-level logins
+     Recommendation (a): it is the reason chains buy, and Phase 3 delivers it.
+
+  3. Primary monetization:
+       (a) prepaid claim credits (today's model)
+       (b) subscription per outlet per month           [RECOMMENDED for chains]
+       (c) pay per redemption
+       (d) placement/featured fees on top of any of the above
+     Recommendation: keep (a) for small merchants, add (b) for multi-outlet
+     brands, and sell (d) as an upsell. Decide the price points before Phase 4.
+
+  4. Launch order for the enterprise features: India first or USA first?
+     India has the merchant density; USA has the higher ticket size. The code
+     supports both — this only changes which market you sell to first.
+
+  5. Who owns merchant support day to day? Phase 6 tooling should be built for
+     that person's actual workflow.
+
+================================================================================
+ END — Phase 0 is the next thing to do.
+================================================================================

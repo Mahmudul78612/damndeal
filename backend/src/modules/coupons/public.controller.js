@@ -3,6 +3,7 @@
  * Region comes from req.region (coupon.damndeal.com → US, else IN).
  */
 const crypto = require("crypto");
+const mongoose = require("mongoose");
 const {
   CouponCategory, CouponVendor, CouponCampaign, CouponClaim, CouponSection, SpinPlay,
 } = require("../../models/coupon.models");
@@ -41,30 +42,97 @@ function locFilter(req) {
 const CAMPAIGN_CARD = "title slug offerText offerType offerValue bannerImage isOnline claimedCount totalQuota endAt featured category";
 const VENDOR_CARD = "businessName slug logo isVerifiedBadge";
 
+/* ── Homepage sections (data schema v2 — see coupon.models.js) ────────────── */
+
+/** Hard ceiling so a bad admin config can never pull the whole collection. */
+const SECTION_LIMIT_MAX = 30;
+
+/** Section types whose .items are campaigns. */
+const CAMPAIGN_SECTIONS = new Set(["sponsored", "coupon_grid", "countdown_deal"]);
+
+/** data.sort → mongo sort. Anything unknown falls back to the legacy default. */
+const SECTION_SORTS = {
+  newest: { createdAt: -1 },
+  popular: { claimedCount: -1, createdAt: -1 },
+  ending: { endAt: 1 },
+  discount: { offerValue: -1, createdAt: -1 },
+};
+
+const secLimit = (data, fallback) => {
+  const n = parseInt(data?.limit, 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(SECTION_LIMIT_MAX, n) : fallback;
+};
+const oid = (v) => (v && mongoose.Types.ObjectId.isValid(String(v)) ? String(v) : null);
+
+const campaignCards = (query) =>
+  query.select(CAMPAIGN_CARD).populate("vendor", VENDOR_CARD).populate("category", "name slug").lean();
+
+/**
+ * Resolve the campaigns for one coupon-listing section.
+ * Region / status / quota (liveFilter) and location targeting (locFilter) are
+ * applied on BOTH the auto and the manual path — an admin hand-pick can never
+ * leak an expired, out-of-region or out-of-area coupon.
+ */
+async function resolveSectionCampaigns(req, region, type, data) {
+  const base = { ...liveFilter(region), ...locFilter(req) };
+  const limit = secLimit(data, type === "sponsored" ? 6 : 12);
+
+  // ── Manual: admin picked the exact coupons, keep their order ──
+  if (data.source === "manual") {
+    const ids = (Array.isArray(data.campaignIds) ? data.campaignIds : [])
+      .map(oid).filter(Boolean).slice(0, SECTION_LIMIT_MAX);
+    if (!ids.length) return [];
+    const rows = await campaignCards(
+      CouponCampaign.find({ ...base, _id: { $in: ids } }).limit(SECTION_LIMIT_MAX)
+    );
+    const byId = new Map(rows.map((r) => [String(r._id), r]));
+    return ids.map((id) => byId.get(id)).filter(Boolean).slice(0, limit);
+  }
+
+  // ── Auto: filter + sort ──
+  const f = { ...base };
+  const cat = oid(data.categoryId);
+  const ven = oid(data.vendorId);
+  if (cat) f.category = cat;
+  if (ven) f.vendor = ven;
+  if (type === "sponsored") f["featured.active"] = true;
+
+  let sort = SECTION_SORTS[data.sort];
+  if (type === "countdown_deal") {
+    f.endAt = { $gt: new Date() }; // ending-soonest only, never a past deal
+    sort = SECTION_SORTS.ending;
+  }
+  if (!sort) {
+    // legacy defaults — sections saved before v2 must look exactly as before
+    sort = type === "sponsored"
+      ? { updatedAt: -1 }
+      : { "featured.active": -1, claimedCount: -1, createdAt: -1 };
+  }
+  return campaignCards(CouponCampaign.find(f).sort(sort).limit(limit));
+}
+
 /* GET /api/coupons/home — admin-built sections, hydrated */
 async function home(req, res) {
   const region = R(req);
   const sections = await CouponSection.find({ isActive: true, regions: region }).sort({ sortOrder: 1 }).lean();
   const out = [];
   for (const s of sections) {
-    const sec = { _id: s._id, type: s.type, title: s.title, data: s.data || {} };
+    const data = s.data || {};
+    // data is echoed back verbatim: the frontend reads cardStyle/columns/bg/
+    // bannerStyle/aspect/autoplay straight off it.
+    const sec = { _id: s._id, type: s.type, title: s.title, data };
     if (s.type === "category_rail") {
       sec.items = await CouponCategory.find({ isActive: true, regions: region }).sort({ sortOrder: 1 }).lean();
-    } else if (s.type === "sponsored") {
-      sec.items = await CouponCampaign.find({ ...liveFilter(region), ...locFilter(req), "featured.active": true })
-        .select(CAMPAIGN_CARD).populate("vendor", VENDOR_CARD).populate("category", "name slug")
-        .sort({ updatedAt: -1 }).limit(Number(s.data?.limit) || 6).lean();
-    } else if (s.type === "coupon_grid") {
-      const f = { ...liveFilter(region), ...locFilter(req) };
-      if (s.data?.categoryId) f.category = s.data.categoryId;
-      sec.items = await CouponCampaign.find(f)
-        .select(CAMPAIGN_CARD).populate("vendor", VENDOR_CARD).populate("category", "name slug")
-        .sort({ "featured.active": -1, claimedCount: -1, createdAt: -1 })
-        .limit(Number(s.data?.limit) || 12).lean();
     } else if (s.type === "brand_row") {
       sec.items = await CouponVendor.find({ status: "approved", regions: region })
         .select(VENDOR_CARD).sort({ isVerifiedBadge: -1, createdAt: -1 })
-        .limit(Number(s.data?.limit) || 12).lean();
+        .limit(secLimit(data, 12)).lean();
+    } else if (CAMPAIGN_SECTIONS.has(s.type)) {
+      sec.items = await resolveSectionCampaigns(req, region, s.type, data);
+    } else {
+      // top_strip / hero_banner / banner_single / banner_grid — pure presentation,
+      // everything they need already lives in `data` (text/link/bgColor/banners).
+      sec.items = [];
     }
     out.push(sec);
   }

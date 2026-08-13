@@ -1,15 +1,56 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { Campaign, Claim } from '@/lib/types';
-import { X, Copy, Check, ExternalLink, QrCode } from 'lucide-react';
+import { X, Copy, Check, ExternalLink, QrCode, CalendarClock, BadgeCheck } from 'lucide-react';
 
 /**
- * Claim → unique code + QR modal (Google Play "Install"-style single action).
- * Online offers also get a "Use at site" redirect button.
+ * Claim → unique code + QR modal.
+ * The success state renders as a physical coupon ticket: brand gradient header
+ * band, punched side notches at the perforation, and a QR/code stub below.
  */
+
+const INK = '#1B1530';   // deep purple ink — QR modules
+const NOTCH = 13;        // notch radius (px)
+
+const up = (p?: string) => (p ? (p.startsWith('http') ? p : `/uploads/${p.replace(/^\/?uploads\//, '')}`) : '');
+
+/**
+ * Punches real (transparent) circular bites into an edge so the page behind
+ * shows through — header cuts its bottom edge, stub cuts its top edge, and the
+ * two halves meet as one round notch at the perforation.
+ * Browsers without mask-composite simply render a plain rounded ticket.
+ */
+const notchMask = (edge: 'top' | 'bottom'): CSSProperties => {
+  const y = edge === 'bottom' ? '100%' : '0%';
+  const bite = (x: string) =>
+    `radial-gradient(${NOTCH}px ${NOTCH}px at ${x} ${y}, transparent ${NOTCH - 0.5}px, #000 ${NOTCH}px)`;
+  const img = `${bite('0%')}, ${bite('100%')}`;
+  return {
+    WebkitMaskImage: img,
+    maskImage: img,
+    WebkitMaskComposite: 'source-in',
+    maskComposite: 'intersect',
+  };
+};
+
+/** Vendor logo, or initials on a translucent disc (sits on the gradient band). */
+function BrandDisc({ name, logo }: { name?: string; logo?: string }) {
+  if (logo) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={up(logo)} alt={name || ''} width={40} height={40}
+      className="w-10 h-10 rounded-full object-cover bg-white ring-2 ring-white/70 shadow-sm shrink-0" />;
+  }
+  const initials = (name || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  return (
+    <span className="w-10 h-10 rounded-full bg-white/25 ring-2 ring-white/70 grid place-items-center font-extrabold text-[14px] text-white shrink-0">
+      {initials}
+    </span>
+  );
+}
+
 export default function ClaimButton({ campaign, compact = false, big = false }: { campaign: Campaign; compact?: boolean; big?: boolean }) {
   const { isLoggedIn, openLoginModal } = useAuth();
   const [open, setOpen] = useState(false);
@@ -22,6 +63,19 @@ export default function ClaimButton({ campaign, compact = false, big = false }: 
 
   const soldOut = (campaign.claimedCount || 0) >= (campaign.totalQuota || 0);
 
+  const endsOn = (() => {
+    const d = campaign.endAt ? new Date(campaign.endAt) : null;
+    return d && !isNaN(d.getTime()) ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  })();
+
+  // Esc closes the ticket
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+
   const doClaim = async () => {
     if (!isLoggedIn) { openLoginModal(); return; }
     setLoading(true); setError('');
@@ -32,7 +86,10 @@ export default function ClaimButton({ campaign, compact = false, big = false }: 
       setOpen(true);
       try {
         const QRCode = (await import('qrcode')).default;
-        setQr(await QRCode.toDataURL(res.claim.code, { width: 220, margin: 1, color: { dark: '#1B1530' } }));
+        setQr(await QRCode.toDataURL(res.claim.code, {
+          width: 420, margin: 2, errorCorrectionLevel: 'M',
+          color: { dark: INK, light: '#FFFFFF' },
+        }));
       } catch {}
     } catch (e) {
       setError((e as Error).message || 'Could not claim');
@@ -61,53 +118,123 @@ export default function ClaimButton({ campaign, compact = false, big = false }: 
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center px-4">
-          <div className="absolute inset-0 bg-black/55 backdrop-blur-sm" onClick={() => setOpen(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center fade-up">
-            <button onClick={() => setOpen(false)} className="absolute top-3 right-3 p-1 text-gray-400 hover:text-gray-600"><X size={18} /></button>
+        <div role="dialog" aria-modal="true"
+          className="fixed inset-0 z-[110] flex items-center justify-center px-4 py-6 overflow-y-auto">
+          <div className="fixed inset-0 bg-[#150E2B]/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
 
-            {error ? (
-              <>
-                <p className="text-4xl mb-2">😕</p>
-                <h3 className="font-extrabold text-lg text-gray-900">Couldn&apos;t claim</h3>
-                <p className="text-sm text-gray-500 mt-1">{error}</p>
-              </>
-            ) : claim && (
-              <>
-                <div className="w-12 h-12 mx-auto rounded-full bg-emerald-100 grid place-items-center mb-2">
-                  <Check size={24} className="text-emerald-600" />
-                </div>
-                <h3 className="font-extrabold text-lg text-gray-900">{already ? 'Your coupon' : 'Coupon claimed!'}</h3>
-                <p className="text-[13px] text-gray-500 mt-0.5 mb-4">{campaign.offerText} — {campaign.vendor?.businessName}</p>
+          {error ? (
+            <div className="relative w-full max-w-sm my-auto rounded-3xl bg-white shadow-2xl p-6 text-center fade-up">
+              <button onClick={() => setOpen(false)} aria-label="Close"
+                className="absolute top-3 right-3 p-1 text-gray-400 hover:text-gray-600"><X size={18} /></button>
+              <p className="text-4xl mb-2">😕</p>
+              <h3 className="font-extrabold text-lg text-gray-900">Couldn&apos;t claim</h3>
+              <p className="text-sm text-gray-500 mt-1">{error}</p>
+            </div>
+          ) : claim ? (
+            <div className="relative w-full max-w-sm my-auto fade-up"
+              style={{ filter: 'drop-shadow(0 18px 34px rgba(17,9,40,.45))' }}>
 
-                {qr ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={qr} alt="Coupon QR" className="mx-auto rounded-xl border border-gray-100" width={190} height={190} />
-                ) : (
-                  <div className="w-[190px] h-[190px] mx-auto rounded-xl bg-gray-50 grid place-items-center"><QrCode size={40} className="text-gray-300" /></div>
-                )}
+              {/* ── Ticket head: brand gradient band ────────────────────── */}
+              <div className="relative brand-grad text-white px-5 pt-5 pb-8 rounded-t-[26px] overflow-hidden"
+                style={notchMask('bottom')}>
+                {/* glossy sheen, same language as .btn-claim */}
+                <span aria-hidden className="pointer-events-none absolute left-[5%] right-[5%] top-0 h-[55%] rounded-b-[999px]"
+                  style={{ background: 'linear-gradient(180deg, rgba(255,255,255,.42), rgba(255,255,255,0))' }} />
+                <span aria-hidden className="pointer-events-none absolute -right-5 -bottom-9 text-white/15 font-extrabold text-[108px] leading-none select-none">%</span>
 
-                <button onClick={copy}
-                  className="mt-4 mx-auto flex items-center gap-2 bg-gray-50 border border-dashed border-gray-300 rounded-xl px-5 py-2.5 font-mono font-bold text-[15px] tracking-wide text-gray-900 hover:border-primary">
-                  {claim.code}
-                  {copied ? <Check size={15} className="text-emerald-500" /> : <Copy size={15} className="text-gray-400" />}
+                <button onClick={() => setOpen(false)} aria-label="Close"
+                  className="absolute top-3.5 right-3.5 z-10 w-7 h-7 grid place-items-center rounded-full bg-white/20 hover:bg-white/35 text-white transition">
+                  <X size={15} />
                 </button>
-                <p className="text-[11px] text-gray-400 mt-2">
+
+                <div className="relative flex items-center gap-3 pr-9">
+                  <BrandDisc name={campaign.vendor?.businessName} logo={campaign.vendor?.logo} />
+                  <div className="min-w-0">
+                    <p className="text-[9.5px] font-extrabold uppercase tracking-[0.16em] text-white/80 flex items-center gap-1">
+                      <Check size={11} strokeWidth={3} />{already ? 'Your coupon' : 'Coupon claimed'}
+                    </p>
+                    <p className="text-[14px] font-extrabold truncate flex items-center gap-1 drop-shadow-[0_1px_2px_rgba(0,0,0,.18)]">
+                      <span className="truncate">{campaign.vendor?.businessName}</span>
+                      {campaign.vendor?.isVerifiedBadge && <BadgeCheck size={13} className="shrink-0 text-white/90" />}
+                    </p>
+                  </div>
+                </div>
+
+                <p className="relative font-display font-extrabold text-[30px] leading-none mt-3.5 break-words drop-shadow-[0_2px_6px_rgba(0,0,0,.22)]">
+                  {campaign.offerText}
+                </p>
+                <p className="relative text-[12px] font-semibold text-white/85 mt-1.5 line-clamp-2">{campaign.title}</p>
+              </div>
+
+              {/* ── Stub: perforation, QR, code ─────────────────────────── */}
+              <div className="relative -mt-px bg-white px-5 pt-6 pb-5 rounded-b-[26px] text-center"
+                style={notchMask('top')}>
+                <div className="coupon-dash-h absolute left-6 right-6 top-0" />
+
+                {/* QR on a subtle dotted ground with scan brackets */}
+                <div className="relative mx-auto w-fit">
+                  <div className="rounded-2xl p-2.5 ring-1 ring-[#F0E9FA] shadow-[0_10px_26px_-16px_rgba(42,27,94,.75)]"
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      backgroundImage: 'radial-gradient(rgba(236,26,116,.14) 1px, transparent 1px)',
+                      backgroundSize: '9px 9px',
+                    }}>
+                    <div className="rounded-xl bg-white p-2">
+                      {qr ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={qr} alt="Coupon QR code" width={168} height={168}
+                          className="block w-[168px] h-[168px]" />
+                      ) : (
+                        <div className="w-[168px] h-[168px] grid place-items-center rounded-lg bg-gray-50 animate-pulse">
+                          <QrCode size={40} className="text-gray-300" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {[
+                    'top-0 left-0 border-t-2 border-l-2 rounded-tl-lg',
+                    'top-0 right-0 border-t-2 border-r-2 rounded-tr-lg',
+                    'bottom-0 left-0 border-b-2 border-l-2 rounded-bl-lg',
+                    'bottom-0 right-0 border-b-2 border-r-2 rounded-br-lg',
+                  ].map(c => (
+                    <span key={c} aria-hidden className={`absolute w-4 h-4 border-[#EC1A74]/70 ${c}`} />
+                  ))}
+                </div>
+
+                {/* Code stub + copy control */}
+                <button onClick={copy} aria-label={`Copy coupon code ${claim.code}`}
+                  className="mt-4 w-full flex items-stretch text-left rounded-xl border border-dashed border-[#DCCBF5] bg-[#FAF7FF] overflow-hidden hover:border-primary transition-colors">
+                  <span className="flex-1 min-w-0 px-3.5 py-2.5">
+                    <span className="block text-[9px] font-extrabold uppercase tracking-[0.18em] text-gray-400">Coupon code</span>
+                    <span className="block font-mono font-extrabold text-[16px] tracking-[0.08em] text-ink truncate">{claim.code}</span>
+                  </span>
+                  <span className={`shrink-0 w-[74px] grid place-items-center gap-0.5 border-l border-dashed border-[#DCCBF5] text-[9px] font-extrabold uppercase tracking-wider transition-colors ${copied ? 'bg-emerald-50 text-emerald-600' : 'text-primary'}`}>
+                    {copied ? <Check size={15} /> : <Copy size={15} />}
+                    {copied ? 'Copied' : 'Copy'}
+                  </span>
+                </button>
+
+                {endsOn && (
+                  <p className="mt-2.5 flex items-center justify-center gap-1.5 text-[11px] font-bold text-gray-400">
+                    <CalendarClock size={12} className="shrink-0" /> Valid till {endsOn}
+                  </p>
+                )}
+                <p className="text-[11px] text-gray-400 mt-1">
                   {campaign.isOnline ? 'Use this code on the brand’s website.' : 'Show this QR or code at the counter to redeem.'}
                 </p>
 
                 {campaign.isOnline && campaign.redirectUrl && (
                   <a href={campaign.redirectUrl} target="_blank" rel="noopener noreferrer"
-                    className="mt-3 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-primary text-white font-bold text-sm hover:bg-primary-dark">
-                    Use at site <ExternalLink size={14} />
+                    className="btn-claim w-full mt-4 py-3 text-[14px]">
+                    <span className="relative z-10 flex items-center gap-1.5">Use at site <ExternalLink size={14} /></span>
                   </a>
                 )}
-                <a href="/my-coupons" className="block mt-2 text-[12px] font-semibold text-primary hover:underline">
+                <a href="/my-coupons" className="block mt-3 text-[12px] font-extrabold text-primary hover:underline">
                   Saved in My Coupons →
                 </a>
-              </>
-            )}
-          </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </>

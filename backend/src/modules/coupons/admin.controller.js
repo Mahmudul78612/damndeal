@@ -4,6 +4,7 @@
  * Mounted with authenticate + authorize("admin").
  */
 const crypto = require("crypto");
+const mongoose = require("mongoose");
 const {
   CouponCategory, CouponVendor, CouponCampaign, CouponClaim, CouponSection, CouponPackOrder,
 } = require("../../models/coupon.models");
@@ -11,6 +12,8 @@ const {
 const slugify = (s) =>
   String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 60) ||
   crypto.randomBytes(4).toString("hex");
+
+const isId = (v) => !!v && mongoose.Types.ObjectId.isValid(String(v));
 
 /* ── Dashboard ── */
 async function dashboard(req, res) {
@@ -76,6 +79,35 @@ async function moderateCampaign(req, res) {
   return res.json({ success: true, campaign: c });
 }
 
+/* GET /admin/campaigns/search?q=&limit=20&status=&region=&categoryId=
+   Lightweight picker feed for the homepage builder's "manual" coupon sections. */
+async function searchCampaigns(req, res) {
+  const q = String(req.query.q || "").trim().slice(0, 60);
+  const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
+  const filter = {};
+  if (req.query.status) filter.status = req.query.status;
+  if (req.query.region) filter.regions = req.query.region;
+  if (isId(req.query.categoryId)) filter.category = req.query.categoryId;
+  if (q) {
+    const rx = { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
+    filter.$or = [{ title: rx }, { offerText: rx }, { slug: rx }];
+  }
+  const rows = await CouponCampaign.find(filter)
+    .select("title offerText bannerImage status")
+    .populate("vendor", "businessName").populate("category", "name")
+    .sort({ createdAt: -1 }).limit(limit).lean();
+  const campaigns = rows.map((c) => ({
+    _id: c._id,
+    title: c.title,
+    offerText: c.offerText || "",
+    bannerImage: c.bannerImage || "",
+    vendorName: c.vendor?.businessName || "",
+    categoryName: c.category?.name || "",
+    status: c.status,
+  }));
+  return res.json({ success: true, campaigns });
+}
+
 /* PUT /admin/campaigns/:id — direct field updates (inSpin, endAt, quota, etc.) */
 async function updateCampaign(req, res) {
   const allowed = {};
@@ -134,14 +166,83 @@ async function listSections(req, res) {
   const items = await CouponSection.find(filter).sort({ sortOrder: 1 }).lean();
   return res.json({ success: true, items });
 }
+/** Whitelist for section.data (schema v2 — see coupon.models.js).
+ *  Unknown keys are dropped; legacy keys (text/link/bgColor/image/style) stay. */
+const SECTION_SORTS = ["newest", "popular", "ending", "discount"];
+const CARD_STYLES = ["ticket", "tile", "list", "compact"];
+const BGS = ["white", "band", "gradient"];
+const BANNER_STYLES = ["plain", "coupon", "rounded"];
+const ASPECTS = ["16:9", "3:1", "3:4", "1:1"];
+
+const pick = (v, allowed) => (allowed.includes(v) ? v : undefined);
+const str = (v, max = 300) => (v === undefined || v === null ? undefined : String(v).slice(0, max));
+
+function cleanSectionData(raw) {
+  const d = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const out = {};
+  const set = (k, v) => { if (v !== undefined) out[k] = v; };
+
+  /* content source */
+  set("source", pick(d.source, ["auto", "manual"]));
+  if (Array.isArray(d.campaignIds)) {
+    out.campaignIds = d.campaignIds.map(String).filter(isId).slice(0, 30);
+  }
+  if (d.categoryId !== undefined) out.categoryId = isId(d.categoryId) ? String(d.categoryId) : null;
+  if (d.vendorId !== undefined) out.vendorId = isId(d.vendorId) ? String(d.vendorId) : null;
+  set("sort", pick(d.sort, SECTION_SORTS));
+  if (d.limit !== undefined) {
+    const n = parseInt(d.limit, 10);
+    if (Number.isFinite(n) && n > 0) out.limit = Math.min(30, n);
+  }
+
+  /* presentation */
+  set("cardStyle", pick(d.cardStyle, CARD_STYLES));
+  if (d.columns !== undefined) {
+    const c = parseInt(d.columns, 10);
+    if ([2, 3, 4, 5].includes(c)) out.columns = c;
+  }
+  set("bg", pick(d.bg, BGS));
+
+  /* banners */
+  if (Array.isArray(d.banners)) {
+    out.banners = d.banners.slice(0, 20).filter((b) => b && typeof b === "object").map((b) => ({
+      image: str(b.image, 500) || "",
+      link: str(b.link, 500) || "",
+      title: str(b.title, 120) || "",
+      badge: str(b.badge, 40) || "",
+    }));
+  }
+  set("bannerStyle", pick(d.bannerStyle, BANNER_STYLES));
+  set("aspect", pick(d.aspect, ASPECTS));
+  if (d.autoplay !== undefined) out.autoplay = !!d.autoplay;
+
+  /* legacy keys that must keep working */
+  set("text", str(d.text, 500));
+  set("link", str(d.link, 500));
+  set("bgColor", str(d.bgColor, 40));
+  set("image", str(d.image, 500));
+  set("style", pick(d.style, CARD_STYLES)); // legacy alias of cardStyle
+  return out;
+}
+
 async function createSection(req, res) {
   const { type, title = "", data = {}, regions = ["IN", "US"], sortOrder = 0, isActive = true } = req.body;
   if (!type) return res.status(400).json({ success: false, message: "type required" });
-  const item = await CouponSection.create({ type, title, data, regions, sortOrder, isActive });
+  const item = await CouponSection.create({
+    type, title, data: cleanSectionData(data), regions, sortOrder, isActive,
+  });
   return res.status(201).json({ success: true, item });
 }
+
+/* PUT /admin/sections/:id — partial update; only known fields are written and
+   `data` is passed through the v2 whitelist. */
 async function updateSection(req, res) {
-  const item = await CouponSection.findByIdAndUpdate(req.params.id, req.body, { new: true });
+  const patch = {};
+  for (const k of ["type", "title", "regions", "sortOrder", "isActive"]) {
+    if (req.body[k] !== undefined) patch[k] = req.body[k];
+  }
+  if (req.body.data !== undefined) patch.data = cleanSectionData(req.body.data);
+  const item = await CouponSection.findByIdAndUpdate(req.params.id, patch, { new: true, runValidators: true });
   if (!item) return res.status(404).json({ success: false, message: "Not found" });
   return res.json({ success: true, item });
 }
@@ -178,7 +279,7 @@ async function decidePackOrder(req, res) {
 module.exports = {
   dashboard,
   listCategories, createCategory, updateCategory, deleteCategory,
-  listCampaigns, moderateCampaign, updateCampaign,
+  listCampaigns, searchCampaigns, moderateCampaign, updateCampaign,
   getSpinSettings, updateSpinSettings,
   listVendors, updateVendor,
   listSections, createSection, updateSection, deleteSection,

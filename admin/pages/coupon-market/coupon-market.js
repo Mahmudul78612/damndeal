@@ -291,11 +291,126 @@
   const SEC_META = {
     top_strip: ["📢", "Announcement strip", "Thin colored bar at the very top"],
     hero_banner: ["🖼️", "Hero banners", "Big swipeable layout banners (connect any offer)"],
-    category_rail: ["📁", "Category rail", "Auto: category pills"],
-    sponsored: ["⭐", "Sponsored row", "Auto: featured campaigns"],
-    coupon_grid: ["🎟️", "Coupon grid", "Auto: live coupons (optionally one category)"],
-    brand_row: ["🏪", "Brands row", "Auto: vendor logos"],
     banner_single: ["🖼️", "Single banner", "One full-width banner"],
+    banner_grid: ["🔲", "Banner grid", "2-up / 3-up banner tiles"],
+    category_rail: ["📁", "Category rail", "Auto: category pills"],
+    sponsored: ["⭐", "Sponsored row", "Featured campaigns — or hand-pick them"],
+    coupon_grid: ["🎟️", "Coupon grid", "Live coupons — auto query or hand-picked"],
+    countdown_deal: ["⏳", "Countdown deals", "Ending-soon coupons with a timer"],
+    brand_row: ["🏪", "Brands row", "Auto: vendor logos"],
+  };
+  const BANNER_TYPES = ["hero_banner", "banner_single", "banner_grid"];
+  const COUPON_TYPES = ["sponsored", "coupon_grid", "countdown_deal"];
+  const MULTI_BANNER = ["hero_banner", "banner_grid"];
+  const SEC_SORTS = [["newest", "🆕 Newest first"], ["popular", "🔥 Most claimed"], ["ending", "⏳ Ending soon"], ["discount", "💰 Biggest discount"]];
+  /* option sets — value → label. Values are the exact keys the API expects. */
+  const OPTS = {
+    cardStyle: [["ticket", "Ticket"], ["tile", "Tile 3:4"], ["list", "List rows"], ["compact", "Compact"]],
+    columns: [[2, "2 across"], [3, "3 across"], [4, "4 across"], [5, "5 across"]],
+    bg: [["white", "White"], ["band", "Soft band"], ["gradient", "Brand gradient"]],
+    bannerStyle: [["plain", "Plain"], ["coupon", "Coupon ticket"], ["rounded", "Rounded"]],
+    aspect: [["16:9", "Wide 16:9"], ["3:1", "Strip 3:1"], ["3:4", "Portrait 3:4"], ["1:1", "Square 1:1"]],
+  };
+  const VALS = (k) => OPTS[k].map((o) => o[0]);
+  const GRAD = "linear-gradient(135deg,#EC1A74,#FF7A00)";
+  const _bar = (w) => `<div style="height:3px;width:${w};background:#E9D5FF;border-radius:2px"></div>`;
+  const _box = "border:1px solid #e4e4e4;border-radius:5px;background:#fff;overflow:hidden";
+  function cardPreview(v) {
+    if (v === "tile") return `<div style="width:30px;height:40px;${_box};display:flex;flex-direction:column">
+        <div style="height:25px;background:${GRAD}"></div><div style="padding:3px;display:flex;flex-direction:column;gap:2px">${_bar("90%")}${_bar("55%")}</div></div>`;
+    if (v === "list") return `<div style="width:54px;height:40px;${_box};padding:4px;display:flex;flex-direction:column;gap:5px">
+        ${[0, 1].map(() => `<div style="display:flex;gap:4px;align-items:center"><div style="width:12px;height:12px;border-radius:3px;background:${GRAD}"></div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:2px">${_bar("100%")}${_bar("60%")}</div></div>`).join("")}</div>`;
+    if (v === "compact") return `<div style="width:54px;height:40px;${_box};padding:5px;display:flex;flex-direction:column;gap:5px">${_bar("100%")}${_bar("75%")}${_bar("90%")}${_bar("50%")}</div>`;
+    return `<div style="width:54px;height:40px;${_box};display:flex;flex-direction:column">
+        <div style="height:17px;background:${GRAD}"></div>
+        <div style="border-top:1px dashed #cbb6d8;padding:4px;display:flex;flex-direction:column;gap:3px">${_bar("85%")}${_bar("50%")}</div></div>`;
+  }
+  function colPreview(n) {
+    return `<div style="width:54px;height:40px;${_box};padding:4px;display:flex;gap:3px;align-items:stretch">
+        ${Array.from({ length: n }, () => `<div style="flex:1;background:${GRAD};opacity:.75;border-radius:2px"></div>`).join("")}</div>`;
+  }
+  function bgPreview(v) {
+    const fill = v === "gradient" ? "linear-gradient(90deg,#EC1A74,#FF7A00,#FFB800)" : v === "band" ? "#F5F0FF" : "#fff";
+    return `<div style="width:54px;height:40px;border:1px solid #e4e4e4;border-radius:5px;background:${fill};display:flex;align-items:center;justify-content:center">
+        <div style="width:34px;height:20px;background:#fff;border:1px solid #e4e4e4;border-radius:4px;box-shadow:0 2px 6px rgba(0,0,0,.08)"></div></div>`;
+  }
+  function banPreview(v) {
+    if (v === "coupon") return `<div style="position:relative;width:54px;height:40px;border:1px solid #e4e4e4;border-radius:8px;background:${GRAD};display:flex;align-items:center;justify-content:center">
+        <div style="width:1px;height:70%;border-left:2px dashed #fff;opacity:.9"></div>
+        <div style="position:absolute;left:-4px;top:50%;transform:translateY(-50%);width:8px;height:8px;border-radius:50%;background:#fff;border:1px solid #e4e4e4"></div>
+        <div style="position:absolute;right:-4px;top:50%;transform:translateY(-50%);width:8px;height:8px;border-radius:50%;background:#fff;border:1px solid #e4e4e4"></div></div>`;
+    return `<div style="width:54px;height:40px;background:${GRAD};border-radius:${v === "rounded" ? "12px" : "0"}"></div>`;
+  }
+  function aspPreview(v) {
+    const dim = { "16:9": [52, 29], "3:1": [52, 17], "3:4": [24, 32], "1:1": [32, 32] }[v] || [52, 29];
+    return `<div style="height:40px;display:flex;align-items:center;justify-content:center">
+        <div style="width:${dim[0]}px;height:${dim[1]}px;background:${GRAD};border-radius:4px"></div></div>`;
+  }
+  const OPT_PREVIEW = { cardStyle: cardPreview, columns: colPreview, bg: bgPreview, bannerStyle: banPreview, aspect: aspPreview };
+  function optBtns(k, val) {
+    const prev = OPT_PREVIEW[k];
+    return (OPTS[k] || []).map(([v, label]) => {
+      const on = String(val) === String(v);
+      const arg = typeof v === "number" ? v : `'${v}'`;
+      return `<button type="button" class="btn btn-sm" title="${esc(label)}" onclick="cmSecPick('${k}',${arg})"
+        style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;padding:8px;min-width:74px;height:auto;
+               border:2px solid ${on ? "#EC1A74" : "#e6e6e6"};background:${on ? "#FFF3F8" : "#fff"};border-radius:10px">
+        ${prev ? prev(v) : ""}
+        <span style="font-size:11px;font-weight:${on ? "700" : "500"};color:${on ? "#EC1A74" : "#666"}">${esc(label)}</span></button>`;
+    }).join("");
+  }
+  const optGroup = (label, k, val) => F(label, `<div id="cmOpt_${k}" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">${optBtns(k, val)}</div>`);
+  const secHead = (t) => `<div style="font-size:11px;font-weight:800;color:#aaa;letter-spacing:.08em;text-transform:uppercase;margin:14px 0 8px;border-top:1px solid #f0f0f0;padding-top:12px">${t}</div>`;
+  /* normalise a stored data blob to the v2 contract (old rows have none of these keys) */
+  function secNorm(t, raw) {
+    const d = JSON.parse(JSON.stringify(raw || {}));
+    const one = (k, dflt) => (VALS(k).includes(d[k]) ? d[k] : dflt);
+    if (t === "top_strip") {
+      return { text: d.text || "", link: d.link || "/coupons", bgColor: d.bgColor || "#7C3AED" };
+    }
+    if (BANNER_TYPES.includes(t)) {
+      d.banners = Array.isArray(d.banners)
+        ? d.banners.filter((b) => b && b.image).map((b) => ({ image: b.image || "", link: b.link || "", title: b.title || "", badge: b.badge || "" }))
+        : [];
+      if (!d.banners.length && d.image) d.banners = [{ image: d.image, link: d.link || "", title: d.title || "", badge: "" }];
+      delete d.image; delete d.link; // legacy single-image keys now live inside banners[0]
+      d.bannerStyle = one("bannerStyle", "rounded");
+      d.aspect = one("aspect", "16:9");
+      d.autoplay = MULTI_BANNER.includes(t) ? d.autoplay !== false : false;
+      return d;
+    }
+    const lim = parseInt(d.limit, 10);
+    d.limit = Number.isFinite(lim) && lim > 0 ? Math.min(30, lim) : 12;
+    d.bg = one("bg", "white");
+    if (!COUPON_TYPES.includes(t)) return d;
+    d.source = d.source === "manual" ? "manual" : "auto";
+    d.campaignIds = Array.isArray(d.campaignIds) ? d.campaignIds.map(String) : [];
+    d.categoryId = d.categoryId || null;
+    d.vendorId = d.vendorId || null;
+    d.sort = SEC_SORTS.some((x) => x[0] === d.sort) ? d.sort : (t === "countdown_deal" ? "ending" : "newest");
+    d.cardStyle = VALS("cardStyle").includes(d.cardStyle) ? d.cardStyle : (VALS("cardStyle").includes(d.style) ? d.style : "ticket");
+    const col = parseInt(d.columns, 10);
+    d.columns = [2, 3, 4, 5].includes(col) ? col : 3;
+    return d;
+  }
+  const secSummary = (s) => {
+    const d = s.data || {};
+    if (s.type === "top_strip") return esc(d.text || "");
+    if (BANNER_TYPES.includes(s.type)) {
+      const n = (d.banners || []).length || (d.image ? 1 : 0);
+      return `${n} banner(s) · ${esc(d.bannerStyle || "rounded")} · ${esc(d.aspect || "16:9")}`;
+    }
+    if (COUPON_TYPES.includes(s.type)) {
+      const manual = d.source === "manual";
+      const cat = categories.find((c) => c._id === d.categoryId);
+      const ven = vendors.find((v) => v._id === d.vendorId);
+      return [
+        manual ? `✋ ${(d.campaignIds || []).length} hand-picked` : `⚙️ auto${cat ? " · " + esc(cat.name) : ""}${ven ? " · " + esc(ven.businessName) : ""} · top ${d.limit || 12}`,
+        `${esc(d.cardStyle || d.style || "ticket")} · ${d.columns || 3} cols`,
+      ].join(" · ");
+    }
+    return esc(s.title || "");
   };
   function vLayout() {
     return `
@@ -305,9 +420,7 @@
       ${!sections.length ? `<div class="empty-state"><div class="icon">🎨</div><p>No sections — add one above</p></div>` : `
       <div class="card">${sections.map((s, i) => {
         const [ic, label, hint] = SEC_META[s.type] || ["▫️", s.type, ""];
-        const extra = s.type === "top_strip" ? esc(s.data?.text || "") :
-          ["hero_banner", "banner_single"].includes(s.type) ? `${(s.data?.banners || []).length || (s.data?.image ? 1 : 0)} banner(s)` :
-          s.title || "";
+        const extra = secSummary(s);
         return `
         <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #f3f3f3">
           <div style="display:flex;flex-direction:column;gap:2px">
@@ -316,8 +429,8 @@
           </div>
           <span style="font-size:20px">${ic}</span>
           <div style="flex:1;min-width:0">
-            <b style="font-size:13px">${label}</b> <span style="font-size:11px;color:#999">· ${(s.regions || []).join(", ")}</span><br>
-            <span style="font-size:12px;color:#888">${esc(extra) || hint}</span>
+            <b style="font-size:13px">${label}</b> <span style="font-size:11px;color:#999">· ${(s.regions || []).join(", ")}${s.title ? " · " + esc(s.title) : ""}</span><br>
+            <span style="font-size:12px;color:#888">${extra || hint}</span>
           </div>
           ${s.isActive ? stBadge("active") : stBadge("paused")}
           <button class="btn btn-sm" onclick="cmSecUI('${s._id}')" style="font-size:11px">✏️ Edit</button>
