@@ -134,6 +134,18 @@ function initCronJobs() {
     }
   });
 
+  // Coupon analytics rollup — fold yesterday's raw events + Redis impression
+  // counters into CouponDailyStat, which is what merchant dashboards read.
+  cron.schedule("0 2 * * *", async () => {
+    try {
+      const { rollupDay } = require("./couponEvents.service");
+      const out = await rollupDay();
+      console.log(`[CRON] Coupon analytics rollup for ${out.date}: ${out.rows} rows`);
+    } catch (err) {
+      console.error("[CRON] Coupon rollup error:", err.message);
+    }
+  });
+
   console.log("[CRON] All cron jobs initialized");
 }
 

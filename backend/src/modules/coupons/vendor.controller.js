@@ -8,6 +8,8 @@ const crypto = require("crypto");
 const {
   CouponCategory, CouponVendor, CouponCampaign, CouponClaim, CouponPackOrder,
 } = require("../../models/coupon.models");
+const events = require("../../services/couponEvents.service");
+const { CouponDailyStat } = require("../../models/couponAnalytics.models");
 
 const R = (req) => (req.region === "US" ? "US" : "IN");
 const slugify = (s) =>
@@ -152,6 +154,54 @@ async function stats(req, res) {
   });
 }
 
+/* GET /api/coupons/vendor/analytics?days=30
+   Funnel from the pre-aggregated daily rows, plus a per-campaign breakdown.
+   Reads CouponDailyStat only — never the raw event collection — so the range
+   query stays cheap as volume grows. Today is not rolled up yet, so live
+   counters are added on top for the current day. */
+async function analytics(req, res) {
+  const vendor = await requireVendor(req, res); if (!vendor) return;
+  const days = Math.min(Math.max(parseInt(req.query.days, 10) || 30, 1), 365);
+  const since = new Date(Date.now() - (days - 1) * 86400000);
+  const sinceStr = since.toISOString().slice(0, 10);
+
+  const rows = await CouponDailyStat.find({ vendor: vendor._id, date: { $gte: sinceStr } })
+    .sort({ date: 1 }).lean();
+
+  const totals = { impressions: 0, views: 0, clicks: 0, claims: 0, redemptions: 0 };
+  const byDate = {};
+  const byCampaign = {};
+  for (const r of rows) {
+    for (const k of Object.keys(totals)) totals[k] += r[k] || 0;
+    const d = (byDate[r.date] = byDate[r.date] || { date: r.date, impressions: 0, views: 0, clicks: 0, claims: 0, redemptions: 0 });
+    const c = (byCampaign[r.campaign] = byCampaign[r.campaign] || { campaign: r.campaign, impressions: 0, views: 0, clicks: 0, claims: 0, redemptions: 0 });
+    for (const k of Object.keys(totals)) { d[k] += r[k] || 0; c[k] += r[k] || 0; }
+  }
+
+  // Attach campaign titles for the breakdown table
+  const ids = Object.keys(byCampaign);
+  if (ids.length) {
+    const titles = await CouponCampaign.find({ _id: { $in: ids } }).select("title offerText").lean();
+    const map = Object.fromEntries(titles.map((t) => [String(t._id), t]));
+    for (const id of ids) {
+      byCampaign[id].title = map[id]?.title || "(deleted)";
+      byCampaign[id].offerText = map[id]?.offerText || "";
+    }
+  }
+
+  return res.json({
+    success: true,
+    days,
+    totals: {
+      ...totals,
+      claimRate: totals.views ? Math.round((totals.claims / totals.views) * 100) : 0,
+      redemptionRate: totals.claims ? Math.round((totals.redemptions / totals.claims) * 100) : 0,
+    },
+    series: Object.values(byDate),
+    campaigns: Object.values(byCampaign).sort((a, b) => b.claims - a.claims),
+  });
+}
+
 /* ── Verify / redeem (vendor portal — for shops without a website) ────────── */
 
 async function findClaimForVendor(vendor, code) {
@@ -204,6 +254,10 @@ async function redeemCode(req, res) {
   }
 
   await CouponCampaign.updateOne({ _id: claim.campaign._id }, { $inc: { redeemedCount: 1 } });
+  events.track("redeem", {
+    campaign: claim.campaign._id, vendor: vendor._id,
+    user: claim.user?._id || claim.user, region: won.region, source: "portal",
+  });
   return res.json({ success: true, message: "Redeemed — apply the offer!", claim: { code: won.code, redeemedAt: won.redeemedAt } });
 }
 
@@ -260,6 +314,6 @@ async function myPackOrders(req, res) {
 }
 
 module.exports = {
-  register, me, updateMe, createCampaign, myCampaigns, updateCampaign, stats,
+  register, me, updateMe, createCampaign, myCampaigns, updateCampaign, stats, analytics,
   verifyCode, redeemCode, rotateApiKey, packs, buyPack, myPackOrders,
 };

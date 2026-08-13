@@ -9,6 +9,7 @@ const {
 } = require("../../models/coupon.models");
 const AppSettings = require("../../models/AppSettings");
 const { checkClaimAllowed, checkSpinAllowed } = require("../../services/couponGuard.service");
+const events = require("../../services/couponEvents.service");
 
 const R = (req) => (req.region === "US" ? "US" : "IN");
 const liveFilter = (region) => ({
@@ -159,6 +160,7 @@ async function list(req, res) {
       .sort(sortMap[sort] || sortMap.popular).skip((page - 1) * limit).limit(limit).lean(),
     CouponCampaign.countDocuments(filter),
   ]);
+  events.impressions(items.map((i) => i._id), R(req));
   return res.json({ success: true, items, total, page, pages: Math.ceil(total / limit) });
 }
 
@@ -176,6 +178,10 @@ async function detail(req, res) {
   if (!c || !["active", "paused", "expired"].includes(c.status)) {
     return res.status(404).json({ success: false, message: "Coupon not found" });
   }
+  events.track("view", {
+    campaign: c._id, vendor: c.vendor?._id || c.vendor,
+    user: req.user?.userId, region: R(req), source: "detail",
+  });
   CouponCampaign.updateOne({ _id: c._id }, { $inc: { views: 1 } }).catch(() => {});
   return res.json({ success: true, campaign: c });
 }
@@ -232,6 +238,7 @@ async function claimForUser(c, userId, region) {
     const doc = await CouponClaim.create({
       campaign: c._id, vendor: c.vendor, user: userId, code, region, slot: mine,
     });
+    events.track("claim", { campaign: c._id, vendor: c.vendor, user: userId, region, source: "claim" });
     return { claim: doc };
   } catch (err) {
     await releaseQuota();

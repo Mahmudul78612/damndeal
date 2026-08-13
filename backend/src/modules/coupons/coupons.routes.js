@@ -36,6 +36,7 @@ router.get("/vendor/me", authenticate, h(vendor.me));
 router.put("/vendor/me", authenticate, h(vendor.updateMe));
 router.post("/vendor/campaigns", authenticate, h(vendor.createCampaign));
 router.get("/vendor/campaigns", authenticate, h(vendor.myCampaigns));
+router.get("/vendor/analytics", authenticate, h(vendor.analytics));
 router.patch("/vendor/campaigns/:id", authenticate, h(vendor.updateCampaign));
 router.get("/vendor/stats", authenticate, h(vendor.stats));
 router.post("/vendor/verify", authenticate, h(vendor.verifyCode));

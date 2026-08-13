@@ -8,6 +8,7 @@
  */
 const crypto = require("crypto");
 const { CouponVendor, CouponClaim, CouponCampaign } = require("../../models/coupon.models");
+const events = require("../../services/couponEvents.service");
 
 const hashKey = (key) => crypto.createHash("sha256").update(String(key)).digest("hex");
 
@@ -72,6 +73,9 @@ async function redeem(req, res) {
   }
 
   await CouponCampaign.updateOne({ _id: claim.campaign._id }, { $inc: { redeemedCount: 1 } });
+  events.track("redeem", {
+    campaign: claim.campaign._id, vendor: vendor._id, user: claim.user, region: won.region, source: "api",
+  });
   return res.json({
     success: true, redeemed: true, redeemedAt: won.redeemedAt,
     offer: { title: claim.campaign?.title, offerText: claim.campaign?.offerText, offerType: claim.campaign?.offerType, offerValue: claim.campaign?.offerValue },
