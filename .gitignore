@@ -55,3 +55,6 @@ _deploy/
 .qodo/
 *.tar.gz
 *.zip
+
+# Next.js build info
+*.tsbuildinfo
