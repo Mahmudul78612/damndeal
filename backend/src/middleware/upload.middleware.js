@@ -7,7 +7,11 @@ const sharp = require("sharp");
 const UPLOAD_DIR = path.join(__dirname, "../../uploads");
 
 // Ensure upload directories exist
-const dirs = ["kyc", "products", "banners", "delivery", "categories", "customization", "promo", "settings", "desktop-home"];
+const dirs = [
+  "kyc", "products", "banners", "delivery", "categories", "customization",
+  "promo", "settings", "desktop-home", "home-sections", "coupons",
+  "magic-pools", "investor_kyc", "investor_receipts",
+];
 for (const dir of dirs) {
   const p = path.join(UPLOAD_DIR, dir);
   if (!fs.existsSync(p)) {
@@ -18,7 +22,14 @@ for (const dir of dirs) {
 function makeStorage(subDir) {
   return multer.diskStorage({
     destination: (_req, _file, cb) => {
-      cb(null, path.join(UPLOAD_DIR, subDir));
+      // Create on demand too — a missing folder must never fail an upload
+      const dest = path.join(UPLOAD_DIR, subDir);
+      try {
+        if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+      } catch (err) {
+        return cb(err);
+      }
+      cb(null, dest);
     },
     filename: (_req, file, cb) => {
       const ext = path.extname(file.originalname).toLowerCase();
@@ -158,9 +169,11 @@ const uploadHomeSectionBanners = multer({
   fileFilter: imageFilter,
 }).array("bannerImages", 20);
 
+// Accept normal camera/design files; optimizeImages() re-encodes them to webp
+// (~1600px, q80) right after, so what actually lands on disk stays ~100-300 KB.
 const uploadCouponImages = multer({
   storage: makeStorage("coupons"),
-  limits: { fileSize: 200 * 1024 }, // 200 KB max (logos + banners stay light)
+  limits: { fileSize: 8 * 1024 * 1024 }, // 8 MB in, compressed on save
   fileFilter: imageFilter,
 }).array("images", 5);
 

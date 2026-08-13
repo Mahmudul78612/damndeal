@@ -1,9 +1,15 @@
 function errorHandler(err, req, res, _next) {
   console.error("Unhandled error:", err);
 
-  // Multer file upload errors
+  // Multer file upload errors — report the limit that actually applied
   if (err.code === "LIMIT_FILE_SIZE") {
-    return res.status(400).json({ success: false, message: "File too large. Max 5MB per file." });
+    const limitMb = err.field && req.uploadLimitMb ? req.uploadLimitMb : null;
+    return res.status(400).json({
+      success: false,
+      message: limitMb
+        ? `File too large. Maximum ${limitMb} MB per image.`
+        : "File too large. Please upload a smaller image (max 8 MB).",
+    });
   }
   if (err.code === "LIMIT_FILE_COUNT" || err.code === "LIMIT_UNEXPECTED_FILE") {
     return res.status(400).json({ success: false, message: "Too many files uploaded." });

@@ -1,6 +1,6 @@
 /* Coupon Marketplace — ERP-style admin console.
    Campaigns (moderation+feature+spin) · Categories & pack pricing · Vendors ·
-   Homepage layout builder (banners upload ≤200KB) · Spin & Win · Pack orders. */
+   Homepage layout builder (banner uploads auto-compressed) · Spin & Win · Pack orders. */
 (async function () {
   document.body.innerHTML = pageShell("Coupon Marketplace");
   buildLayout("coupon-market");
@@ -355,7 +355,7 @@
         F("Link (tap goes to)", `<input class="form-control" id="cmSecLink" value="${esc(s.data?.link || "/coupons")}">`) +
         F("Color", `<input class="form-control" id="cmSecColor" type="color" value="${esc(s.data?.bgColor || "#7C3AED")}" style="height:38px;padding:2px">`) + `</div>`;
     } else if (t === "hero_banner" || t === "banner_single") {
-      fields = `<label style="font-size:12px;font-weight:600;color:#555">Banners (upload ≤200KB, connect a link — coupon/brand/URL)</label><div id="cmSecBanners"></div>
+      fields = `<label style="font-size:12px;font-weight:600;color:#555">Banners (upload an image, connect a link — coupon/brand/URL)</label><div id="cmSecBanners"></div>
         <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
           <input type="file" id="cmSecFile" accept="image/*" style="font-size:12px">
           <button class="btn btn-sm" onclick="cmSecUpload()" style="font-size:11px">⬆️ Upload & add</button>
@@ -404,7 +404,7 @@
     const inp = document.getElementById("cmSecFile");
     const file = inp?.files?.[0];
     if (!file) { showToast("Choose an image first", "error"); return; }
-    if (file.size > 200 * 1024) { showToast("Image must be under 200 KB", "error"); return; }
+    if (file.size > 8 * 1024 * 1024) { showToast("Image is too large — pick one under 8 MB", "error"); return; }
     try {
       const fd = new FormData(); fd.append("images", file);
       const r = await API.upload("/coupons/upload", fd);

@@ -164,10 +164,11 @@ function Onboard({ onDone }: { onDone: () => void }) {
         <input className={inputCls} value={form.website} onChange={(e) => set('website', e.target.value)} placeholder="https://" />
         <label className={labelCls}>Address / area</label>
         <input className={inputCls} value={form.address} onChange={(e) => set('address', e.target.value)} />
-        <label className={labelCls}>Business logo (max 200 KB)</label>
+        <label className={labelCls}>Business logo</label>
         <input type="file" accept="image/*" className="text-sm" onChange={async (e) => {
           const file = e.target.files?.[0]; if (!file) return;
-          if (file.size > 200 * 1024) { setError('Logo must be under 200 KB'); return; }
+          if (file.size > 8 * 1024 * 1024) { setError('Image is too large — please pick one under 8 MB'); return; }
+          setError('Uploading…');
           try { const fd = new FormData(); fd.append('images', file);
             const r = await api.upload('/coupons/upload', fd);
             if (r.files?.[0]) { set('logo', r.files[0]); setError(''); } } catch (err) { setError((err as Error).message); }
@@ -284,12 +285,17 @@ function CreateCampaign({ credits, onCreated }: { credits: number; onCreated: ()
   }, []);
 
   const uploadBanner = async (file: File) => {
-    if (file.size > 200 * 1024) { setMsg({ ok: false, text: 'Image must be under 200 KB — compress it and retry.' }); return; }
+    if (file.size > 8 * 1024 * 1024) {
+      setMsg({ ok: false, text: 'Image is too large — please pick one under 8 MB.' });
+      return;
+    }
+    setMsg({ ok: true, text: 'Uploading image…' });
     try {
       const fd = new FormData(); fd.append('images', file);
       const r = await api.upload('/coupons/upload', fd);
-      if (r.files?.[0]) { set('bannerImage', r.files[0]); setMsg(null); }
-    } catch (e: any) { setMsg({ ok: false, text: e.message }); }
+      if (r.files?.[0]) { set('bannerImage', r.files[0]); setMsg({ ok: true, text: 'Image uploaded ✓' }); }
+      else setMsg({ ok: false, text: 'Upload failed — please try another image.' });
+    } catch (e: any) { setMsg({ ok: false, text: e.message || 'Upload failed' }); }
   };
 
   const useMyLocation = () => {
@@ -437,10 +443,10 @@ function CreateCampaign({ credits, onCreated }: { credits: number; onCreated: ()
         {step === 2 && (
           <div className="fade-up">
             <p className="font-extrabold text-[16px] mb-1">Creative — banner lagao</p>
-            <p className="text-[12.5px] text-gray-400 mb-4">3:4 portrait best lagta hai (tile grid). Max 200 KB. Nahi lagaya to branded gradient dikhega.</p>
+            <p className="text-[12.5px] text-gray-400 mb-4">A 3:4 portrait image looks best in the tile grid. Large photos are compressed automatically. Skip it and a branded gradient is used.</p>
             <div className="flex gap-6 items-start flex-wrap">
               <div className="flex-1 min-w-[220px]">
-                <label className={labelCls}>Banner image (≤200 KB)</label>
+                <label className={labelCls}>Banner image</label>
                 <input type="file" accept="image/*" className="text-sm" onChange={(e) => e.target.files?.[0] && uploadBanner(e.target.files[0])} />
                 {form.bannerImage && (
                   <button onClick={() => set('bannerImage', '')} className="block mt-2 text-[11.5px] font-bold text-red-500">✕ Remove banner</button>
