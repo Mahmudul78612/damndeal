@@ -1,12 +1,6 @@
 import type { Metadata } from 'next';
 import { Manrope, Baloo_2 } from 'next/font/google';
 import './globals.css';
-import { AuthProvider } from '@/context/AuthContext';
-import { LocationProvider } from '@/context/LocationContext';
-import LoginModal from '@/components/LoginModal';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
-import MobileNav from '@/components/MobileNav';
 
 const manrope = Manrope({ subsets: ['latin'], variable: '--font-manrope', weight: ['400', '500', '600', '700', '800'] });
 const baloo = Baloo_2({ subsets: ['latin'], variable: '--font-baloo', weight: ['600', '700', '800'] });
@@ -25,20 +19,17 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * Root layout is deliberately bare: it only owns <html>/<body> and the fonts.
+ *
+ * The shopper chrome (header, footer, mobile nav, login modal) lives in the
+ * (shop) route group, and the merchant console has its own shell under
+ * /business. Neither should ever render the other's navigation.
+ */
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${manrope.variable} ${baloo.variable}`}>
-      <body className="min-h-screen flex flex-col">
-        <AuthProvider>
-          <LocationProvider>
-          <Header />
-          <main className="flex-1 pb-[64px] md:pb-0">{children}</main>
-          <Footer />
-          <MobileNav />
-          <LoginModal />
-          </LocationProvider>
-        </AuthProvider>
-      </body>
+      <body className="min-h-screen flex flex-col">{children}</body>
     </html>
   );
 }
