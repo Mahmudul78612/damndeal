@@ -696,11 +696,11 @@ function ApiKey({ vendor, onRotated }: { vendor: any; onRotated: () => void }) {
           <button onClick={copy} className="text-white/70 hover:text-white">{copied ? <Check size={16} /> : <Copy size={16} />}</button>
         </div>
       ) : (
-        <p className="text-sm text-gray-500">{vendor.apiKey ? 'A key exists (hidden). Rotate to get a new one — the old key stops working.' : 'No key yet — generate one below.'}</p>
+        <p className="text-sm text-gray-500">{vendor.apiKeyPrefix || vendor.apiKey ? `Active key ${vendor.apiKeyPrefix || ''}… (stored hashed — it cannot be shown again). Rotate to get a new one; the old key stops working immediately.` : 'No key yet — generate one below.'}</p>
       )}
       <button onClick={rotate} disabled={loading}
         className="mt-4 flex items-center gap-2 px-5 py-2.5 bg-primary text-white rounded-xl font-bold text-sm disabled:opacity-50">
-        <RefreshCw size={15} /> {vendor.apiKey || freshKey ? 'Rotate key' : 'Generate key'}
+        <RefreshCw size={15} /> {vendor.apiKeyPrefix || vendor.apiKey || freshKey ? 'Rotate key' : 'Generate key'}
       </button>
       {freshKey && <p className="text-[11px] text-amber-600 mt-2">Copy it now — it won&apos;t be shown again.</p>}
     </Card>

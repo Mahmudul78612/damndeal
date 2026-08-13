@@ -8,6 +8,7 @@ const {
   CouponCategory, CouponVendor, CouponCampaign, CouponClaim, CouponSection, SpinPlay,
 } = require("../../models/coupon.models");
 const AppSettings = require("../../models/AppSettings");
+const { checkClaimAllowed, checkSpinAllowed } = require("../../services/couponGuard.service");
 
 const R = (req) => (req.region === "US" ? "US" : "IN");
 const liveFilter = (region) => ({
@@ -204,8 +205,9 @@ async function claimForUser(c, userId, region) {
   if (c.endAt < new Date()) return { error: "This coupon has expired" };
   if (c.claimedCount >= c.totalQuota) return { error: "All coupons have been claimed" };
 
+  const limit = c.perUserLimit || 1;
   const mine = await CouponClaim.countDocuments({ campaign: c._id, user: userId, status: { $ne: "cancelled" } });
-  if (mine >= (c.perUserLimit || 1)) {
+  if (mine >= limit) {
     const existing = await CouponClaim.findOne({ campaign: c._id, user: userId }).sort({ createdAt: -1 }).lean();
     return { alreadyClaimed: true, claim: existing };
   }
@@ -217,15 +219,37 @@ async function claimForUser(c, userId, region) {
   );
   if (!took.modifiedCount) return { error: "All coupons have been claimed" };
 
-  let code, tries = 0;
-  do { code = genCode(); tries++; } while (tries < 5 && (await CouponClaim.exists({ code })));
+  // From here on the quota is already spent — every failure path must give it
+  // back, otherwise the campaign silently loses coupons.
+  const releaseQuota = () => CouponCampaign.updateOne({ _id: c._id }, { $inc: { claimedCount: -1 } }).catch(() => {});
 
-  const doc = await CouponClaim.create({ campaign: c._id, vendor: c.vendor, user: userId, code, region });
-  return { claim: doc };
+  try {
+    let code, tries = 0;
+    do { code = genCode(); tries++; } while (tries < 5 && (await CouponClaim.exists({ code })));
+
+    // The unique {campaign,user,slot} index is the real per-user guard: two
+    // parallel requests both compute the same slot and only one insert wins.
+    const doc = await CouponClaim.create({
+      campaign: c._id, vendor: c.vendor, user: userId, code, region, slot: mine,
+    });
+    return { claim: doc };
+  } catch (err) {
+    await releaseQuota();
+    if (err && err.code === 11000) {
+      // Lost the race — either the slot (per-user limit) or the code collided.
+      const existing = await CouponClaim.findOne({ campaign: c._id, user: userId }).sort({ createdAt: -1 }).lean();
+      if (existing) return { alreadyClaimed: true, claim: existing };
+      return { error: "Could not claim right now — please try again" };
+    }
+    throw err;
+  }
 }
 
 /* POST /api/coupons/claim { campaignId } */
 async function claim(req, res) {
+  const blocked = await checkClaimAllowed(req, req.user.userId);
+  if (blocked) return res.status(429).json({ success: false, message: blocked });
+
   const c = await CouponCampaign.findById(req.body.campaignId);
   const out = await claimForUser(c, req.user.userId, R(req));
   if (out.error) return res.status(400).json({ success: false, message: out.error });
@@ -259,6 +283,9 @@ async function spinWheel(req, res) {
 /* POST /api/coupons/spin/play (auth) — server picks the prize + claims it */
 async function spinPlay(req, res) {
   const userId = req.user.userId;
+  const blocked = await checkSpinAllowed(req, userId);
+  if (blocked) return res.status(429).json({ success: false, message: blocked });
+
   const region = R(req);
   const cfg = await spinSettings();
   if (!cfg.enabled) return res.status(400).json({ success: false, message: "Spin is not available right now" });
@@ -341,4 +368,7 @@ async function geo(req, res) {
   }
 }
 
-module.exports = { home, list, categories, detail, vendorPage, claim, myClaims, spinWheel, spinPlay, geo };
+module.exports = {
+  home, list, categories, detail, vendorPage, claim, myClaims, spinWheel, spinPlay, geo,
+  claimForUser, // exported for tests and the spin flow
+};

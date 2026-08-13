@@ -6,12 +6,19 @@
  *   POST /api/coupons/api/verify  { code }   header: x-api-key: dck_...
  *   POST /api/coupons/api/redeem  { code }
  */
+const crypto = require("crypto");
 const { CouponVendor, CouponClaim, CouponCampaign } = require("../../models/coupon.models");
+
+const hashKey = (key) => crypto.createHash("sha256").update(String(key)).digest("hex");
 
 async function requireApiVendor(req, res) {
   const key = req.headers["x-api-key"];
   if (!key) { res.status(401).json({ success: false, message: "Missing x-api-key header" }); return null; }
-  const vendor = await CouponVendor.findOne({ apiKey: key });
+  // Keys are stored hashed; the legacy plaintext lookup stays as a fallback
+  // only until the migration has cleared every old apiKey value.
+  const vendor =
+    (await CouponVendor.findOne({ apiKeyHash: hashKey(key) })) ||
+    (await CouponVendor.findOne({ apiKey: key }));
   if (!vendor) { res.status(401).json({ success: false, message: "Invalid API key" }); return null; }
   if (vendor.status !== "approved") { res.status(403).json({ success: false, message: "Vendor account is not active" }); return null; }
   return vendor;
@@ -53,11 +60,20 @@ async function redeem(req, res) {
   if (claim.status !== "claimed") return res.status(410).json({ success: false, message: `Code is ${claim.status}` });
   if (claim.campaign?.endAt && claim.campaign.endAt < new Date()) return res.status(410).json({ success: false, message: "Coupon expired" });
 
-  claim.status = "redeemed"; claim.redeemedAt = new Date(); claim.redeemedVia = "api";
-  await claim.save();
+  // Single atomic flip — concurrent POS calls must yield exactly one redemption.
+  const won = await CouponClaim.findOneAndUpdate(
+    { _id: claim._id, status: "claimed" },
+    { $set: { status: "redeemed", redeemedAt: new Date(), redeemedVia: "api" } },
+    { new: true }
+  );
+  if (!won) {
+    const now = await CouponClaim.findById(claim._id).select("redeemedAt").lean();
+    return res.status(409).json({ success: false, message: "Code already redeemed", redeemedAt: now?.redeemedAt || null });
+  }
+
   await CouponCampaign.updateOne({ _id: claim.campaign._id }, { $inc: { redeemedCount: 1 } });
   return res.json({
-    success: true, redeemed: true, redeemedAt: claim.redeemedAt,
+    success: true, redeemed: true, redeemedAt: won.redeemedAt,
     offer: { title: claim.campaign?.title, offerText: claim.campaign?.offerText, offerType: claim.campaign?.offerType, offerValue: claim.campaign?.offerValue },
   });
 }

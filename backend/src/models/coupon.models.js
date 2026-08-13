@@ -50,7 +50,12 @@ const couponVendorSchema = new mongoose.Schema(
     status: { type: String, enum: ["pending", "approved", "suspended"], default: "approved", index: true },
     isVerifiedBadge: { type: Boolean, default: false }, // ✔ shown on cards (admin grants)
     // External verify API (for vendors with their own website/portal)
-    apiKey: { type: String, default: null, index: true }, // "dck_..." (shown once, stored as-is v1)
+    // API key is never stored in the clear: only its sha256 hash is kept, plus
+    // a short prefix so the portal can show "dck_1a2b…" for recognition.
+    // The full key is returned exactly once, at creation/rotation time.
+    apiKeyHash: { type: String, default: null, index: true },
+    apiKeyPrefix: { type: String, default: null },
+    apiKey: { type: String, default: null }, // legacy plaintext — cleared by migration
     apiKeyCreatedAt: { type: Date, default: null },
     // Claim quota credited from pack purchases (campaign creation consumes it)
     claimCredits: { type: Number, default: 50 }, // free starter credits
@@ -127,9 +132,16 @@ const couponClaimSchema = new mongoose.Schema(
     redeemedAt: { type: Date, default: null },
     redeemedVia: { type: String, enum: [null, "portal", "api"], default: null },
     region: { type: String, enum: ["IN", "US"], default: "IN" },
+    // 0-based index of this claim within the user's per-campaign allowance.
+    // The unique {campaign,user,slot} index below is what actually enforces
+    // perUserLimit — a count() check alone loses to parallel requests.
+    slot: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
+couponClaimSchema.index({ campaign: 1, user: 1, slot: 1 }, { unique: true });
+couponClaimSchema.index({ user: 1, createdAt: -1 });      // my-coupons page
+couponClaimSchema.index({ vendor: 1, status: 1 });        // vendor redemption lists
 couponClaimSchema.index({ campaign: 1, user: 1 });
 
 /* ── Section (admin-customizable homepage, like home-sections) ────────────── */

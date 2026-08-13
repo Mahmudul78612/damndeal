@@ -8,6 +8,7 @@ const mongoose = require("mongoose");
 const {
   CouponCategory, CouponVendor, CouponCampaign, CouponClaim, CouponSection, CouponPackOrder,
 } = require("../../models/coupon.models");
+const { writeAudit, diff } = require("../../services/audit.service");
 
 const slugify = (s) =>
   String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 60) ||
@@ -37,15 +38,20 @@ async function createCategory(req, res) {
   const { name, icon = "🏷️", regions = ["IN", "US"], sortOrder = 0, packs = [] } = req.body;
   if (!name) return res.status(400).json({ success: false, message: "name required" });
   const item = await CouponCategory.create({ name, slug: slugify(name), icon, regions, sortOrder, packs });
+  await writeAudit(req, { action: 'coupon.category.create', module: 'coupons', targetType: 'CouponCategory', targetId: item._id, targetLabel: item.name, after: { name, regions, packs } });
   return res.status(201).json({ success: true, item });
 }
 async function updateCategory(req, res) {
+  const prev = await CouponCategory.findById(req.params.id).lean();
   const item = await CouponCategory.findByIdAndUpdate(req.params.id, req.body, { new: true });
   if (!item) return res.status(404).json({ success: false, message: "Not found" });
+  const d = diff(prev, item.toObject(), ["name", "icon", "regions", "sortOrder", "packs", "isActive"]);
+  if (d) await writeAudit(req, { action: "coupon.category.update", module: "coupons", targetType: "CouponCategory", targetId: item._id, targetLabel: item.name, ...d });
   return res.json({ success: true, item });
 }
 async function deleteCategory(req, res) {
-  await CouponCategory.findByIdAndDelete(req.params.id);
+  const gone = await CouponCategory.findByIdAndDelete(req.params.id);
+  if (gone) await writeAudit(req, { action: "coupon.category.delete", module: "coupons", targetType: "CouponCategory", targetId: gone._id, targetLabel: gone.name, before: { name: gone.name, regions: gone.regions } });
   return res.json({ success: true });
 }
 
@@ -63,6 +69,8 @@ async function moderateCampaign(req, res) {
   const { action, reason = "", featuredDays } = req.body; // approve | reject | feature | unfeature | expire
   const c = await CouponCampaign.findById(req.params.id);
   if (!c) return res.status(404).json({ success: false, message: "Not found" });
+  const prevStatus = c.status;
+  const prevFeatured = c.featured?.active === true;
   if (action === "approve") { c.status = "active"; c.rejectReason = ""; }
   else if (action === "reject") {
     c.status = "rejected"; c.rejectReason = reason;
@@ -76,6 +84,16 @@ async function moderateCampaign(req, res) {
   else if (action === "unfeature") { c.featured.active = false; c.featured.until = null; }
   else if (action === "expire") c.status = "expired";
   await c.save();
+  await writeAudit(req, {
+    action: `coupon.campaign.${action}`,
+    module: "coupons",
+    targetType: "CouponCampaign",
+    targetId: c._id,
+    targetLabel: c.title,
+    before: { status: prevStatus, featured: prevFeatured },
+    after: { status: c.status, featured: c.featured?.active === true },
+    note: reason || "",
+  });
   return res.json({ success: true, campaign: c });
 }
 
@@ -114,8 +132,11 @@ async function updateCampaign(req, res) {
   for (const k of ["inSpin", "endAt", "totalQuota", "regions", "title", "description", "instructions", "terms", "offerText", "bannerImage"]) {
     if (req.body[k] !== undefined) allowed[k] = req.body[k];
   }
+  const prev = await CouponCampaign.findById(req.params.id).lean();
   const c = await CouponCampaign.findByIdAndUpdate(req.params.id, allowed, { new: true });
   if (!c) return res.status(404).json({ success: false, message: "Not found" });
+  const d = diff(prev, c.toObject(), Object.keys(allowed));
+  if (d) await writeAudit(req, { action: "coupon.campaign.update", module: "coupons", targetType: "CouponCampaign", targetId: c._id, targetLabel: c.title, ...d });
   return res.json({ success: true, campaign: c });
 }
 
@@ -140,6 +161,7 @@ async function updateSpinSettings(req, res) {
   if (cooldownHours !== undefined) {
     await AppSettings.findOneAndUpdate({ key: "coupon_spin_cooldown_hours" }, { key: "coupon_spin_cooldown_hours", value: Number(cooldownHours) || 24 }, { upsert: true });
   }
+  await writeAudit(req, { action: "coupon.spin.settings", module: "coupons", targetType: "AppSettings", targetLabel: "Spin & Win", after: { enabled, cooldownHours } });
   return res.json({ success: true });
 }
 
@@ -154,8 +176,12 @@ async function updateVendor(req, res) {
   for (const k of ["status", "isVerifiedBadge", "claimCredits", "regions"]) {
     if (req.body[k] !== undefined) allowed[k] = req.body[k];
   }
+  const prev = await CouponVendor.findById(req.params.id).lean();
   const v = await CouponVendor.findByIdAndUpdate(req.params.id, allowed, { new: true });
   if (!v) return res.status(404).json({ success: false, message: "Not found" });
+  // Credit changes and suspensions are the two things support disputes are about
+  const d = diff(prev, v.toObject(), Object.keys(allowed));
+  if (d) await writeAudit(req, { action: "coupon.vendor.update", module: "coupons", targetType: "CouponVendor", targetId: v._id, targetLabel: v.businessName, ...d });
   return res.json({ success: true, vendor: v });
 }
 
@@ -242,12 +268,16 @@ async function updateSection(req, res) {
     if (req.body[k] !== undefined) patch[k] = req.body[k];
   }
   if (req.body.data !== undefined) patch.data = cleanSectionData(req.body.data);
+  const prev = await CouponSection.findById(req.params.id).lean();
   const item = await CouponSection.findByIdAndUpdate(req.params.id, patch, { new: true, runValidators: true });
   if (!item) return res.status(404).json({ success: false, message: "Not found" });
+  const changed = diff(prev, item.toObject(), Object.keys(patch));
+  if (changed) await writeAudit(req, { action: "coupon.section.update", module: "coupons", targetType: "CouponSection", targetId: item._id, targetLabel: item.title || item.type, ...changed });
   return res.json({ success: true, item });
 }
 async function deleteSection(req, res) {
-  await CouponSection.findByIdAndDelete(req.params.id);
+  const gone = await CouponSection.findByIdAndDelete(req.params.id);
+  if (gone) await writeAudit(req, { action: "coupon.section.delete", module: "coupons", targetType: "CouponSection", targetId: gone._id, targetLabel: gone.title || gone.type, before: { type: gone.type, title: gone.title } });
   return res.json({ success: true });
 }
 
@@ -273,6 +303,15 @@ async function decidePackOrder(req, res) {
     );
   } else if (action === "reject") order.status = "rejected";
   await order.save();
+  await writeAudit(req, {
+    action: `coupon.packorder.${action}`,
+    module: "coupons",
+    targetType: "CouponPackOrder",
+    targetId: order._id,
+    targetLabel: `${order.claims} claims · ${order.currency} ${order.price}`,
+    before: { status: "pending" },
+    after: { status: order.status, paymentRef: order.paymentRef || "" },
+  });
   return res.json({ success: true, order });
 }
 

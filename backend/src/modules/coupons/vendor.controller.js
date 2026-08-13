@@ -184,11 +184,27 @@ async function redeemCode(req, res) {
   const claim = await findClaimForVendor(vendor, req.body.code || "");
   if (!claim) return res.status(404).json({ success: false, message: "Code not found for your business" });
   if (claim.status === "redeemed") return res.status(409).json({ success: false, message: `Already redeemed on ${claim.redeemedAt?.toLocaleString()}` });
+  if (claim.status !== "claimed") return res.status(410).json({ success: false, message: `This coupon is ${claim.status}` });
   if (claim.campaign?.endAt && claim.campaign.endAt < new Date()) return res.status(410).json({ success: false, message: "This coupon has expired" });
-  claim.status = "redeemed"; claim.redeemedAt = new Date(); claim.redeemedVia = "portal";
-  await claim.save();
+
+  // Single atomic flip — two cashiers scanning the same code at the same
+  // moment must produce exactly one redemption.
+  const redeemedAt = new Date();
+  const won = await CouponClaim.findOneAndUpdate(
+    { _id: claim._id, status: "claimed" },
+    { $set: { status: "redeemed", redeemedAt, redeemedVia: "portal" } },
+    { new: true }
+  );
+  if (!won) {
+    const now = await CouponClaim.findById(claim._id).select("redeemedAt").lean();
+    return res.status(409).json({
+      success: false,
+      message: `Already redeemed${now?.redeemedAt ? ` on ${now.redeemedAt.toLocaleString()}` : ""}`,
+    });
+  }
+
   await CouponCampaign.updateOne({ _id: claim.campaign._id }, { $inc: { redeemedCount: 1 } });
-  return res.json({ success: true, message: "Redeemed — apply the offer!", claim: { code: claim.code, redeemedAt: claim.redeemedAt } });
+  return res.json({ success: true, message: "Redeemed — apply the offer!", claim: { code: won.code, redeemedAt: won.redeemedAt } });
 }
 
 /* ── API key + packs ──────────────────────────────────────────────────────── */
@@ -196,10 +212,18 @@ async function redeemCode(req, res) {
 /* POST /api/coupons/vendor/api-key — generate/rotate */
 async function rotateApiKey(req, res) {
   const vendor = await requireVendor(req, res); if (!vendor) return;
-  vendor.apiKey = "dck_" + crypto.randomBytes(24).toString("hex");
+  // Generate once, hand it back once — only the hash is persisted.
+  const key = "dck_" + crypto.randomBytes(24).toString("hex");
+  vendor.apiKeyHash = crypto.createHash("sha256").update(key).digest("hex");
+  vendor.apiKeyPrefix = key.slice(0, 12);
+  vendor.apiKey = null; // never store the clear key again
   vendor.apiKeyCreatedAt = new Date();
   await vendor.save();
-  return res.json({ success: true, apiKey: vendor.apiKey, message: "Store this key securely — treat it like a password." });
+  return res.json({
+    success: true,
+    apiKey: key,
+    message: "Copy this key now — it is shown only once and cannot be recovered.",
+  });
 }
 
 /* GET /api/coupons/vendor/packs — category pack pricing for vendor's region */
