@@ -12,6 +12,7 @@ const events = require("../../services/couponEvents.service");
 const { CouponDailyStat } = require("../../models/couponAnalytics.models");
 const { CouponOutlet } = require("../../models/couponOrg.models");
 const { deriveLocation, refreshBrandCampaigns } = require("../../services/couponTargeting.service");
+const { outletInScope, resolveBrand } = require("../../middleware/couponAuth.middleware");
 const mongoose = require("mongoose");
 const isId = (v) => !!v && mongoose.Types.ObjectId.isValid(String(v));
 
@@ -46,10 +47,33 @@ async function register(req, res) {
   return res.status(201).json({ success: true, vendor });
 }
 
+/**
+ * The brand this request acts on.
+ *
+ * Team members (cashier, manager…) are NOT the brand's owner user, so the
+ * legacy `CouponVendor.findOne({ user })` lookup cannot find their brand.
+ * When a membership is attached we resolve through the member's scope
+ * instead; the owner lookup stays as the fallback so accounts created before
+ * the org model keep working unchanged.
+ */
 async function requireVendor(req, res) {
-  const vendor = await CouponVendor.findOne({ user: req.user.userId });
-  if (!vendor) { res.status(404).json({ success: false, message: "Vendor profile not found — register first", needsRegistration: true }); return null; }
-  if (vendor.status === "suspended") { res.status(403).json({ success: false, message: "Your vendor account is suspended" }); return null; }
+  let vendor = null;
+
+  if (req.couponMember && !req.couponMember.legacy) {
+    vendor = await resolveBrand(req, res);
+    if (!vendor) return null;              // resolveBrand already answered
+  } else {
+    vendor = await CouponVendor.findOne({ user: req.user.userId });
+  }
+
+  if (!vendor) {
+    res.status(404).json({ success: false, message: "Vendor profile not found — register first", needsRegistration: true });
+    return null;
+  }
+  if (vendor.status === "suspended") {
+    res.status(403).json({ success: false, message: "Your vendor account is suspended" });
+    return null;
+  }
   return vendor;
 }
 
@@ -346,12 +370,35 @@ async function redeemCode(req, res) {
   if (claim.status !== "claimed") return res.status(410).json({ success: false, message: `This coupon is ${claim.status}` });
   if (claim.campaign?.endAt && claim.campaign.endAt < new Date()) return res.status(410).json({ success: false, message: "This coupon has expired" });
 
+  // A cashier is pinned to their outlet: they may only redeem there, and the
+  // redemption is attributed to that shop and that person.
+  let outletId = req.body.outletId || null;
+  const scoped = req.couponMember?.scope?.outlets || [];
+  if (scoped.length) {
+    if (outletId && !outletInScope(req, outletId)) {
+      return res.status(403).json({ success: false, message: "You can only redeem at your own outlet." });
+    }
+    outletId = outletId || scoped[0];
+  }
+  if (outletId) {
+    const belongs = await CouponOutlet.exists({ _id: outletId, brand: vendor._id });
+    if (!belongs) return res.status(400).json({ success: false, message: "That outlet does not belong to this brand." });
+  }
+
   // Single atomic flip — two cashiers scanning the same code at the same
   // moment must produce exactly one redemption.
   const redeemedAt = new Date();
+  const billValue = Number(req.body.billValue);
   const won = await CouponClaim.findOneAndUpdate(
     { _id: claim._id, status: "claimed" },
-    { $set: { status: "redeemed", redeemedAt, redeemedVia: "portal" } },
+    {
+      $set: {
+        status: "redeemed", redeemedAt, redeemedVia: "portal",
+        redeemedOutlet: outletId || null,
+        redeemedBy: req.couponMember?._id || null,
+        ...(Number.isFinite(billValue) && billValue > 0 ? { billValue } : {}),
+      },
+    },
     { new: true }
   );
   if (!won) {

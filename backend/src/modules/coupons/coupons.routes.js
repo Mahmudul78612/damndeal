@@ -6,6 +6,8 @@ const pub = require("./public.controller");
 const vendor = require("./vendor.controller");
 const extApi = require("./verifyApi.controller");
 const admin = require("./admin.controller");
+const member = require("./member.controller");
+const { attachCouponMember, requireCouponPermission } = require("../../middleware/couponAuth.middleware");
 
 const router = express.Router();
 const h = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -32,26 +34,41 @@ router.post("/api/redeem", h(extApi.redeem));
 
 /* ── Vendor portal (auth) ── */
 router.post("/vendor/register", authenticate, h(vendor.register));
-router.get("/vendor/me", authenticate, h(vendor.me));
-router.put("/vendor/me", authenticate, h(vendor.updateMe));
-router.post("/vendor/campaigns", authenticate, h(vendor.createCampaign));
-router.get("/vendor/campaigns", authenticate, h(vendor.myCampaigns));
-router.get("/vendor/analytics", authenticate, h(vendor.analytics));
+router.get("/vendor/me", authenticate, attachCouponMember, h(vendor.me));
+router.put("/vendor/me", authenticate, attachCouponMember, requireCouponPermission("manage_brands"), h(vendor.updateMe));
+router.post("/vendor/campaigns", authenticate, attachCouponMember, requireCouponPermission("manage_campaigns"), h(vendor.createCampaign));
+router.get("/vendor/campaigns", authenticate, attachCouponMember, h(vendor.myCampaigns));
+router.get("/vendor/analytics", authenticate, attachCouponMember, requireCouponPermission("view_dashboard"), h(vendor.analytics));
 
 /* Outlets — the brand's physical locations */
-router.get("/vendor/outlets", authenticate, h(vendor.listOutlets));
-router.post("/vendor/outlets", authenticate, h(vendor.createOutlet));
-router.post("/vendor/outlets/bulk", authenticate, h(vendor.bulkOutlets));
-router.put("/vendor/outlets/:id", authenticate, h(vendor.updateOutlet));
-router.delete("/vendor/outlets/:id", authenticate, h(vendor.deleteOutlet));
-router.patch("/vendor/campaigns/:id", authenticate, h(vendor.updateCampaign));
-router.get("/vendor/stats", authenticate, h(vendor.stats));
-router.post("/vendor/verify", authenticate, h(vendor.verifyCode));
-router.post("/vendor/redeem", authenticate, h(vendor.redeemCode));
-router.post("/vendor/api-key", authenticate, h(vendor.rotateApiKey));
+router.get("/vendor/outlets", authenticate, attachCouponMember, h(vendor.listOutlets));
+router.post("/vendor/outlets", authenticate, attachCouponMember, requireCouponPermission("manage_outlets"), h(vendor.createOutlet));
+router.post("/vendor/outlets/bulk", authenticate, attachCouponMember, requireCouponPermission("manage_outlets"), h(vendor.bulkOutlets));
+router.put("/vendor/outlets/:id", authenticate, attachCouponMember, requireCouponPermission("manage_outlets"), h(vendor.updateOutlet));
+router.delete("/vendor/outlets/:id", authenticate, attachCouponMember, requireCouponPermission("manage_outlets"), h(vendor.deleteOutlet));
+router.patch("/vendor/campaigns/:id", authenticate, attachCouponMember, requireCouponPermission("manage_campaigns"), h(vendor.updateCampaign));
+router.get("/vendor/stats", authenticate, attachCouponMember, h(vendor.stats));
+router.post("/vendor/verify", authenticate, attachCouponMember, requireCouponPermission("redeem_codes"), h(vendor.verifyCode));
+router.post("/vendor/redeem", authenticate, attachCouponMember, requireCouponPermission("redeem_codes"), h(vendor.redeemCode));
+router.post("/vendor/api-key", authenticate, attachCouponMember, requireCouponPermission("manage_api"), h(vendor.rotateApiKey));
 router.get("/vendor/packs", authenticate, h(vendor.packs));
-router.post("/vendor/packs", authenticate, h(vendor.buyPack));
+router.post("/vendor/packs", authenticate, attachCouponMember, requireCouponPermission("manage_billing"), h(vendor.buyPack));
 router.get("/vendor/pack-orders", authenticate, h(vendor.myPackOrders));
+
+/* ── Business portal: team accounts, invites, credentials ── */
+// Public — the invitee has no session yet
+router.get("/business/invite/:token", h(member.inviteInfo));
+router.post("/business/invite/:token/accept", h(member.acceptInvite));
+router.post("/business/login", h(member.login));
+
+// Signed in as a member of a business
+const biz = [authenticate, attachCouponMember];
+router.get("/business/me", ...biz, h(member.me));
+router.post("/business/set-password", ...biz, h(member.setPassword));
+router.get("/business/members", ...biz, requireCouponPermission("manage_members"), h(member.listMembers));
+router.post("/business/members", ...biz, requireCouponPermission("manage_members"), h(member.inviteMember));
+router.put("/business/members/:id", ...biz, requireCouponPermission("manage_members"), h(member.updateMember));
+router.delete("/business/members/:id", ...biz, requireCouponPermission("manage_members"), h(member.removeMember));
 
 /* ── Image upload (vendor banners / admin section banners) ── */
 router.post("/upload", authenticate, uploadCouponImages, optimizeImages(1600), (req, res) => {

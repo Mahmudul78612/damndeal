@@ -88,6 +88,11 @@ const couponMemberSchema = new mongoose.Schema(
       outlets: { type: [mongoose.Schema.Types.ObjectId], default: [] },
     },
 
+    // Business logins are email + password (bcrypt). Phone OTP still works for
+    // the owner through the consumer account; a cashier on a shared till
+    // device needs credentials that do not depend on someone's personal phone.
+    passwordHash: { type: String, default: null, select: false },
+
     status: { type: String, enum: ["invited", "active", "disabled"], default: "invited", index: true },
     inviteToken: { type: String, default: null, index: true },
     inviteExpiresAt: { type: Date, default: null },
