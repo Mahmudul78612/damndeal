@@ -88,6 +88,7 @@ function buildLayout(activePageId) {
     ]},
     { group: "System", items: [
       { id: "reports", label: "Reports", icon: "📈", href: basePath + "/pages/reports/reports.html", perm: "view_reports" },
+      { id: "security", label: "Security", icon: "🛡️", href: basePath + "/pages/security/security.html", perm: "view_security" },
       { id: "ddgo-settings", label: "Quick Commerce Settings", icon: "🟢", href: basePath + "/pages/ddgo-settings/ddgo-settings.html", perm: "manage_settings" },
       { id: "settings", label: "Settings", icon: "⚙️", href: basePath + "/pages/settings/settings.html", perm: "manage_settings" },
       { id: "home-sections", label: "Home Layouts", icon: "🏠", href: basePath + "/pages/home-sections/home-sections.html", perm: "manage_homepage" },

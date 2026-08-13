@@ -63,6 +63,7 @@ router.use("/notifications", P("manage_notifications"));
 router.use("/magic-pools", P("manage_magic_pools"));
 router.use("/investors", P("manage_investors"));
 router.use("/reports", P("view_reports"));
+router.use("/security", P("view_security"));
 router.use("/settings", P("manage_settings"));
 router.use("/home-sections", P("manage_homepage"));
 router.use("/desktop-home-sections", P("manage_homepage"));

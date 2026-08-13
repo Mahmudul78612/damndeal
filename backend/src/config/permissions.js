@@ -36,6 +36,7 @@ const PERMISSIONS = [
   { key: "manage_investors", label: "Investors", group: "Engagement" },
   // System
   { key: "view_reports", label: "Reports", group: "System" },
+  { key: "view_security", label: "Security & OTP protection", group: "System" },
   { key: "manage_settings", label: "Settings", group: "System" },
   { key: "manage_homepage", label: "Home Layouts & App Customization", group: "System" },
 ];
