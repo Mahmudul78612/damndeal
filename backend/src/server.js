@@ -43,15 +43,8 @@ app.use(
 );
 
 // Rate limiting
-const otpLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === "development" ? 100 : 10,
-  message: { success: false, message: "Too many requests, try again later" },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use("/api/auth/send-otp", otpLimiter);
-app.use("/api/auth/verify-otp", otpLimiter);
+// NOTE: the auth (OTP) limiter is mounted further down, after express.json(),
+// because it has to read which phone number is being asked for.
 
 const ipcheck = require("./services/ipcheck.service");
 const realClientIp = (req) =>
@@ -100,6 +93,24 @@ app.post(
 
 // Body parsing
 app.use(express.json({ limit: "10mb" }));
+
+// Auth (OTP) rate limiting — deliberately after body parsing so it can see the
+// number being requested. Fixed-OTP numbers (the owner/admin and the store
+// review accounts) are exempt: they never send an SMS, so they cost nothing to
+// serve and must not be throttled while testing.
+const { fixedOtpFor } = require("./services/otp.service");
+const otpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === "development" ? 100 : 10,
+  message: { success: false, message: "Too many requests, try again later" },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    try { return !!fixedOtpFor(req.body && req.body.phone); } catch { return false; }
+  },
+});
+app.use("/api/auth/send-otp", otpLimiter);
+app.use("/api/auth/verify-otp", otpLimiter);
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // Region detection (X-Region header / hostname → req.region; defaults to 'IN')

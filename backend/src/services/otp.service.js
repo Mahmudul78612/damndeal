@@ -54,6 +54,39 @@ function ipKey(ip) {
   return `otp_ip:${ip}`;
 }
 
+/**
+ * Fixed-OTP numbers (owner/admin testing, Play & App Store review accounts).
+ *
+ * Two env vars, both optional:
+ *   TEST_PHONE_OTPS = "+916002655912:956811,9876543210:600265"   per-number code
+ *   TEST_PHONES + TEST_OTP                                       one shared code
+ *
+ * Numbers are matched on their last 10 digits, so +91xxxxxxxxxx, 91xxxxxxxxxx
+ * and xxxxxxxxxx are all the same entry — no more listing every format.
+ *
+ * These numbers skip every limit AND never send a real SMS: nothing is spent,
+ * and repeated testing is never throttled.
+ */
+function normPhone(p) {
+  const digits = String(p || "").replace(/\D/g, "");
+  return digits.slice(-10);
+}
+
+function fixedOtpFor(phone) {
+  const key = normPhone(phone);
+  if (!key) return null;
+
+  for (const pair of (process.env.TEST_PHONE_OTPS || "").split(",")) {
+    const [num, code] = pair.split(":").map((s) => (s || "").trim());
+    if (num && code && normPhone(num) === key) return code;
+  }
+
+  const shared = (process.env.TEST_OTP || "").trim();
+  if (!shared) return null;
+  const list = (process.env.TEST_PHONES || "").split(",").map((p) => normPhone(p)).filter(Boolean);
+  return list.includes(key) ? shared : null;
+}
+
 // Reject numbers that can never receive an Indian OTP (saves SMS credits):
 // wrong length/prefix, all-same-digit (9999999999) or the two obvious sequences.
 function isBogusIndianNumber(phone) {
@@ -74,15 +107,18 @@ async function sendOtp(phone, ipOrReq) {
   const clientIp = req ? botGuard.clientIp(req) : ipOrReq;
   const redis = await getRedisClient();
 
-  // --- Whitelisted test phone bypass (dev + Play/App Store review accounts) ---
-  // Only the exact numbers in TEST_PHONES with the fixed TEST_OTP are affected;
-  // no real SMS is sent for them. Safe in production because it's a fixed allow-list.
-  const testPhones = (process.env.TEST_PHONES || "").split(",").map((p) => p.trim()).filter(Boolean);
-  const testOtp = process.env.TEST_OTP;
-  if (testOtp && testPhones.includes(phone)) {
-    await redis.setEx(otpKey(phone), OTP_EXPIRY, testOtp);
+  // --- Fixed-OTP numbers (owner/admin + store review accounts) ---
+  // Deliberately first: these skip every rate limit, cooldown, daily cap and
+  // bot check, and never send a real SMS. Nothing is spent and repeated
+  // testing is never throttled. Safe because it is a fixed allow-list.
+  const fixed = fixedOtpFor(phone);
+  if (fixed) {
+    await redis.setEx(otpKey(phone), OTP_EXPIRY, fixed);
     await redis.del(attemptKey(phone));
-    console.log(`[TEST] OTP bypass for whitelisted ${phone}`);
+    // Clear any limit state left from earlier real sends to this number
+    await redis.del(cooldownKey(phone));
+    await redis.del(sendsKey(phone));
+    console.log(`[TEST] fixed-OTP bypass for ${phone} (no SMS, no limits)`);
     return { success: true, message: "OTP sent successfully" };
   }
 
@@ -236,14 +272,14 @@ async function sendOtp(phone, ipOrReq) {
 async function verifyOtp(phone, otp) {
   const redis = await getRedisClient();
 
-  // --- Whitelisted test phone bypass (dev + Play/App Store review accounts) ---
-  const testPhones = (process.env.TEST_PHONES || "").split(",").map((p) => p.trim()).filter(Boolean);
-  const testOtp = process.env.TEST_OTP;
-  if (testOtp && testPhones.includes(phone) && otp === testOtp) {
+  // --- Fixed-OTP numbers: their code always verifies, with no attempt limit ---
+  const fixed = fixedOtpFor(phone);
+  if (fixed && String(otp) === fixed) {
     await redis.del(otpKey(phone));
     await redis.del(attemptKey(phone));
     await redis.del(cooldownKey(phone));
-    console.log(`[TEST] OTP verified for whitelisted ${phone}`);
+    await redis.del(sendsKey(phone));
+    console.log(`[TEST] fixed-OTP verified for ${phone}`);
     return { success: true };
   }
 
@@ -375,4 +411,4 @@ function sendFast2SmsWhatsApp(apiKey, phone, otp) {
   });
 }
 
-module.exports = { sendOtp, verifyOtp, getRedisClient };
+module.exports = { sendOtp, verifyOtp, getRedisClient, fixedOtpFor, normPhone };
