@@ -25,12 +25,37 @@ interface FetchOptions extends RequestInit {
   token?: string;
 }
 
+
+/**
+ * Stable per-browser id + the moment this tab was opened.
+ *
+ * These are anti-abuse signals for OTP requests, not tracking: the server uses
+ * them to notice one browser asking for many different phone numbers, or a
+ * form submitted faster than a human can type. Both degrade gracefully — the
+ * server has its own network-level checks when a client sends neither.
+ */
+const TAB_OPENED_AT = Date.now();
+function deviceId(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    let id = localStorage.getItem('dd_did');
+    if (!id) {
+      id = (crypto?.randomUUID?.() || Math.random().toString(36).slice(2) + Date.now().toString(36)).replace(/-/g, '').slice(0, 32);
+      localStorage.setItem('dd_did', id);
+    }
+    return id;
+  } catch {
+    return '';
+  }
+}
+
 async function request<T = any>(endpoint: string, options: FetchOptions = {}): Promise<T> {
   const { token, headers: customHeaders, ...rest } = options;
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'x-client-type': 'web',
+    ...(typeof window !== 'undefined' ? { 'x-device-id': deviceId(), 'x-form-opened': String(TAB_OPENED_AT) } : {}),
     'x-region': REGION,
     ...(customHeaders as Record<string, string>),
   };

@@ -16,11 +16,7 @@ async function sendOtp(req, res) {
     investor = await Investor.create({ phone, name, email, region });
   }
 
-  const clientIp =
-    req.headers["x-real-ip"] ||
-    (req.headers["x-forwarded-for"] || "").split(",").pop().trim() ||
-    req.ip;
-  const result = await otpService.sendOtp(phone, clientIp);
+  const result = await otpService.sendOtp(phone, req);
   if (!result.success) return res.status(429).json(result);
   return res.json({ success: true, message: "OTP sent", isNew: !investor.createdAt });
 }

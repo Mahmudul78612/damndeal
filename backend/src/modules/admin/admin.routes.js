@@ -68,6 +68,16 @@ router.use("/home-sections", P("manage_homepage"));
 router.use("/desktop-home-sections", P("manage_homepage"));
 router.use("/app-customization", P("manage_homepage"));
 
+// OTP / bot-protection status (any admin or staff may view)
+router.get("/security/otp", async (req, res) => {
+  const botGuard = require("../../services/botGuard.service");
+  try {
+    return res.json({ success: true, ...(await botGuard.stats()) });
+  } catch (e) {
+    return res.status(503).json({ success: false, message: "Protection stats unavailable: " + e.message });
+  }
+});
+
 // Who am I + permission catalog (no permission needed — every signed-in
 // admin/staff must be able to load their own menu)
 router.get("/me", staff.getMe);

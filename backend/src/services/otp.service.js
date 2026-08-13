@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const https = require("https");
 const { createClient } = require("redis");
 const ipcheck = require("./ipcheck.service");
+const botGuard = require("./botGuard.service");
 
 let redisClient;
 
@@ -15,6 +16,8 @@ async function getRedisClient() {
   }
   return redisClient;
 }
+
+botGuard.useRedis(getRedisClient);
 
 const OTP_EXPIRY = 300; // 5 minutes
 const MAX_ATTEMPTS = 5;
@@ -61,7 +64,14 @@ function isBogusIndianNumber(phone) {
   return false;
 }
 
-async function sendOtp(phone, clientIp) {
+/**
+ * @param {string} phone
+ * @param {string|object} ipOrReq  the request (preferred — enables bot scoring)
+ *                                 or just the client IP for legacy callers
+ */
+async function sendOtp(phone, ipOrReq) {
+  const req = ipOrReq && typeof ipOrReq === "object" ? ipOrReq : null;
+  const clientIp = req ? botGuard.clientIp(req) : ipOrReq;
   const redis = await getRedisClient();
 
   // --- Whitelisted test phone bypass (dev + Play/App Store review accounts) ---
@@ -79,6 +89,31 @@ async function sendOtp(phone, clientIp) {
   // 0) Obviously-invalid number — never burns an SMS credit
   if (isBogusIndianNumber(phone)) {
     return { success: false, message: "Please enter a valid mobile number" };
+  }
+
+  // 0.1) Bot scoring. Per-IP and per-number caps alone cannot stop an attacker
+  // who rotates both, so this looks at the signals rotation cannot hide:
+  // subnet velocity, one device asking for many numbers, scripted clients,
+  // sequential number patterns, and a platform-wide daily spend cap.
+  if (req) {
+    const verdict = await botGuard.assess(req, phone);
+    if (verdict.action === "block") {
+      await botGuard.recordBlock(req, phone, verdict);
+      return {
+        success: false,
+        code: "BLOCKED",
+        message: verdict.message ||
+          "We could not verify this request. Please try again from your mobile data, or contact support.",
+      };
+    }
+    if (verdict.action === "challenge") {
+      await botGuard.recordBlock(req, phone, verdict);
+      return {
+        success: false,
+        code: "CHALLENGE",
+        message: "Please wait a moment and try again — we are verifying this request.",
+      };
+    }
   }
 
   // 0.5) Network trust — datacenter/VPS/proxy IPs and non-Indian IPs can't
@@ -164,17 +199,33 @@ async function sendOtp(phone, clientIp) {
     OTP_PROGRESSIVE_COOLDOWNS[Math.min(sendCount - 1, OTP_PROGRESSIVE_COOLDOWNS.length - 1)];
   await redis.setEx(cooldownKey(phone), nextCooldown, "1");
 
-  // --- Send OTP via Fast2SMS WhatsApp ---
+  // --- Deliver: DLT SMS first, WhatsApp as the fallback ---
   const fast2smsKey = process.env.FAST2SMS_API_KEY;
   if (fast2smsKey) {
     const phoneWithout91 = phone.replace(/^\+91/, "");
-    try {
-      await sendFast2SmsWhatsApp(fast2smsKey, phoneWithout91, otp);
-      console.log(`[FAST2SMS] WhatsApp OTP sent to ${phone}`);
-    } catch (err) {
-      console.error(`[FAST2SMS] Failed to send OTP to ${phone}:`, err.message);
-      // OTP is already stored in Redis, so user can still verify if SMS reaches later
+    const channel = (process.env.OTP_CHANNEL || "sms").toLowerCase();
+    let delivered = false;
+
+    if (channel !== "whatsapp") {
+      try {
+        await sendFast2SmsSms(fast2smsKey, phoneWithout91, otp);
+        delivered = true;
+        console.log(`[FAST2SMS] SMS OTP sent to ${phone}`);
+      } catch (err) {
+        console.error(`[FAST2SMS] SMS failed for ${phone}:`, err.message);
+      }
     }
+    if (!delivered && channel !== "sms-only") {
+      try {
+        await sendFast2SmsWhatsApp(fast2smsKey, phoneWithout91, otp);
+        delivered = true;
+        console.log(`[FAST2SMS] WhatsApp OTP sent to ${phone}`);
+      } catch (err) {
+        console.error(`[FAST2SMS] WhatsApp failed for ${phone}:`, err.message);
+        // The OTP is already in Redis, so a late-arriving message still verifies
+      }
+    }
+    if (delivered) botGuard.recordSend();
   } else if (process.env.NODE_ENV !== "production") {
     console.log(`[DEV] OTP for ${phone}: ${otp}`);
   }
@@ -227,6 +278,56 @@ async function verifyOtp(phone, otp) {
 }
 
 // Fast2SMS WhatsApp OTP sender (Simple API - GET method)
+/**
+ * Fast2SMS DLT SMS — the approved transactional route.
+ *
+ *   Template : "Dear Customer Your One Time Password is {#VAR#} to login
+ *               into your account . Damndeal India"
+ *   Sender   : DAMNPY   ·  Message ID 222884  ·  Entity: Damndeal India Pvt Ltd
+ *
+ * SMS is the primary channel because it needs no WhatsApp install and is the
+ * DLT-registered path; WhatsApp stays as the fallback when SMS fails.
+ */
+function sendFast2SmsSms(apiKey, phone, otp) {
+  return new Promise((resolve, reject) => {
+    const params = new URLSearchParams({
+      authorization: apiKey,
+      route: "dlt",
+      sender_id: process.env.FAST2SMS_SENDER_ID || "DAMNPY",
+      message: process.env.FAST2SMS_SMS_MESSAGE_ID || "222884",
+      variables_values: otp,
+      numbers: phone,
+      flash: "0",
+    });
+    const entityId = process.env.FAST2SMS_ENTITY_ID;
+    if (entityId) params.append("entity_id", entityId);
+
+    const req = https.request(
+      {
+        hostname: "www.fast2sms.com",
+        path: `/dev/bulkV2?${params.toString()}`,
+        method: "GET",
+        headers: { accept: "application/json" },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          try {
+            const json = JSON.parse(data);
+            if (json.return === true || json.status_code === 200) resolve(json);
+            else reject(new Error(json.message || JSON.stringify(json)));
+          } catch {
+            reject(new Error(`Fast2SMS invalid response: ${data.slice(0, 160)}`));
+          }
+        });
+      }
+    );
+    req.on("error", reject);
+    req.end();
+  });
+}
+
 function sendFast2SmsWhatsApp(apiKey, phone, otp) {
   return new Promise((resolve, reject) => {
     // Approved WhatsApp authentication template "new_authv" (Fast2SMS message id)

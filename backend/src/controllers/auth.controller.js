@@ -25,11 +25,7 @@ async function handleSendOtp(req, res) {
     }
   }
 
-  const clientIp =
-    req.headers["x-real-ip"] ||
-    (req.headers["x-forwarded-for"] || "").split(",").pop().trim() ||
-    req.ip;
-  const result = await sendOtp(phone, clientIp);
+  const result = await sendOtp(phone, req);
 
   return res.status(result.success ? 200 : 429).json(result);
 }
