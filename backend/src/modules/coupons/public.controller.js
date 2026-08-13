@@ -10,6 +10,7 @@ const {
 const AppSettings = require("../../models/AppSettings");
 const { checkClaimAllowed, checkSpinAllowed } = require("../../services/couponGuard.service");
 const events = require("../../services/couponEvents.service");
+const { CouponOutlet } = require("../../models/couponOrg.models");
 
 const R = (req) => (req.region === "US" ? "US" : "IN");
 const liveFilter = (region) => ({
@@ -22,19 +23,34 @@ const liveFilter = (region) => ({
 /** Location targeting: show nationwide offers everywhere; local offers only in
  *  their state — or within the user's chosen radius when lat/lng is shared.
  *  Query params: ?state=Punjab&lat=..&lng=..&radius=25  (all optional) */
-function locFilter(req) {
+async function locFilter(req) {
   const state = (req.query.state || "").trim();
   const lat = parseFloat(req.query.lat);
   const lng = parseFloat(req.query.lng);
   const radiusKm = Math.min(200, parseFloat(req.query.radius) || 25);
   const or = [{ "location.nationwide": true }, { "location.nationwide": { $exists: false } }];
   if (state) or.push({ "location.states": state });
+
   if (Number.isFinite(lat) && Number.isFinite(lng)) {
-    or.push({
-      "location.point": {
-        $geoWithin: { $centerSphere: [[lng, lat], radiusKm / 6378.1] },
-      },
-    });
+    const circle = { $geoWithin: { $centerSphere: [[lng, lat], radiusKm / 6378.1] } };
+
+    // Legacy single point — campaigns created before outlets existed.
+    or.push({ "location.point": circle });
+
+    // Outlet-aware matching. Rather than indexing an array of GeoJSON on the
+    // campaign (MongoDB cannot extract geo keys from that), find the outlets
+    // in range first — that query uses the outlets' own 2dsphere index — and
+    // match campaigns through them. Small collection, one extra round trip.
+    const near = await CouponOutlet.find({ point: circle, isActive: true })
+      .select("_id brand").limit(500).lean();
+    if (near.length) {
+      const outletIds = near.map((o) => o._id);
+      const brandIds = [...new Set(near.map((o) => String(o.brand)))];
+      // campaign targets these specific shops …
+      or.push({ scope: "selected", outlets: { $in: outletIds } });
+      // … or the whole brand, and one of its shops is in range
+      or.push({ scope: "all_outlets", vendor: { $in: brandIds } });
+    }
   }
   // No location chosen → show everything (nationwide + local both)
   if (!state && !Number.isFinite(lat)) return {};
@@ -76,7 +92,7 @@ const campaignCards = (query) =>
  * leak an expired, out-of-region or out-of-area coupon.
  */
 async function resolveSectionCampaigns(req, region, type, data) {
-  const base = { ...liveFilter(region), ...locFilter(req) };
+  const base = { ...liveFilter(region), ...(await locFilter(req)) };
   const limit = secLimit(data, type === "sponsored" ? 6 : 12);
 
   // ── Manual: admin picked the exact coupons, keep their order ──
@@ -147,7 +163,7 @@ async function list(req, res) {
   const { category, q, sort = "popular" } = req.query;
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = Math.min(48, parseInt(req.query.limit) || 24);
-  const filter = { ...liveFilter(region), ...locFilter(req) };
+  const filter = { ...liveFilter(region), ...(await locFilter(req)) };
   if (category) {
     const cat = await CouponCategory.findOne({ slug: category }).select("_id");
     if (cat) filter.category = cat._id;
@@ -183,7 +199,21 @@ async function detail(req, res) {
     user: req.user?.userId, region: R(req), source: "detail",
   });
   CouponCampaign.updateOne({ _id: c._id }, { $inc: { views: 1 } }).catch(() => {});
-  return res.json({ success: true, campaign: c });
+
+  // Where can this actually be used? Shoppers need the shop list, not a radius.
+  let outlets = [];
+  if (!c.isOnline && c.scope !== "online") {
+    const brandId = c.vendor?._id || c.vendor;
+    const filter = { brand: brandId, isActive: true };
+    if (c.scope === "selected" && Array.isArray(c.outlets) && c.outlets.length) {
+      filter._id = { $in: c.outlets };
+    }
+    outlets = await CouponOutlet.find(filter)
+      .select("name address city state phone hours point")
+      .limit(50)
+      .lean();
+  }
+  return res.json({ success: true, campaign: c, outlets, outletCount: outlets.length });
 }
 
 /* GET /api/coupons/vendors/:slug — brand page */
@@ -280,7 +310,7 @@ async function spinWheel(req, res) {
   const region = R(req);
   const cfg = await spinSettings();
   if (!cfg.enabled) return res.json({ success: true, enabled: false, segments: [] });
-  const segments = await CouponCampaign.find({ ...liveFilter(region), ...locFilter(req), inSpin: true })
+  const segments = await CouponCampaign.find({ ...liveFilter(region), ...(await locFilter(req)), inSpin: true })
     .select("title offerText slug")
     .populate("vendor", "businessName logo")
     .limit(10).lean();
@@ -305,7 +335,7 @@ async function spinPlay(req, res) {
     return res.status(429).json({ success: false, code: "COOLDOWN", nextSpinAt: nextAt, message: "You already spun — come back later!" });
   }
 
-  const pool = await CouponCampaign.find({ ...liveFilter(region), ...locFilter(req), inSpin: true }).limit(10);
+  const pool = await CouponCampaign.find({ ...liveFilter(region), ...(await locFilter(req)), inSpin: true }).limit(10);
   if (pool.length < 2) return res.status(400).json({ success: false, message: "Spin is not available right now" });
 
   // Try random picks until a claim succeeds (skips per-user-limit hits)

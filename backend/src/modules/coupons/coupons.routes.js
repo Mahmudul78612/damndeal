@@ -37,6 +37,13 @@ router.put("/vendor/me", authenticate, h(vendor.updateMe));
 router.post("/vendor/campaigns", authenticate, h(vendor.createCampaign));
 router.get("/vendor/campaigns", authenticate, h(vendor.myCampaigns));
 router.get("/vendor/analytics", authenticate, h(vendor.analytics));
+
+/* Outlets — the brand's physical locations */
+router.get("/vendor/outlets", authenticate, h(vendor.listOutlets));
+router.post("/vendor/outlets", authenticate, h(vendor.createOutlet));
+router.post("/vendor/outlets/bulk", authenticate, h(vendor.bulkOutlets));
+router.put("/vendor/outlets/:id", authenticate, h(vendor.updateOutlet));
+router.delete("/vendor/outlets/:id", authenticate, h(vendor.deleteOutlet));
 router.patch("/vendor/campaigns/:id", authenticate, h(vendor.updateCampaign));
 router.get("/vendor/stats", authenticate, h(vendor.stats));
 router.post("/vendor/verify", authenticate, h(vendor.verifyCode));

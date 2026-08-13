@@ -10,6 +10,10 @@ const {
 } = require("../../models/coupon.models");
 const events = require("../../services/couponEvents.service");
 const { CouponDailyStat } = require("../../models/couponAnalytics.models");
+const { CouponOutlet } = require("../../models/couponOrg.models");
+const { deriveLocation, refreshBrandCampaigns } = require("../../services/couponTargeting.service");
+const mongoose = require("mongoose");
+const isId = (v) => !!v && mongoose.Types.ObjectId.isValid(String(v));
 
 const R = (req) => (req.region === "US" ? "US" : "IN");
 const slugify = (s) =>
@@ -74,9 +78,11 @@ async function createCampaign(req, res) {
     title, category, offerType = "percent", offerValue = 0, offerText,
     description = "", instructions = "", terms = "", bannerImage = "", isOnline = false, redirectUrl = "",
     totalQuota = 50, perUserLimit = 1, endAt, location = {},
+    scope, outlets = [],
   } = req.body;
 
-  // Location targeting — nationwide, or specific states/city (+ optional geo point)
+  // Manual location targeting — nationwide, or specific states/city (+ geo point).
+  // Still supported for brands that have not created outlets yet.
   const loc = {
     nationwide: location.nationwide !== false,
     states: Array.isArray(location.states) ? location.states.filter(Boolean).slice(0, 10) : [],
@@ -87,8 +93,29 @@ async function createCampaign(req, res) {
   if (Number.isFinite(lat) && Number.isFinite(lng)) {
     loc.point = { type: "Point", coordinates: [lng, lat] };
   }
-  if (!loc.nationwide && !loc.states.length && !loc.point) {
-    return res.status(400).json({ success: false, message: "Pick at least one state (or your location) for a local offer" });
+
+  // Outlet-based targeting wins when the brand has outlets: the merchant picks
+  // shops, and states/points are derived from them (see couponTargeting).
+  const outletIds = (Array.isArray(outlets) ? outlets : []).filter((id) => isId(id));
+  let effectiveScope = scope || (isOnline ? "online" : "all_outlets");
+  if (effectiveScope === "selected" && !outletIds.length) {
+    return res.status(400).json({ success: false, message: "Select at least one outlet, or choose all outlets." });
+  }
+  const outletCount = await CouponOutlet.countDocuments({ brand: vendor._id, isActive: true });
+  let finalLoc = loc;
+  if (outletCount > 0 && effectiveScope !== "online") {
+    finalLoc = await deriveLocation(
+      { vendor: vendor._id, scope: effectiveScope, outlets: outletIds, isOnline },
+      loc
+    );
+  } else if (effectiveScope !== "online") {
+    // No outlets yet — fall back to the manual rules, which must still be valid
+    if (!loc.nationwide && !loc.states.length && !loc.point) {
+      return res.status(400).json({ success: false, message: "Pick at least one state (or your location) for a local offer" });
+    }
+    effectiveScope = "all_outlets";
+  } else {
+    finalLoc = { nationwide: true, states: [], city: "", radiusKm: 0 };
   }
   if (!title || !offerText || !category || !endAt) {
     return res.status(400).json({ success: false, message: "title, offerText, category and endAt are required" });
@@ -106,7 +133,10 @@ async function createCampaign(req, res) {
     category, offerType, offerValue, offerText: String(offerText).trim(),
     description, instructions, terms, bannerImage, isOnline: !!isOnline, redirectUrl,
     totalQuota: quota, perUserLimit: Math.max(1, parseInt(perUserLimit) || 1),
-    location: loc,
+    location: finalLoc,
+    scope: effectiveScope,
+    outlets: effectiveScope === "selected" ? outletIds : [],
+    org: vendor.org || null,
     endAt: new Date(endAt), regions: vendor.regions.length ? vendor.regions : [R(req)],
     status: "pending", // admin approves → active
   });
@@ -200,6 +230,85 @@ async function analytics(req, res) {
     series: Object.values(byDate),
     campaigns: Object.values(byCampaign).sort((a, b) => b.claims - a.claims),
   });
+}
+
+/* ── Outlets (locations of this brand) ───────────────────────────────────── */
+
+function outletPayload(body) {
+  const out = {};
+  for (const k of ["name", "code", "address", "state", "city", "pincode", "phone", "hours"]) {
+    if (body[k] !== undefined) out[k] = String(body[k]).trim();
+  }
+  if (body.isActive !== undefined) out.isActive = !!body.isActive;
+  const lat = parseFloat(body.lat), lng = parseFloat(body.lng);
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    out.point = { type: "Point", coordinates: [lng, lat] };
+  }
+  return out;
+}
+
+/* GET /api/coupons/vendor/outlets */
+async function listOutlets(req, res) {
+  const vendor = await requireVendor(req, res); if (!vendor) return;
+  const items = await CouponOutlet.find({ brand: vendor._id }).sort({ createdAt: 1 }).lean();
+  return res.json({ success: true, items });
+}
+
+/* POST /api/coupons/vendor/outlets */
+async function createOutlet(req, res) {
+  const vendor = await requireVendor(req, res); if (!vendor) return;
+  const payload = outletPayload(req.body);
+  if (!payload.name) return res.status(400).json({ success: false, message: "Outlet name is required" });
+  const outlet = await CouponOutlet.create({ ...payload, brand: vendor._id, org: vendor.org || null });
+  // New location → campaigns targeting "all outlets" must now reach it
+  await refreshBrandCampaigns(vendor._id);
+  return res.status(201).json({ success: true, outlet });
+}
+
+/* PUT /api/coupons/vendor/outlets/:id */
+async function updateOutlet(req, res) {
+  const vendor = await requireVendor(req, res); if (!vendor) return;
+  const outlet = await CouponOutlet.findOneAndUpdate(
+    { _id: req.params.id, brand: vendor._id },
+    outletPayload(req.body),
+    { new: true }
+  );
+  if (!outlet) return res.status(404).json({ success: false, message: "Outlet not found" });
+  await refreshBrandCampaigns(vendor._id);
+  return res.json({ success: true, outlet });
+}
+
+/* DELETE /api/coupons/vendor/outlets/:id */
+async function deleteOutlet(req, res) {
+  const vendor = await requireVendor(req, res); if (!vendor) return;
+  const gone = await CouponOutlet.findOneAndDelete({ _id: req.params.id, brand: vendor._id });
+  if (!gone) return res.status(404).json({ success: false, message: "Outlet not found" });
+  // Drop it from any campaign that targeted it explicitly, then re-derive
+  await CouponCampaign.updateMany({ vendor: vendor._id, outlets: gone._id }, { $pull: { outlets: gone._id } });
+  await refreshBrandCampaigns(vendor._id);
+  return res.json({ success: true });
+}
+
+/* POST /api/coupons/vendor/outlets/bulk  { rows: [...] }
+   Bulk import so a 40-outlet chain is not 40 forms. Accepts the parsed rows
+   (the portal parses the CSV client-side and posts JSON). */
+async function bulkOutlets(req, res) {
+  const vendor = await requireVendor(req, res); if (!vendor) return;
+  const rows = Array.isArray(req.body.rows) ? req.body.rows.slice(0, 500) : [];
+  if (!rows.length) return res.status(400).json({ success: false, message: "No rows to import" });
+
+  const docs = [];
+  const errors = [];
+  rows.forEach((r, i) => {
+    const payload = outletPayload(r);
+    if (!payload.name) { errors.push(`Row ${i + 1}: name is required`); return; }
+    docs.push({ ...payload, brand: vendor._id, org: vendor.org || null });
+  });
+  if (!docs.length) return res.status(400).json({ success: false, message: "Nothing valid to import", errors });
+
+  const created = await CouponOutlet.insertMany(docs, { ordered: false });
+  await refreshBrandCampaigns(vendor._id);
+  return res.status(201).json({ success: true, imported: created.length, skipped: errors.length, errors });
 }
 
 /* ── Verify / redeem (vendor portal — for shops without a website) ────────── */
@@ -316,4 +425,5 @@ async function myPackOrders(req, res) {
 module.exports = {
   register, me, updateMe, createCampaign, myCampaigns, updateCampaign, stats, analytics,
   verifyCode, redeemCode, rotateApiKey, packs, buyPack, myPackOrders,
+  listOutlets, createOutlet, updateOutlet, deleteOutlet, bulkOutlets,
 };

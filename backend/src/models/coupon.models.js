@@ -41,6 +41,12 @@ const couponVendorSchema = new mongoose.Schema(
     phone: { type: String, default: "" },
     email: { type: String, default: "" },
     address: { type: String, default: "" },
+    // The company this brand belongs to (roadmap phase 2). Backfilled by
+    // scripts/phase2-coupon-orgs.js for every vendor that existed before.
+    org: { type: mongoose.Schema.Types.ObjectId, ref: "CouponOrg", default: null, index: true },
+    // NOTE: the address fields below are the LEGACY single location. They are
+    // kept as the brand's registered address; the real, filterable locations
+    // now live in CouponOutlet.
     state: { type: String, default: "" },
     city: { type: String, default: "" },
     lat: { type: Number, default: null },
@@ -112,13 +118,36 @@ const couponCampaignSchema = new mongoose.Schema(
         type: { type: String, enum: ["Point"], default: undefined },
         coordinates: { type: [Number], default: undefined }, // [lng, lat]
       },
+      // NOTE: outlet coordinates are deliberately NOT duplicated here.
+      // MongoDB cannot build a 2dsphere index over an array of GeoJSON
+      // objects ("Can't extract geo keys"), so "near me" for multi-outlet
+      // campaigns is resolved by querying CouponOutlet first — see
+      // locFilter() in public.controller.js. `point` below stays as the
+      // legacy single location for campaigns created before outlets existed.
     },
+
+    /* ── Multi-location targeting (roadmap phase 2) ──
+       all_outlets : every active outlet of this brand
+       selected    : only `outlets`
+       online      : no physical location, shows everywhere            */
+    scope: {
+      type: String,
+      enum: ["all_outlets", "selected", "online"],
+      default: "all_outlets",
+    },
+    outlets: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "CouponOutlet" }],
+      default: [],
+    },
+    org: { type: mongoose.Schema.Types.ObjectId, ref: "CouponOrg", default: null, index: true },
   },
   { timestamps: true }
 );
 couponCampaignSchema.index({ status: 1, regions: 1, "featured.active": 1 });
 couponCampaignSchema.index({ "location.states": 1 });
 couponCampaignSchema.index({ "location.point": "2dsphere" }, { sparse: true });
+couponCampaignSchema.index({ org: 1, status: 1 });
+couponCampaignSchema.index({ outlets: 1 });
 
 /* ── Claim (unique code per customer per campaign) ────────────────────────── */
 const couponClaimSchema = new mongoose.Schema(
@@ -136,10 +165,19 @@ const couponClaimSchema = new mongoose.Schema(
     // The unique {campaign,user,slot} index below is what actually enforces
     // perUserLimit — a count() check alone loses to parallel requests.
     slot: { type: Number, default: 0 },
+
+    /* ── Redemption attribution (roadmap phase 2) ──
+       Without these, per-outlet reporting and fraud tracing are impossible. */
+    org: { type: mongoose.Schema.Types.ObjectId, ref: "CouponOrg", default: null, index: true },
+    redeemedOutlet: { type: mongoose.Schema.Types.ObjectId, ref: "CouponOutlet", default: null },
+    redeemedBy: { type: mongoose.Schema.Types.ObjectId, ref: "CouponMember", default: null },
+    billValue: { type: Number, default: null }, // optional bill amount for ROI
   },
   { timestamps: true }
 );
 couponClaimSchema.index({ campaign: 1, user: 1, slot: 1 }, { unique: true });
+couponClaimSchema.index({ redeemedOutlet: 1, redeemedAt: -1 });
+couponClaimSchema.index({ org: 1, status: 1 });
 couponClaimSchema.index({ user: 1, createdAt: -1 });      // my-coupons page
 couponClaimSchema.index({ vendor: 1, status: 1 });        // vendor redemption lists
 couponClaimSchema.index({ campaign: 1, user: 1 });
