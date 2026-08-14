@@ -98,7 +98,6 @@ export default function CouponStrip() {
 
 function CouponCardMini({ c, href }: { c: Coupon; href: string }) {
   const img = c.tileImage || c.bannerImage;
-  const left = Math.max(0, (c.totalQuota || 0) - (c.claimedCount || 0));
   const endsIn = (() => {
     if (!c.endAt) return '';
     const days = Math.ceil((new Date(c.endAt).getTime() - Date.now()) / 86400000);
@@ -115,33 +114,33 @@ function CouponCardMini({ c, href }: { c: Coupon; href: string }) {
         {img ? (
           <img src={imgUrl(img)} alt={c.title} className="w-full h-full object-cover" loading="lazy" />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-[#EC1A74] via-[#FF7A00] to-[#FFB800] grid place-items-center px-2">
-            <span className="text-white font-extrabold text-[15px] text-center leading-tight drop-shadow">
-              {c.offerText}
-            </span>
-          </div>
+          <div className="w-full h-full bg-gradient-to-br from-[#EC1A74] via-[#FF7A00] to-[#FFB800]" />
         )}
-        {img && (
-          <span className="absolute top-1.5 left-1.5 bg-gradient-to-r from-[#EC1A74] to-[#FF7A00] text-white text-[10.5px] font-bold px-2 py-0.5 rounded-full shadow">
-            {c.offerText}
-          </span>
-        )}
+
         {endsIn && (
-          <span className="absolute bottom-1.5 left-1.5 bg-black/65 text-white text-[9.5px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+          <span className="absolute top-1.5 right-1.5 bg-black/60 text-white text-[9.5px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
             <Clock size={9} /> {endsIn}
           </span>
         )}
+
+        {/* Title sits on the artwork. The gradient is what makes it readable
+            over any photo — a text-shadow alone fails on a busy image. */}
+        <div className="absolute inset-x-0 bottom-0 pt-7 pb-1.5 px-2 bg-gradient-to-t from-black/85 via-black/45 to-transparent">
+          <p
+            className="text-white text-[11.5px] font-semibold leading-snug line-clamp-2"
+            style={{ textShadow: '0 1px 3px rgba(0,0,0,.55)' }}
+          >
+            {c.title}
+          </p>
+        </div>
       </div>
 
-      <div className="p-2">
-        <p className="text-[11.5px] font-semibold text-gray-900 line-clamp-2 leading-snug min-h-[28px]">
-          {c.title}
-        </p>
-        <p className="text-[10.5px] text-gray-500 truncate mt-0.5">
+      <div className="px-2 py-1.5">
+        <p className="text-[11px] font-semibold text-gray-800 truncate">
           {c.vendor?.businessName || c.category?.name || ''}
         </p>
-        <p className="text-[10px] font-bold text-emerald-600 mt-1">
-          {left > 0 ? `${left} left · Free` : 'Free to claim'}
+        <p className="text-[12.5px] font-extrabold bg-gradient-to-r from-[#EC1A74] to-[#FF7A00] bg-clip-text text-transparent">
+          {c.offerText}
         </p>
       </div>
     </a>

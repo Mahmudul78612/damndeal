@@ -34,6 +34,10 @@ export default function HomePage() {
   const catHeadingColor = config.category_heading_color || '#1F2937';
   const catTextColor = config.category_text_color || '#1F2937';
   const catBgColor = config.category_bg_color || '#F3E8FF';
+  // Where the hero banner sits — the coupon rail is rendered right after it.
+  const firstCarousel = sections.findIndex(
+    (s) => s.type === 'banner_carousel' || s.type === 'hero_carousel'
+  );
 
   return (
     <div className="pb-3">
@@ -71,16 +75,23 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* ── Coupons & Offers — live from the coupon marketplace ── */}
-        <CouponStrip />
-
         {/* ── Mobile SDUI Sections — India only. US uses the responsive
               DesktopHome section system on all screen sizes. ── */}
         {!IS_US && (
           <div className="mt-0 space-y-3 md:hidden">
-            {sections.map((section, i) => (
-              <SectionRenderer key={section._id || section.id || i} section={section} />
-            ))}
+            {sections.map((section, i) => {
+              // The coupon rail belongs directly under the hero banner, so it
+              // is injected after the first carousel rather than pinned above
+              // everything. Layouts without a carousel are handled below.
+              const isCarousel = section.type === 'banner_carousel' || section.type === 'hero_carousel';
+              return (
+                <div key={section._id || section.id || i}>
+                  <SectionRenderer section={section} />
+                  {isCarousel && i === firstCarousel && <CouponStrip />}
+                </div>
+              );
+            })}
+            {firstCarousel === -1 && <CouponStrip />}
           </div>
         )}
 
