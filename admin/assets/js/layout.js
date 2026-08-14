@@ -91,7 +91,8 @@ function buildLayout(activePageId) {
       { id: "security", label: "Security", icon: "🛡️", href: basePath + "/pages/security/security.html", perm: "view_security" },
       { id: "ddgo-settings", label: "Quick Commerce Settings", icon: "🟢", href: basePath + "/pages/ddgo-settings/ddgo-settings.html", perm: "manage_settings" },
       { id: "settings", label: "Settings", icon: "⚙️", href: basePath + "/pages/settings/settings.html", perm: "manage_settings" },
-      { id: "home-sections", label: "Home Layouts", icon: "🏠", href: basePath + "/pages/home-sections/home-sections.html", perm: "manage_homepage" },
+      { id: "home-sections", label: "Home Layout — Mobile", icon: "📱", href: basePath + "/pages/home-sections/home-sections.html", perm: "manage_homepage" },
+      { id: "desktop-home", label: "Home Layout — Desktop", icon: "🖥️", href: basePath + "/pages/desktop-home/desktop-home.html", perm: "manage_homepage" },
       { id: "app-customization", label: "App Customization", icon: "🎨", href: basePath + "/pages/app-customization/app-customization.html", perm: "manage_homepage" },
     ]},
   ];
