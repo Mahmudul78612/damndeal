@@ -16,6 +16,7 @@ const h = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(
 router.get("/home", h(pub.home));
 router.get("/geo", h(pub.geo));
 router.get("/list", h(pub.list));
+router.get("/highlights", h(pub.highlights));
 router.get("/categories", h(pub.categories));
 router.get("/c/:slug", h(pub.detail));
 router.get("/vendors/:slug", h(pub.vendorPage));

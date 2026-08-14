@@ -8,6 +8,7 @@ import { HomeSection, Category } from '@/lib/types';
 import { useAppConfig } from '@/context/ConfigContext';
 import SectionRenderer from '@/components/SectionRenderer';
 import DesktopHome from '@/components/DesktopHome';
+import CouponStrip from '@/components/CouponStrip';
 import { ChevronRight, LayoutGrid } from 'lucide-react';
 
 export default function HomePage() {
@@ -69,6 +70,9 @@ export default function HomePage() {
             </div>
           </div>
         )}
+
+        {/* ── Coupons & Offers — live from the coupon marketplace ── */}
+        <CouponStrip />
 
         {/* ── Mobile SDUI Sections — India only. US uses the responsive
               DesktopHome section system on all screen sizes. ── */}

@@ -456,7 +456,38 @@ async function geo(req, res) {
   }
 }
 
+/**
+ * GET /api/coupons/highlights?limit=10
+ *
+ * One cheap call for the storefront's coupon strip: the newest live coupons
+ * plus the real counts behind them. Counts are computed, never hard-coded, so
+ * the "more from N brands" line cannot drift from reality.
+ *
+ * Deliberately NOT location-filtered: this runs on damndeal.in where the
+ * shopper has not chosen a coupon location yet. Region and live-status rules
+ * still apply, so nothing expired, sold out or out-of-region can appear.
+ */
+async function highlights(req, res) {
+  const region = R(req);
+  const limit = Math.min(20, Math.max(1, parseInt(req.query.limit, 10) || 10));
+  const live = liveFilter(region);
+
+  const [items, total, vendorIds] = await Promise.all([
+    campaignCards(CouponCampaign.find(live).sort({ "featured.active": -1, createdAt: -1 }).limit(limit)),
+    CouponCampaign.countDocuments(live),
+    CouponCampaign.distinct("vendor", live),
+  ]);
+
+  return res.json({
+    success: true,
+    region,
+    items,
+    totalCoupons: total,
+    brandCount: vendorIds.length,   // brands that actually have a live coupon
+  });
+}
+
 module.exports = {
-  home, list, categories, detail, vendorPage, claim, myClaims, spinWheel, spinPlay, geo,
+  home, list, categories, detail, vendorPage, claim, myClaims, spinWheel, spinPlay, geo, highlights,
   claimForUser, // exported for tests and the spin flow
 };
