@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { api, imgUrl, IS_US } from '@/lib/api';
 import { Category, AppConfig } from '@/lib/types';
 import ProductCard from '@/components/ProductCard';
+import CouponStrip from './CouponStrip';
 
 interface DesktopSection {
   _id: string;
@@ -60,9 +61,23 @@ export default function DesktopHome({ categories, config }: { categories: Catego
     // US store uses this section system on ALL screens (responsive); India keeps
     // the desktop-only behaviour and its separate mobile home.
     <div className={`${IS_US ? 'block' : 'hidden md:block'} max-w-[1400px] mx-auto px-3 md:px-4 mt-4 space-y-4 pb-8`}>
-      {sections.map(section => (
-        <DesktopSectionRenderer key={section._id} section={section} />
-      ))}
+      {(() => {
+        // Same rule as the mobile home: the coupon rail sits directly under the
+        // top banner. Desktop layouts don't always use a carousel, so any
+        // banner section counts, and a layout with no banner at all puts the
+        // rail after its first section rather than dumping it at the bottom.
+        let slot = sections.findIndex(
+          (x) => x.type === 'hero_carousel' || x.type === 'banner_carousel'
+        );
+        if (slot === -1) slot = sections.findIndex((x) => x.type.startsWith('banner_'));
+        if (slot === -1) slot = 0;
+        return sections.map((section, i) => (
+          <div key={section._id}>
+            <DesktopSectionRenderer section={section} />
+            {i === slot && <CouponStrip />}
+          </div>
+        ));
+      })()}
     </div>
   );
 }
