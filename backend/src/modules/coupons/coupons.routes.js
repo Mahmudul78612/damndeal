@@ -96,6 +96,8 @@ router.get("/admin/campaigns", ...adm, h(admin.listCampaigns));
 router.get("/admin/campaigns/search", ...adm, h(admin.searchCampaigns));
 router.post("/admin/campaigns/:id/moderate", ...adm, h(admin.moderateCampaign));
 router.put("/admin/campaigns/:id", ...adm, h(admin.updateCampaign));
+router.get("/admin/credit-packs", ...adm, h(admin.getCreditPacks));
+router.put("/admin/credit-packs", ...adm, h(admin.updateCreditPacks));
 router.get("/admin/spin-settings", ...adm, h(admin.getSpinSettings));
 router.put("/admin/spin-settings", ...adm, h(admin.updateSpinSettings));
 router.get("/admin/vendors", ...adm, h(admin.listVendors));

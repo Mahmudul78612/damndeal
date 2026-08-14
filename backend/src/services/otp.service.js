@@ -19,7 +19,10 @@ async function getRedisClient() {
 
 botGuard.useRedis(getRedisClient);
 
-const OTP_EXPIRY = 300; // 5 minutes
+// The approved DLT template tells the customer "Expires in 10 minutes", and
+// carrier delivery can genuinely take a couple of minutes at peak. Expiring at
+// 5 was making late-but-valid messages useless — match the template instead.
+const OTP_EXPIRY = 600; // 10 minutes
 const MAX_ATTEMPTS = 5;
 
 // ── Anti-abuse limits (progressive backoff, industry standard) ──
@@ -236,32 +239,41 @@ async function sendOtp(phone, ipOrReq) {
   await redis.setEx(cooldownKey(phone), nextCooldown, "1");
 
   // --- Deliver: DLT SMS first, WhatsApp as the fallback ---
+  //
+  // Fired WITHOUT awaiting. The code is already stored, so the customer's
+  // "Sending OTP…" spinner should not also wait on the provider's HTTP round
+  // trip. Acceptance time is logged so a slow gateway is measurable instead of
+  // guessed at.
   const fast2smsKey = process.env.FAST2SMS_API_KEY;
   if (fast2smsKey) {
     const phoneWithout91 = phone.replace(/^\+91/, "");
     const channel = (process.env.OTP_CHANNEL || "sms").toLowerCase();
-    let delivered = false;
 
-    if (channel !== "whatsapp") {
-      try {
-        await sendFast2SmsSms(fast2smsKey, phoneWithout91, otp);
-        delivered = true;
-        console.log(`[FAST2SMS] SMS OTP sent to ${phone}`);
-      } catch (err) {
-        console.error(`[FAST2SMS] SMS failed for ${phone}:`, err.message);
+    (async () => {
+      const t0 = Date.now();
+      let delivered = false;
+
+      if (channel !== "whatsapp") {
+        try {
+          await sendFast2SmsSms(fast2smsKey, phoneWithout91, otp);
+          delivered = true;
+          console.log(`[FAST2SMS] SMS accepted for ${phone} in ${Date.now() - t0}ms`);
+        } catch (err) {
+          console.error(`[FAST2SMS] SMS failed for ${phone} after ${Date.now() - t0}ms:`, err.message);
+        }
       }
-    }
-    if (!delivered && channel !== "sms-only") {
-      try {
-        await sendFast2SmsWhatsApp(fast2smsKey, phoneWithout91, otp);
-        delivered = true;
-        console.log(`[FAST2SMS] WhatsApp OTP sent to ${phone}`);
-      } catch (err) {
-        console.error(`[FAST2SMS] WhatsApp failed for ${phone}:`, err.message);
-        // The OTP is already in Redis, so a late-arriving message still verifies
+      if (!delivered && channel !== "sms-only") {
+        try {
+          await sendFast2SmsWhatsApp(fast2smsKey, phoneWithout91, otp);
+          delivered = true;
+          console.log(`[FAST2SMS] WhatsApp accepted for ${phone} in ${Date.now() - t0}ms`);
+        } catch (err) {
+          console.error(`[FAST2SMS] WhatsApp failed for ${phone}:`, err.message);
+          // The OTP is already in Redis, so a late-arriving message still verifies
+        }
       }
-    }
-    if (delivered) botGuard.recordSend();
+      if (delivered) botGuard.recordSend();
+    })().catch((e) => console.error("[FAST2SMS] delivery task crashed:", e.message));
   } else if (process.env.NODE_ENV !== "production") {
     console.log(`[DEV] OTP for ${phone}: ${otp}`);
   }

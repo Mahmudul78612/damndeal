@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { adoptSsoSession, writeSsoCookie, clearSsoCookie } from '@/lib/sso';
 import { User } from '@/lib/types';
 
 interface AuthCtx {
@@ -38,7 +39,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadUser = useCallback(async () => {
-    const token = localStorage.getItem('dd_token');
+    // Accept a session started on the sibling site (damndeal.in <-> coupon.…)
+    const token = adoptSsoSession();
     if (!token) { setLoading(false); return; }
     try {
       const res = await api.get('/auth/me');
@@ -46,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       localStorage.removeItem('dd_token');
       localStorage.removeItem('dd_refresh');
+      clearSsoCookie();
     }
     setLoading(false);
   }, []);
@@ -58,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await api.post('/auth/verify-otp', { phone, otp });
     localStorage.setItem('dd_token', res.accessToken);
     localStorage.setItem('dd_refresh', res.refreshToken);
+    writeSsoCookie(res.accessToken);
     setUser(res.user);
     return res;
   };
@@ -66,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await api.post('/auth/firebase-verify', { idToken });
     localStorage.setItem('dd_token', res.accessToken);
     localStorage.setItem('dd_refresh', res.refreshToken);
+    writeSsoCookie(res.accessToken);
     setUser(res.user);
     return res;
   };
@@ -74,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api.post('/auth/logout').catch(() => {});
     localStorage.removeItem('dd_token');
     localStorage.removeItem('dd_refresh');
+    clearSsoCookie();
     setUser(null);
   };
 

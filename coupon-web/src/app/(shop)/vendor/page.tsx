@@ -733,41 +733,102 @@ function Packs({ onOrdered }: { onOrdered: () => void }) {
   const [data, setData] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
   const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState<number | null>(null);
   const load = () => {
     api.get('/coupons/vendor/packs').then(setData).catch(() => {});
     api.get('/coupons/vendor/pack-orders').then((r) => setOrders(r.items || [])).catch(() => {});
   };
   useEffect(load, []);
 
-  const buy = async (categoryId: string, claims: number) => {
+  const buy = async (claims: number) => {
     setMsg('');
+    setBusy(claims);
     try {
-      const r = await api.post('/coupons/vendor/packs', { categoryId, claims });
-      setMsg(r.message); load(); onOrdered();
+      const r = await api.post('/coupons/vendor/packs', { claims });
+      // Gateway available → straight to checkout. Otherwise the order is kept
+      // and the team settles it, so the intent is never lost.
+      if (r.checkout?.gateway === 'stripe' && r.checkout.url) {
+        window.location.href = r.checkout.url;
+        return;
+      }
+      if (r.checkout?.gateway === 'razorpay') {
+        setMsg('Opening payment…');
+        openRazorpay(r);
+        return;
+      }
+      setMsg(r.message || 'Order created — our team will contact you.');
+      load(); onOrdered();
     } catch (e: any) { setMsg(e.message || 'Failed'); }
+    setBusy(null);
+  };
+
+  /** Razorpay Checkout, loaded on demand so it costs nothing until needed. */
+  const openRazorpay = (r: any) => {
+    const start = () => {
+      const rz = new (window as any).Razorpay({
+        key: r.checkout.keyId,
+        order_id: r.checkout.razorpayOrderId,
+        amount: r.checkout.amount,
+        currency: r.checkout.currency,
+        name: 'DamnDeal Coupons',
+        description: `${r.order.claims} coupon credits`,
+        handler: async (resp: any) => {
+          try {
+            const c = await api.post(`/coupons/vendor/packs/${r.order._id}/confirm`, resp);
+            setMsg(c.message || 'Credits added ✓');
+          } catch (e: any) {
+            setMsg(e.message || 'Payment received — credits will appear shortly.');
+          }
+          load(); onOrdered(); setBusy(null);
+        },
+        modal: { ondismiss: () => { setMsg('Payment cancelled'); setBusy(null); load(); } },
+      });
+      rz.open();
+    };
+    if ((window as any).Razorpay) return start();
+    const sc = document.createElement('script');
+    sc.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    sc.onload = start;
+    sc.onerror = () => { setMsg('Could not load the payment window.'); setBusy(null); };
+    document.body.appendChild(sc);
   };
 
   const cur = CURRENCY_SYMBOL;
   return (
     <div className="space-y-4">
       {msg && <p className="text-sm font-semibold text-primary bg-primary-light rounded-xl px-4 py-3">{msg}</p>}
-      <div className="grid md:grid-cols-2 gap-4">
-        {(data?.categories || []).map((c: any) => (
-          <Card key={c._id}>
-            <p className="font-extrabold text-[15px] mb-3">{c.icon} {c.name}</p>
-            <div className="space-y-2">
-              {c.packs.map((p: any) => (
-                <div key={p.claims} className="flex items-center justify-between bg-band rounded-xl px-4 py-2.5">
-                  <span className="text-sm font-bold">{p.claims.toLocaleString()} coupons {p.label && <span className="text-gray-400 font-semibold">· {p.label}</span>}</span>
-                  <button onClick={() => buy(c._id, p.claims)}
-                    className="text-[13px] font-extrabold text-primary hover:bg-primary hover:text-white border border-primary/30 rounded-full px-4 py-1.5 transition">
-                    {cur}{(data.currency === 'USD' ? p.priceUSD : p.priceINR).toLocaleString()} · Buy
-                  </button>
-                </div>
-              ))}
+      <div>
+        <h2 className="text-[17px] font-extrabold text-ink">Buy credits</h2>
+        <p className="text-[12.5px] text-gray-500 mt-0.5 mb-3">
+          One credit lets one customer claim one coupon. Credits never expire and work on every
+          coupon you run, in any category.
+        </p>
+        <div className="grid sm:grid-cols-3 gap-3">
+          {(data?.packs || []).map((p: any) => (
+            <div key={p.claims}
+              className={`relative bg-white rounded-2xl border p-4 text-center ${p.popular ? 'border-primary shadow-[0_8px_24px_-12px_rgba(124,58,237,.5)]' : 'border-gray-200'}`}>
+              {p.popular && (
+                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 brand-grad text-white text-[10px] font-extrabold uppercase tracking-wide px-2.5 py-0.5 rounded-full">
+                  Most popular
+                </span>
+              )}
+              {p.label && <p className="text-[11px] font-extrabold uppercase tracking-wide text-gray-400">{p.label}</p>}
+              <p className="text-[26px] font-extrabold text-ink leading-tight mt-0.5">{p.claims.toLocaleString()}</p>
+              <p className="text-[12px] text-gray-500 -mt-0.5">credits</p>
+              <p className="text-[19px] font-extrabold brand-grad-text mt-2">{cur}{Number(p.price).toLocaleString()}</p>
+              <p className="text-[11px] text-gray-400">
+                {cur}{(Number(p.price) / p.claims).toFixed(2)} per coupon
+              </p>
+              <button onClick={() => buy(p.claims)} disabled={busy !== null}
+                className="btn-claim w-full mt-3 py-2.5 text-[13.5px] disabled:opacity-50">
+                <span className="relative z-10">{busy === p.claims ? 'Opening…' : 'Buy credits'}</span>
+              </button>
             </div>
-          </Card>
-        ))}
+          ))}
+          {!data?.packs?.length && (
+            <p className="sm:col-span-3 text-sm text-gray-400 text-center py-6">Loading credit packs…</p>
+          )}
+        </div>
       </div>
       {orders.length > 0 && (
         <Card>
@@ -776,7 +837,14 @@ function Packs({ onOrdered }: { onOrdered: () => void }) {
             {orders.map((o) => (
               <div key={o._id} className="flex items-center gap-3 border-b border-gray-50 pb-2 last:border-0">
                 <span className="font-bold">{o.claims} coupons</span>
-                <span className="text-gray-400 flex-1">{o.category?.name} · {o.currency === 'USD' ? '$' : '₹'}{o.price}</span>
+                <span className="text-gray-400 flex-1">
+                  {o.currency === 'USD' ? '$' : '₹'}{o.totalAmount || o.price}
+                  {o.invoiceNumber ? ` · ${o.invoiceNumber}` : ''}
+                </span>
+                {o.status === 'paid' && (
+                  <a href={`/proxy-api/coupons/vendor/packs/${o._id}/invoice`} target="_blank" rel="noreferrer"
+                    className="text-[11.5px] font-bold text-primary hover:underline">Invoice</a>
+                )}
                 <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${o.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : o.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'}`}>{o.status}</span>
               </div>
             ))}

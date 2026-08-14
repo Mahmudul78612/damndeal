@@ -184,6 +184,43 @@ async function updateSpinSettings(req, res) {
   return res.json({ success: true });
 }
 
+/* GET /admin/credit-packs — the single marketplace credit price list */
+async function getCreditPacks(req, res) {
+  const row = await AppSettings.findOne({ key: "coupon_credit_packs" }).lean();
+  const packs = Array.isArray(row?.value) ? row.value : [];
+  return res.json({ success: true, packs });
+}
+
+/* PUT /admin/credit-packs { packs:[{claims,priceINR,priceUSD,label,popular}] } */
+async function updateCreditPacks(req, res) {
+  const incoming = Array.isArray(req.body.packs) ? req.body.packs : [];
+  const packs = incoming
+    .filter((p) => Number(p?.claims) > 0)
+    .map((p) => ({
+      claims: Number(p.claims),
+      priceINR: Math.max(0, Number(p.priceINR) || 0),
+      priceUSD: Math.max(0, Number(p.priceUSD) || 0),
+      label: String(p.label || "").slice(0, 40),
+      popular: !!p.popular,
+    }))
+    .sort((a, b) => a.claims - b.claims);
+  if (!packs.length) {
+    return res.status(400).json({ success: false, message: "Add at least one credit pack" });
+  }
+  const prev = await AppSettings.findOne({ key: "coupon_credit_packs" }).lean();
+  await AppSettings.findOneAndUpdate(
+    { key: "coupon_credit_packs" },
+    { key: "coupon_credit_packs", value: packs },
+    { upsert: true }
+  );
+  await writeAudit(req, {
+    action: "coupon.creditpacks.update", module: "coupons",
+    targetType: "AppSettings", targetLabel: "Credit packs",
+    before: { packs: prev?.value || [] }, after: { packs },
+  });
+  return res.json({ success: true, packs });
+}
+
 /* ── Vendors ── */
 async function listVendors(req, res) {
   const items = await CouponVendor.find().populate("user", "name phone email")
@@ -345,6 +382,7 @@ module.exports = {
   listCategories, createCategory, updateCategory, deleteCategory,
   listCampaigns, searchCampaigns, moderateCampaign, updateCampaign,
   getSpinSettings, updateSpinSettings,
+  getCreditPacks, updateCreditPacks,
   listVendors, updateVendor,
   listSections, createSection, updateSection, deleteSection,
   listPackOrders, decidePackOrder,

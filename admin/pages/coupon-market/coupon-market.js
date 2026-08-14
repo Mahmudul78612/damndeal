@@ -8,6 +8,8 @@
 
   let tab = "campaigns";
   let campaigns = [], categories = [], vendors = [], sections = [], packOrders = [], stats = {}, spin = {};
+  // One marketplace-wide credit price list (not per category any more)
+  let creditPacks = [];
   let campFilter = { status: "", region: "", q: "" };
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -42,15 +44,15 @@
   /* ── data ── */
   async function loadAll() {
     try {
-      const [d, camp, cat, ven, sec, pk, sp] = await Promise.all([
+      const [d, camp, cat, ven, sec, pk, sp, cp] = await Promise.all([
         API.get("/coupons/admin/dashboard"), API.get("/coupons/admin/campaigns"),
         API.get("/coupons/admin/categories"), API.get("/coupons/admin/vendors"),
         API.get("/coupons/admin/sections"), API.get("/coupons/admin/pack-orders"),
-        API.get("/coupons/admin/spin-settings"),
+        API.get("/coupons/admin/spin-settings"), API.get("/coupons/admin/credit-packs"),
       ]);
       stats = d.stats || {}; campaigns = camp.items || []; categories = cat.items || [];
       vendors = ven.items || []; sections = (sec.items || []).sort((a, b) => a.sortOrder - b.sortOrder);
-      packOrders = pk.items || []; spin = sp || {};
+      packOrders = pk.items || []; spin = sp || {}; creditPacks = cp.packs || [];
       render();
     } catch (e) { content.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><p>${esc(e.message)}</p></div>`; }
   }
@@ -81,7 +83,7 @@
     if (tab === "categories") body.innerHTML = vCategories();
     if (tab === "vendors") body.innerHTML = vVendors();
     if (tab === "layout") body.innerHTML = vLayout();
-    if (tab === "spin") body.innerHTML = vSpin();
+    if (tab === "spin") { body.innerHTML = vSpin(); setTimeout(() => window.cmPackDraw && window.cmPackDraw(), 0); }
     if (tab === "packs") body.innerHTML = vPacks();
   }
   window.cmTab = (k) => { tab = k; render(); };
@@ -561,6 +563,21 @@
     const eligible = campaigns.filter((c) => c.status === "active");
     return `
       <div class="card" style="padding:16px;margin-bottom:14px">
+        <h3 style="margin:0 0 4px;font-size:15px">💳 Credit pricing (one list for everyone)</h3>
+        <p style="margin:0 0 12px;font-size:12.5px;color:#777">
+          Credits are a single product, not a per-category price. A brand buys credits and spends them
+          on any coupon it runs. Edit the packs here and every vendor sees exactly these prices.
+        </p>
+        <div style="overflow:auto">
+        <table class="table" style="margin-bottom:10px">
+          <thead><tr><th>Credits</th><th>Price &#8377; (India)</th><th>Price $ (USA)</th><th>Label</th><th>Popular</th><th></th></tr></thead>
+          <tbody id="cmPackRows"></tbody>
+        </table>
+        </div>
+        <button class="btn" onclick="cmPackAdd()">+ Add pack</button>
+        <button class="btn btn-primary" onclick="cmPacksSave()">&#128190; Save pricing</button>
+      </div>
+      <div class="card" style="padding:16px;margin-bottom:14px">
         <h3 style="margin:0 0 4px;font-size:15px">🎟️ Claim rules (whole marketplace)</h3>
         <p style="margin:0 0 12px;font-size:12.5px;color:#777">
           How many coupons ONE customer may take across every brand. This sits on top of each
@@ -601,6 +618,39 @@
           </tr>`).join("") || `<tr><td colspan="4" style="text-align:center;color:#999;padding:20px">No active campaigns yet</td></tr>`}</tbody></table>
       </div>`;
   }
+  /* ── Credit pricing editor (single list, no categories) ── */
+  window.cmPackDraw = () => {
+    const tb = document.getElementById("cmPackRows");
+    if (!tb) return;
+    tb.innerHTML = creditPacks.map((p, i) =>
+      "<tr>" +
+      "<td><input class='form-control' type='number' min='1' value='" + (p.claims || "") + "' onchange='cmPackSet(" + i + ",\"claims\",this.value)' style='width:110px'></td>" +
+      "<td><input class='form-control' type='number' min='0' value='" + (p.priceINR || 0) + "' onchange='cmPackSet(" + i + ",\"priceINR\",this.value)' style='width:120px'></td>" +
+      "<td><input class='form-control' type='number' min='0' value='" + (p.priceUSD || 0) + "' onchange='cmPackSet(" + i + ",\"priceUSD\",this.value)' style='width:120px'></td>" +
+      "<td><input class='form-control' value='" + esc(p.label || "") + "' placeholder='Starter' onchange='cmPackSet(" + i + ",\"label\",this.value)' style='width:130px'></td>" +
+      "<td style='text-align:center'><input type='checkbox' " + (p.popular ? "checked" : "") + " onchange='cmPackSet(" + i + ",\"popular\",this.checked)'></td>" +
+      "<td><button class='btn btn-danger' onclick='cmPackDel(" + i + ")'>&#10005;</button></td>" +
+      "</tr>"
+    ).join("") || "<tr><td colspan='6' style='text-align:center;color:#999;padding:16px'>No packs yet — add one.</td></tr>";
+  };
+  window.cmPackSet = (i, k, v) => {
+    if (!creditPacks[i]) return;
+    creditPacks[i][k] = (k === "popular" || k === "label") ? v : Number(v);
+  };
+  window.cmPackAdd = () => {
+    creditPacks.push({ claims: 100, priceINR: 999, priceUSD: 19, label: "", popular: false });
+    cmPackDraw();
+  };
+  window.cmPackDel = (i) => { creditPacks.splice(i, 1); cmPackDraw(); };
+  window.cmPacksSave = async () => {
+    try {
+      const r = await API.put("/coupons/admin/credit-packs", { packs: creditPacks });
+      creditPacks = r.packs || creditPacks;
+      showToast("Credit pricing saved", "success");
+      cmPackDraw();
+    } catch (e) { showToast(e.message, "error"); }
+  };
+
   window.cmSpinSave = async () => {
     try {
       await API.put("/coupons/admin/spin-settings", {

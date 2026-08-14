@@ -246,7 +246,9 @@ const couponSectionSchema = new mongoose.Schema(
 const couponPackOrderSchema = new mongoose.Schema(
   {
     vendor: { type: mongoose.Schema.Types.ObjectId, ref: "CouponVendor", required: true, index: true },
-    category: { type: mongoose.Schema.Types.ObjectId, ref: "CouponCategory", required: true },
+    // Credits are one marketplace-wide product now; category is kept only
+    // so historical orders still resolve their old per-category pack.
+    category: { type: mongoose.Schema.Types.ObjectId, ref: "CouponCategory", default: null },
     claims: { type: Number, required: true },
     price: { type: Number, required: true },
     currency: { type: String, enum: ["INR", "USD"], default: "INR" },

@@ -441,26 +441,64 @@ async function rotateApiKey(req, res) {
   });
 }
 
-/* GET /api/coupons/vendor/packs — category pack pricing for vendor's region */
+/**
+ * The one credit price list for the whole marketplace.
+ *
+ * Credits used to be priced per category, which meant a brand saw a different
+ * price depending on which category it sat in. There is now a single list,
+ * edited in the admin console and stored in AppSettings.
+ */
+const DEFAULT_CREDIT_PACKS = [
+  { claims: 100, priceINR: 999, priceUSD: 19, label: "Starter" },
+  { claims: 500, priceINR: 3999, priceUSD: 79, label: "Growth", popular: true },
+  { claims: 2000, priceINR: 12999, priceUSD: 249, label: "Business" },
+];
+async function creditPacks() {
+  const AppSettings = require("../../models/AppSettings");
+  const row = await AppSettings.findOne({ key: "coupon_credit_packs" }).lean();
+  const list = Array.isArray(row?.value) ? row.value : null;
+  const clean = (list || DEFAULT_CREDIT_PACKS)
+    .filter((p) => Number(p?.claims) > 0)
+    .map((p) => ({
+      claims: Number(p.claims),
+      priceINR: Number(p.priceINR) || 0,
+      priceUSD: Number(p.priceUSD) || 0,
+      label: String(p.label || ""),
+      popular: !!p.popular,
+    }))
+    .sort((a, b) => a.claims - b.claims);
+  return clean.length ? clean : DEFAULT_CREDIT_PACKS;
+}
+
+/* GET /api/coupons/vendor/packs — the single credit price list for this region */
 async function packs(req, res) {
   const region = R(req);
-  const cats = await CouponCategory.find({ isActive: true, regions: region, "packs.0": { $exists: true } })
-    .select("name slug icon packs").lean();
-  return res.json({ success: true, region, currency: region === "US" ? "USD" : "INR", categories: cats });
+  const list = await creditPacks();
+  return res.json({
+    success: true,
+    region,
+    currency: region === "US" ? "USD" : "INR",
+    packs: list.map((p) => ({
+      claims: p.claims,
+      label: p.label || "",
+      popular: !!p.popular,
+      price: region === "US" ? p.priceUSD : p.priceINR,
+    })),
+  });
 }
 
 /* POST /api/coupons/vendor/packs { categoryId, claims } → pending order */
 async function buyPack(req, res) {
   const vendor = await requireVendor(req, res); if (!vendor) return;
   const region = R(req);
-  const cat = await CouponCategory.findById(req.body.categoryId);
-  const pack = cat?.packs?.find((p) => p.claims === Number(req.body.claims));
-  if (!cat || !pack) return res.status(400).json({ success: false, message: "Pack not found" });
-  const price = region === "US" ? pack.priceUSD : pack.priceINR;
+  const list = await creditPacks();
+  const pack = list.find((p) => Number(p.claims) === Number(req.body.claims));
+  if (!pack) return res.status(400).json({ success: false, message: "That credit pack is not available" });
+  const price = Number(region === "US" ? pack.priceUSD : pack.priceINR) || 0;
   const { taxPercent, taxAmount, totalAmount } = await billing.priceBreakdown(price, region);
 
   const order = await CouponPackOrder.create({
-    vendor: vendor._id, org: vendor.org || null, category: cat._id, claims: pack.claims,
+    vendor: vendor._id, org: vendor.org || null, claims: pack.claims,
     price, currency: region === "US" ? "USD" : "INR", region,
     taxPercent, taxAmount, totalAmount,
   });
