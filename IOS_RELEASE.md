@@ -50,6 +50,24 @@ Xcode me:
 5. **Product → Archive**. Complete hone pe Organizer khulega.
 6. **Distribute App → App Store Connect → Upload** → sab defaults pe Next → Upload.
 
+## Agar `pod install` pe error aaye
+
+**`Invalid 'Podfile' file: cannot load such file -- .../ios/C:\flutter\packages\flutter_tools\bin\podhelper`**
+
+Iska matlab `ios/Flutter/Generated.xcconfig` me Windows ka `FLUTTER_ROOT=C:\flutter`
+bacha hua hai (Podfile wahi se path uthata hai). Ye file har machine pe alag hoti hai,
+isliye naye zip me daali hi nahi gayi — purana zip use kar rahe ho to app folder me:
+
+```sh
+rm -f ios/Flutter/Generated.xcconfig ios/Flutter/flutter_export_environment.sh
+rm -rf ios/Flutter/ephemeral ios/Pods ios/Podfile.lock .flutter-plugins-dependencies
+flutter clean
+flutter pub get
+cd ios && pod install
+```
+
+`flutter pub get` Mac ka sahi path likh dega aur `pod install` chal jayega.
+
 ## App Store Connect me
 
 1. https://appstoreconnect.apple.com → **My Apps → + → New App**:
