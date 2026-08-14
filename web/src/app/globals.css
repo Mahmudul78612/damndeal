@@ -29,6 +29,15 @@ body {
   body { padding-bottom: 48px; overscroll-behavior-y: contain; }
   .safe-top { padding-top: env(safe-area-inset-top, 0); }
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
+
+  /* Inside our Android/iOS shell the home page is drawn edge to edge — the
+     app only insets its inner pages. Some Android WebViews still report a 0
+     inset even with viewport-fit=cover, so guarantee a floor here. Scoped to
+     .in-app so a normal mobile browser is untouched, and .safe-top only
+     exists on the home header, so no inner page can be padded twice. */
+  html.in-app .safe-top {
+    padding-top: max(env(safe-area-inset-top, 0px), 26px);
+  }
 }
 
 /* Product description rendered HTML */

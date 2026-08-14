@@ -7,6 +7,7 @@ import MobileHeader from "@/components/layout/MobileHeader";
 import DesktopNavbar from "@/components/layout/DesktopNavbar";
 import Footer from "@/components/layout/Footer";
 import GlobalLoginModal from "@/components/GlobalLoginModal";
+import InAppShellClass from "@/components/InAppShellClass";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://damndeal.in";
 
@@ -100,6 +101,10 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   themeColor: "#7C3AED",
+  // Without this, env(safe-area-inset-*) reports 0 and the .safe-top padding
+  // on the home header does nothing — which is why the page slid under the
+  // status bar inside the Android app while every inner page looked right.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -110,6 +115,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
       <body className="min-h-full">
+        <InAppShellClass />
         <Providers>
           <MobileHeader />
           <DesktopNavbar />
