@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
-import { Home, ShoppingCart, User, Grid3X3 } from 'lucide-react';
+import { Home, ShoppingCart, User, Grid3X3, Ticket } from 'lucide-react';
+import { useCouponMarket } from './CouponMarketLink';
 
 const tabs = [
   { href: '/', icon: Home, label: 'Home' },
@@ -18,6 +19,9 @@ const navAllowedRoots = ['/categories', '/account', '/cart'];
 export default function MobileNav() {
   const path = usePathname();
   const { itemCount } = useCart();
+  // Coupon marketplace lives on a sibling subdomain, so it needs a plain <a>
+  // rather than a client-side route — the shared session cookie does the rest.
+  const coupons = useCouponMarket();
   const normalizedPath = path === '/' ? '/' : path.replace(/\/$/, '');
   const showBottomNav =
     normalizedPath === '/' ||
@@ -44,6 +48,13 @@ export default function MobileNav() {
                 </Link>
               );
             })}
+
+            {coupons.enabled && (
+              <a href={coupons.url} className="flex flex-col items-center gap-0">
+                <Ticket size={20} className="text-gray-400" strokeWidth={1.8} />
+                <span className="text-[9px] text-gray-400">{coupons.label}</span>
+              </a>
+            )}
           </div>
         </nav>
       )}

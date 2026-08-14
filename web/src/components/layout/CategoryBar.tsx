@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { api, imgUrl } from '@/lib/api';
 import { Category } from '@/lib/types';
+import CouponMarketLink from './CouponMarketLink';
 
 export default function CategoryBar() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -29,6 +30,9 @@ export default function CategoryBar() {
           ref={scrollRef}
           className="flex items-center gap-1 px-4 py-1.5 overflow-x-auto no-scrollbar"
         >
+          {/* Coupon marketplace — a sibling subdomain, so the session carries over */}
+          <CouponMarketLink className="shrink-0 px-3 py-1 rounded-full text-xs brand-grad text-white hover:opacity-90" />
+
           {/* All */}
           <Link
             href="/categories"

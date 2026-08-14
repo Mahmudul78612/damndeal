@@ -22,6 +22,9 @@ export default function MobileHeader() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  // Past this the logo row folds away and only a compact search bar remains,
+  // which is all a shopper needs once they are into the page.
+  const [compact, setCompact] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout>(null);
@@ -59,12 +62,24 @@ export default function MobileHeader() {
   }, []);
 
   // Solidify header on scroll so content doesn't show through.
+  // rAF-throttled so a fast scroll never fights the main thread.
   useEffect(() => {
+    let ticking = false;
+    const apply = () => {
+      const y = window.scrollY;
+      setScrolled(y > 8);
+      // Hysteresis: collapse at 84px but only expand again below 40px, so the
+      // header cannot flicker while a finger hovers around the threshold.
+      setCompact((was) => (was ? y > 40 : y > 84));
+      ticking = false;
+    };
     const onScroll = () => {
-      setScrolled(window.scrollY > 8);
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(apply);
     };
     window.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
+    apply();
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
@@ -98,9 +113,18 @@ export default function MobileHeader() {
         }}
       />
       <div className="relative z-10">
-        <div className="relative z-10 px-3 pt-3 pb-3 safe-top">
-          {/* Top Row - Logo + Cart - always visible */}
-          <div className="flex items-center justify-between mb-3">
+        <div
+          className={`relative z-10 px-3 safe-top transition-[padding] duration-200 ${
+            compact ? 'pt-1.5 pb-2' : 'pt-3 pb-3'
+          }`}
+          style={{ boxShadow: scrolled ? '0 2px 12px -6px rgba(17,9,40,.35)' : 'none' }}
+        >
+          {/* Logo + cart row — folds away once the shopper scrolls in */}
+          <div
+            className={`flex items-center justify-between overflow-hidden transition-all duration-200 ${
+              compact ? 'max-h-0 opacity-0 mb-0' : 'max-h-14 opacity-100 mb-3'
+            }`}
+          >
             {/* Logo */}
             <Link href="/" className="shrink-0">
               <Image 
@@ -129,7 +153,10 @@ export default function MobileHeader() {
           </div>
 
           {/* Search Bar with Suggestions */}
-          <div className="relative" ref={containerRef}>
+          {/* Search row. When the logo row is folded away the cart rides here,
+              so it is never out of reach while scrolling. */}
+          <div className="flex items-center gap-2">
+          <div className="relative flex-1 min-w-0" ref={containerRef}>
             <div
               className="flex items-center gap-2 rounded-full px-3 py-2 text-sm text-gray-500 transition shadow-md"
               style={{ backgroundColor: searchBgColor }}
@@ -212,6 +239,22 @@ export default function MobileHeader() {
                 )}
               </div>
             )}
+          </div>
+
+          <Link
+            href="/cart"
+            aria-label="Cart"
+            className={`relative shrink-0 grid place-items-center rounded-full bg-white/20 overflow-hidden transition-all duration-200 ${
+              compact ? 'w-9 h-9 opacity-100' : 'w-0 h-9 opacity-0 pointer-events-none'
+            }`}
+          >
+            <ShoppingCart size={18} className="text-white" strokeWidth={2} />
+            {itemCount > 0 && (
+              <span className="absolute top-0.5 right-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[14px] h-[14px] px-[3px] flex items-center justify-center">
+                {itemCount > 9 ? '9+' : itemCount}
+              </span>
+            )}
+          </Link>
           </div>
         </div>
 

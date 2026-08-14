@@ -74,7 +74,9 @@ router.get("/app-config", async (req, res) => {
       // Legal page overrides (HTML / Markdown supported as raw HTML)
       "legal_privacy_html", "legal_terms_html", "legal_refund_html", "legal_vendor_html",
       // Company / footer
-      "company_name", "company_address", "support_phone_alt"
+      "company_name", "company_address", "support_phone_alt",
+      // Coupon marketplace entry point (same-login via the shared .damndeal cookie)
+      "coupon_market_enabled", "coupon_market_url", "coupon_market_label"
     ];
     const docs = await AppSettings.find({ key: { $in: keys } });
     const config = {};

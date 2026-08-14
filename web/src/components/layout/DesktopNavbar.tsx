@@ -8,6 +8,7 @@ import { useAppConfig, useBrandLogo, useBrandName } from '@/context/ConfigContex
 import { ShoppingCart, User, LogOut, Package, MapPin, Wallet, Heart, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import SearchDropdown from '@/components/SearchDropdown';
+import CouponMarketLink from './CouponMarketLink';
 
 export default function DesktopNavbar() {
   const { itemCount } = useCart();
@@ -48,6 +49,9 @@ export default function DesktopNavbar() {
 
         {/* Right cluster */}
         <div className="flex items-center gap-1 shrink-0 ml-auto">
+          {/* Coupon marketplace — sibling subdomain, so the session carries over */}
+          <CouponMarketLink className="mr-1 px-3 py-1.5 rounded-full text-[13px] brand-grad text-white hover:opacity-90" />
+
           {/* Wishlist */}
           <Link href="/wishlist" title="Wishlist" className="p-2.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition">
             <Heart size={20} />
