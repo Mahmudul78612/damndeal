@@ -32,7 +32,10 @@ export default function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur shadow-[0_2px_14px_-6px_rgba(91,33,182,0.18)]">
+    // `home-safe` only on "/": inside our app shell the home page is drawn
+    // edge to edge while inner pages already get a native status-bar spacer,
+    // so padding both would double it.
+    <header className={`sticky top-0 z-50 bg-white/95 backdrop-blur shadow-[0_2px_14px_-6px_rgba(91,33,182,0.18)] ${pathname === '/' ? 'home-safe' : ''}`}>
       {/* brand gradient hairline */}
       <div className="h-[3.5px] brand-grad" />
       <div className="max-w-[1200px] mx-auto px-3 md:px-4 h-[58px] md:h-[64px] flex items-center gap-2.5 md:gap-7">

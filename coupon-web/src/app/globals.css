@@ -124,3 +124,13 @@ h1, h2, h3, .font-display {
 @media (prefers-reduced-motion: reduce) {
   .fade-up, .pop-in { animation: none; }
 }
+
+/* ── Inside our Android/iOS shell ────────────────────────────────────────────
+   The shell adds a native status-bar spacer on inner pages but draws the home
+   page edge to edge, expecting the site to inset itself. `.home-safe` is only
+   on the header when the path is "/", so inner pages can never be padded
+   twice. The floor covers Android WebViews that still report a zero inset
+   even with viewport-fit=cover. A normal mobile browser is untouched. */
+html.in-app .home-safe {
+  padding-top: max(env(safe-area-inset-top, 0px), 26px);
+}

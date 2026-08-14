@@ -1,9 +1,19 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Manrope, Baloo_2 } from 'next/font/google';
 import './globals.css';
+import InAppShellClass from '@/components/InAppShellClass';
 
 const manrope = Manrope({ subsets: ['latin'], variable: '--font-manrope', weight: ['400', '500', '600', '700', '800'] });
 const baloo = Baloo_2({ subsets: ['latin'], variable: '--font-baloo', weight: ['600', '700', '800'] });
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#7C3AED',
+  // Without cover, env(safe-area-inset-*) reports 0 and the home header slides
+  // under the status bar inside our app shell.
+  viewportFit: 'cover',
+};
 
 export const metadata: Metadata = {
   title: {
@@ -29,7 +39,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${manrope.variable} ${baloo.variable}`}>
-      <body className="min-h-screen flex flex-col">{children}</body>
+      <body className="min-h-screen flex flex-col"><InAppShellClass />{children}</body>
     </html>
   );
 }
