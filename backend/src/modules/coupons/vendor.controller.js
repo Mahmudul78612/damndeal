@@ -190,8 +190,70 @@ async function updateCampaign(req, res) {
   const { action } = req.body;
   if (action === "pause" && c.status === "active") c.status = "paused";
   else if (action === "resume" && c.status === "paused") c.status = "active";
-  const editable = ["description", "instructions", "terms", "bannerImage", "tileImage", "redirectUrl", "endAt"];
+
+  const editable = ["description", "instructions", "terms", "bannerImage", "tileImage", "redirectUrl"];
   for (const k of editable) if (req.body[k] !== undefined) c[k] = req.body[k];
+
+  // The headline is what a customer decided to claim on, so it is only
+  // editable while nobody has claimed yet — otherwise an offer could be
+  // swapped out from under codes already sitting in people's wallets.
+  if (c.claimedCount === 0) {
+    if (req.body.title !== undefined) {
+      const t = String(req.body.title).trim();
+      if (!t) return res.status(400).json({ success: false, message: "Title cannot be empty" });
+      c.title = t;
+    }
+    if (req.body.offerText !== undefined) {
+      const o = String(req.body.offerText).trim();
+      if (!o) return res.status(400).json({ success: false, message: "Offer text cannot be empty" });
+      c.offerText = o;
+    }
+  } else if (req.body.title !== undefined || req.body.offerText !== undefined) {
+    return res.status(409).json({
+      success: false,
+      message: "This coupon already has claims, so the title and offer cannot be changed. Pause it and create a new one instead.",
+    });
+  }
+
+  if (req.body.perUserLimit !== undefined) {
+    c.perUserLimit = Math.max(1, parseInt(req.body.perUserLimit, 10) || 1);
+  }
+
+  // Extending is free; pulling the end date in early is allowed too, but it
+  // can never land before what has already been claimed against.
+  if (req.body.endAt !== undefined) {
+    const end = new Date(req.body.endAt);
+    if (isNaN(end.getTime())) {
+      return res.status(400).json({ success: false, message: "Invalid end date" });
+    }
+    c.endAt = end;
+    if (c.status === "expired" && end > new Date()) c.status = "active";
+  }
+
+  // Growing the quota takes more credits, exactly like creating a campaign.
+  // Shrinking is refunded, but never below what customers already claimed.
+  if (req.body.totalQuota !== undefined) {
+    const next = Math.max(1, parseInt(req.body.totalQuota, 10) || 1);
+    if (next < c.claimedCount) {
+      return res.status(400).json({
+        success: false,
+        message: `${c.claimedCount} coupons are already claimed — quota cannot go below that.`,
+      });
+    }
+    const delta = next - c.totalQuota;
+    if (delta > 0 && delta > vendor.claimCredits) {
+      return res.status(402).json({
+        success: false, code: "INSUFFICIENT_CREDITS",
+        message: `You have ${vendor.claimCredits} coupon credits — buy a pack to add ${delta} more.`,
+      });
+    }
+    if (delta !== 0) {
+      vendor.claimCredits -= delta;
+      await vendor.save();
+      c.totalQuota = next;
+    }
+  }
+
   await c.save();
   return res.json({ success: true, campaign: c });
 }

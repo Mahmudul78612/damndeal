@@ -126,11 +126,26 @@ function cachedGet<T = any>(url: string, opts?: FetchOptions): Promise<T> {
 }
 
 // Multipart upload — browser sets the Content-Type boundary itself.
+//
+// This refreshes on 401 exactly like request() does. Without it an upload was
+// the only call that could not survive an expired access token, so a merchant
+// who left the portal open long enough got "Invalid or expired token" the
+// moment they attached an image, while every other action kept working.
 async function uploadRequest<T = any>(endpoint: string, formData: FormData): Promise<T> {
   const headers: Record<string, string> = { 'x-client-type': 'web', 'x-region': REGION };
   const stored = typeof window !== 'undefined' ? localStorage.getItem('dd_token') : null;
   if (stored) headers['Authorization'] = `Bearer ${stored}`;
-  const res = await fetch(`${API_BASE}${endpoint}`, { method: 'POST', headers, body: formData });
+
+  let res = await fetch(`${API_BASE}${endpoint}`, { method: 'POST', headers, body: formData });
+
+  if (res.status === 401 && typeof window !== 'undefined') {
+    const refreshed = await tryRefresh();
+    if (refreshed) {
+      headers['Authorization'] = `Bearer ${refreshed}`;
+      res = await fetch(`${API_BASE}${endpoint}`, { method: 'POST', headers, body: formData });
+    }
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: 'Upload failed' }));
     throw new Error(err.message || `HTTP ${res.status}`);

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { biz, CURRENCY } from '@/lib/bizApi';
 import { useBusiness } from '@/context/BusinessContext';
 import { CheckCircle2, XCircle, ScanLine, RotateCcw } from 'lucide-react';
+import QrScanner from '@/components/QrScanner';
 
 /**
  * The till screen.
@@ -22,6 +23,7 @@ export default function CounterPage() {
   const [state, setState] = useState<'idle' | 'checking' | 'valid' | 'done' | 'error'>('idle');
   const [claim, setClaim] = useState<any>(null);
   const [message, setMessage] = useState('');
+  const [scanning, setScanning] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const scopedOutlets = member?.scope?.outlets || [];
@@ -40,9 +42,11 @@ export default function CounterPage() {
     setTimeout(() => inputRef.current?.focus(), 30);
   };
 
-  const check = async (e?: React.FormEvent) => {
+  // `value` lets a scan verify straight away instead of waiting a render for
+  // the input's state to land.
+  const check = async (e?: React.FormEvent, value?: string) => {
     e?.preventDefault();
-    const c = code.trim().toUpperCase();
+    const c = (value ?? code).trim().toUpperCase();
     if (!c) return;
     setState('checking'); setMessage('');
     try {
@@ -94,8 +98,22 @@ export default function CounterPage() {
         </p>
       )}
 
+      <button
+        onClick={() => setScanning(true)}
+        className="w-full mb-3 py-3.5 rounded-2xl bg-ink text-white font-extrabold text-[15px] flex items-center justify-center gap-2 active:scale-[.99] transition"
+      >
+        <ScanLine size={19} /> Scan customer QR
+      </button>
+
+      {scanning && (
+        <QrScanner
+          onClose={() => setScanning(false)}
+          onDetect={(c) => { setScanning(false); setCode(c); check(undefined, c); }}
+        />
+      )}
+
       <form onSubmit={check} className="bg-white rounded-2xl border border-gray-200 p-4">
-        <label className="block text-[12px] font-bold text-gray-500 mb-1.5">Customer code</label>
+        <label className="block text-[12px] font-bold text-gray-500 mb-1.5">Or type the code</label>
         <input
           ref={inputRef}
           value={code}

@@ -1,13 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api, CURRENCY_SYMBOL } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import ImageCropUpload, { COUPON_IMAGE_SPECS } from '@/components/ImageCropUpload';
+import QrScanner from '@/components/QrScanner';
 import { Category } from '@/lib/types';
 import {
   LayoutDashboard, TicketPlus, ScanLine, KeyRound, Package2, Check, X,
-  Copy, RefreshCw, PauseCircle, PlayCircle, BadgePercent, Store, Camera,
+  Copy, RefreshCw, PauseCircle, PlayCircle, BadgePercent, Store, Camera, Pencil,
 } from 'lucide-react';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -260,6 +262,7 @@ function Dashboard() {
 function Campaigns({ goCreate }: { goCreate: () => void }) {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<any>(null);
   const load = () => api.get('/coupons/vendor/campaigns').then((r) => setItems(r.items || [])).finally(() => setLoading(false));
   useEffect(() => { load(); }, []);
 
@@ -291,11 +294,185 @@ function Campaigns({ goCreate }: { goCreate: () => void }) {
             {c.status === 'rejected' && c.rejectReason && <p className="text-[12px] text-red-500 mt-0.5">Reason: {c.rejectReason}</p>}
           </div>
           <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full ${badge[c.status] || ''}`}>{c.status}</span>
+          <button onClick={() => setEditing(c)} title="Edit" className="p-2 text-gray-400 hover:text-primary"><Pencil size={18} /></button>
           {c.status === 'active' && <button onClick={() => act(c._id, 'pause')} title="Pause" className="p-2 text-gray-400 hover:text-amber-500"><PauseCircle size={19} /></button>}
           {c.status === 'paused' && <button onClick={() => act(c._id, 'resume')} title="Resume" className="p-2 text-gray-400 hover:text-emerald-500"><PlayCircle size={19} /></button>}
         </Card>
       ))}
+
+      {editing && (
+        <EditCampaign
+          campaign={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); load(); }}
+        />
+      )}
     </div>
+  );
+}
+
+/* ── Edit an existing coupon ──
+   Everything a merchant can safely change after publishing. The headline and
+   the offer are locked once someone has claimed, because a claimed code is a
+   promise; the server enforces that too, this just explains it up front. */
+function EditCampaign({ campaign, onClose, onSaved }: { campaign: any; onClose: () => void; onSaved: () => void }) {
+  const locked = (campaign.claimedCount || 0) > 0;
+  const [form, setForm] = useState({
+    title: campaign.title || '',
+    offerText: campaign.offerText || '',
+    description: campaign.description || '',
+    instructions: campaign.instructions || '',
+    terms: campaign.terms || '',
+    redirectUrl: campaign.redirectUrl || '',
+    endAt: campaign.endAt ? new Date(campaign.endAt).toISOString().slice(0, 10) : '',
+    totalQuota: campaign.totalQuota || 0,
+    perUserLimit: campaign.perUserLimit || 1,
+    bannerImage: campaign.bannerImage || '',
+    tileImage: campaign.tileImage || '',
+  });
+  const set = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  const save = async () => {
+    setSaving(true); setErr('');
+    const body: any = {
+      description: form.description,
+      instructions: form.instructions,
+      terms: form.terms,
+      redirectUrl: form.redirectUrl,
+      bannerImage: form.bannerImage,
+      tileImage: form.tileImage,
+      perUserLimit: form.perUserLimit,
+      totalQuota: form.totalQuota,
+    };
+    if (form.endAt) body.endAt = new Date(`${form.endAt}T23:59:59`).toISOString();
+    if (!locked) { body.title = form.title; body.offerText = form.offerText; }
+
+    try {
+      await api.patch(`/coupons/vendor/campaigns/${campaign._id}`, body);
+      onSaved();
+    } catch (e: any) {
+      setErr(e.message || 'Could not save');
+    }
+    setSaving(false);
+  };
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[90] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div
+        className="bg-white w-full sm:max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-3.5 flex items-center justify-between">
+          <div className="min-w-0">
+            <p className="font-extrabold text-[15px] truncate">Edit coupon</p>
+            <p className="text-[11.5px] text-gray-400 truncate">{campaign.title}</p>
+          </div>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-700"><X size={20} /></button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {locked && (
+            <p className="text-[12px] bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2">
+              {campaign.claimedCount} customers have already claimed this coupon, so the title and offer
+              are locked. Everything else can still be changed.
+            </p>
+          )}
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Title</label>
+              <input className={inputCls} value={form.title} disabled={locked}
+                onChange={(e) => set('title', e.target.value)} />
+            </div>
+            <div>
+              <label className={labelCls}>Offer text</label>
+              <input className={inputCls} value={form.offerText} disabled={locked}
+                onChange={(e) => set('offerText', e.target.value)} placeholder="30% OFF" />
+            </div>
+          </div>
+
+          <div>
+            <label className={labelCls}>Description</label>
+            <textarea className={inputCls} rows={3} value={form.description}
+              onChange={(e) => set('description', e.target.value)} />
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>How to redeem</label>
+              <textarea className={inputCls} rows={3} value={form.instructions}
+                onChange={(e) => set('instructions', e.target.value)} />
+            </div>
+            <div>
+              <label className={labelCls}>Terms</label>
+              <textarea className={inputCls} rows={3} value={form.terms}
+                onChange={(e) => set('terms', e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid sm:grid-cols-3 gap-3">
+            <div>
+              <label className={labelCls}>Ends on</label>
+              <input type="date" className={inputCls} value={form.endAt}
+                onChange={(e) => set('endAt', e.target.value)} />
+            </div>
+            <div>
+              <label className={labelCls}>Total coupons</label>
+              <input type="number" min={campaign.claimedCount || 1} className={inputCls} value={form.totalQuota}
+                onChange={(e) => set('totalQuota', parseInt(e.target.value, 10) || 0)} />
+              <p className="text-[11px] text-gray-400 mt-1">{campaign.claimedCount} claimed. Adding more uses credits.</p>
+            </div>
+            <div>
+              <label className={labelCls}>Per customer</label>
+              <input type="number" min={1} className={inputCls} value={form.perUserLimit}
+                onChange={(e) => set('perUserLimit', parseInt(e.target.value, 10) || 1)} />
+            </div>
+          </div>
+
+          {campaign.isOnline && (
+            <div>
+              <label className={labelCls}>Redirect URL</label>
+              <input className={inputCls} value={form.redirectUrl}
+                onChange={(e) => set('redirectUrl', e.target.value)} placeholder="https://" />
+            </div>
+          )}
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            <ImageCropUpload
+              spec={COUPON_IMAGE_SPECS.banner}
+              value={form.bannerImage}
+              imgSrc={up}
+              onUploaded={(url) => set('bannerImage', url)}
+              upload={(fd) => api.upload('/coupons/upload', fd)}
+            />
+            <ImageCropUpload
+              spec={COUPON_IMAGE_SPECS.tile}
+              value={form.tileImage}
+              imgSrc={up}
+              onUploaded={(url) => set('tileImage', url)}
+              upload={(fd) => api.upload('/coupons/upload', fd)}
+            />
+          </div>
+
+          {err && <p className="text-[12.5px] text-red-600 font-semibold">{err}</p>}
+        </div>
+
+        <div className="sticky bottom-0 bg-white border-t border-gray-100 px-5 py-3 flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-gray-200 font-bold text-sm text-gray-600">
+            Cancel
+          </button>
+          <button onClick={save} disabled={saving}
+            className="flex-1 py-2.5 rounded-lg bg-primary text-white font-extrabold text-sm disabled:opacity-50">
+            {saving ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -635,10 +812,15 @@ function Verify() {
   const [loading, setLoading] = useState(false);
   const [redeeming, setRedeeming] = useState(false);
   const [done, setDone] = useState('');
+  const [scanning, setScanning] = useState(false);
 
-  const check = async () => {
+  // Takes the code explicitly so a scan can verify immediately, without
+  // waiting a render for the input's state to catch up.
+  const check = async (value?: string) => {
+    const c = (value ?? code).trim().toUpperCase();
+    if (c.length < 6) return;
     setLoading(true); setResult(null); setDone('');
-    try { setResult(await api.post('/coupons/vendor/verify', { code })); }
+    try { setResult(await api.post('/coupons/vendor/verify', { code: c })); }
     catch (e: any) { setResult({ valid: false, error: e.message || 'Not found' }); }
     setLoading(false);
   };
@@ -654,16 +836,31 @@ function Verify() {
   return (
     <Card className="max-w-lg">
       <p className="font-bold text-sm mb-1">Verify a customer&apos;s coupon</p>
-      <p className="text-[12.5px] text-gray-400 mb-4">Type the code from their QR / screen. Redeeming marks it used (one-time).</p>
+      <p className="text-[12.5px] text-gray-400 mb-4">Scan their QR, or type the code. Redeeming marks it used (one-time).</p>
+
+      <button
+        onClick={() => setScanning(true)}
+        className="w-full mb-3 py-3 rounded-xl bg-primary text-white font-extrabold text-sm flex items-center justify-center gap-2 hover:opacity-90"
+      >
+        <ScanLine size={18} /> Scan QR code
+      </button>
+
       <div className="flex gap-2">
         <input className={`${inputCls} font-mono font-bold tracking-wider uppercase`} value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="DD-XXXX-XXXX"
           onKeyDown={(e) => e.key === 'Enter' && check()} />
-        <button onClick={check} disabled={loading || code.length < 6}
+        <button onClick={() => check()} disabled={loading || code.length < 6}
           className="px-5 rounded-lg bg-primary text-white font-bold text-sm disabled:opacity-50">
           {loading ? '…' : 'Check'}
         </button>
       </div>
+
+      {scanning && (
+        <QrScanner
+          onClose={() => setScanning(false)}
+          onDetect={(c) => { setScanning(false); setCode(c); check(c); }}
+        />
+      )}
       {result && (
         <div className={`mt-4 rounded-xl p-4 ${result.valid ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'}`}>
           {result.valid ? (

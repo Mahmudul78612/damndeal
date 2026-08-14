@@ -43,6 +43,56 @@ export function clearBizSession() {
   localStorage.removeItem(BIZ_REFRESH_KEY);
 }
 
+/**
+ * Trade the stored refresh token for a fresh access token.
+ *
+ * Access tokens live 15 minutes, so without this a cashier who kept the
+ * console open through a quiet hour was thrown back to the login screen on
+ * their next tap. Member sessions are issued by the same token service as
+ * shopper ones, so /auth/refresh-token accepts them unchanged.
+ *
+ * Concurrent 401s share one refresh call — a page that fires several requests
+ * at once must not burn (and rotate away) the refresh token several times.
+ */
+let refreshing: Promise<string | null> | null = null;
+
+async function refreshBizToken(): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
+  if (refreshing) return refreshing;
+
+  refreshing = (async () => {
+    const refreshToken = localStorage.getItem(BIZ_REFRESH_KEY);
+    if (!refreshToken) return null;
+    try {
+      const res = await fetch(`${API_BASE}/auth/refresh-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data?.accessToken) return null;
+      setBizSession(data.accessToken, data.refreshToken);
+      return data.accessToken as string;
+    } catch {
+      return null;
+    } finally {
+      // Let the next 401 start a fresh attempt rather than reusing this result
+      setTimeout(() => { refreshing = null; }, 0);
+    }
+  })();
+
+  return refreshing;
+}
+
+function bounceToLogin(message?: string): Error {
+  clearBizSession();
+  if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/business/login')) {
+    window.location.href = '/business/login';
+  }
+  return new Error(message || 'Please sign in again');
+}
+
 async function request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -53,15 +103,16 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
   const t = bizToken();
   if (t) headers['Authorization'] = `Bearer ${t}`;
 
-  const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
-  const body = await res.json().catch(() => null);
+  let res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+  let body = await res.json().catch(() => null);
 
   if (res.status === 401) {
-    clearBizSession();
-    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/business/login')) {
-      window.location.href = '/business/login';
-    }
-    throw new Error(body?.message || 'Please sign in again');
+    const refreshed = await refreshBizToken();
+    if (!refreshed) throw bounceToLogin(body?.message);
+    headers['Authorization'] = `Bearer ${refreshed}`;
+    res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+    body = await res.json().catch(() => null);
+    if (res.status === 401) throw bounceToLogin(body?.message);
   }
   if (!res.ok || body?.success === false) {
     const err = new Error(body?.message || `Request failed (${res.status})`);
@@ -85,7 +136,15 @@ export const biz = {
     const headers: Record<string, string> = { 'x-client-type': 'web', 'x-region': region() };
     const t = bizToken();
     if (t) headers['Authorization'] = `Bearer ${t}`;
-    const res = await fetch(`${API_BASE}${url}`, { method: 'POST', headers, body: formData });
+
+    let res = await fetch(`${API_BASE}${url}`, { method: 'POST', headers, body: formData });
+    if (res.status === 401) {
+      const refreshed = await refreshBizToken();
+      if (!refreshed) throw bounceToLogin();
+      headers['Authorization'] = `Bearer ${refreshed}`;
+      res = await fetch(`${API_BASE}${url}`, { method: 'POST', headers, body: formData });
+    }
+
     const body = await res.json().catch(() => null);
     if (!res.ok || body?.success === false) throw new Error(body?.message || 'Upload failed');
     return body;
