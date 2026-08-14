@@ -89,6 +89,21 @@ Risk kam karne ke liye:
   bolna, native features (in-app notifications screen, offline page, quick actions)
   add kar dunga.
 
+## India app — extra note (US app me ye nahi hai)
+
+India app me location bhi hai. Website jab "use my current location" maangti hai,
+tab app ka **GeoBridge** OS ki permission sheet dikhata hai — matlab prompt tabhi
+aata hai jab user khud button dabata hai, app khulte hi nahi.
+
+Isliye App Store Connect ke privacy form me **Location → Precise Location** ko
+"App Functionality" ke liye tick karna (Tracking = No). Review Notes me ye line
+bhi jod dena:
+
+> Location is requested only when the customer taps "use my current location"
+> on the website, to check delivery availability and show nearby offers.
+> Nothing is requested at launch and no location is collected in the
+> background.
+
 ## Kya kya already fix ho chuka hai (dobara mat chhedna)
 
 - ✅ Unique bundle IDs (pehle dono me duplicate tha — App Store reject ho jata)
@@ -99,6 +114,7 @@ Risk kam karne ke liye:
 - ✅ App icons (21 sizes incl. 1024 marketing, no-alpha RGB PNG — App Store safe)
 - ✅ UPI/tel/whatsapp external links iOS pe url_launcher se khulte hain (`LSApplicationQueriesSchemes` set)
 - ✅ Min iOS 13.0 har jagah consistent (pbxproj + Podfile + AppFrameworkInfo.plist)
+- ✅ India app: location bridge (permission on tap, not at launch)
 - ✅ **Native features (4.2 protection)**: native bottom tab bar (Home / Categories /
   Offers / Cart / Account — website ka nav app me hide hota hai), pura native
   Offers & Updates tab (live banners/products, pull-to-refresh, haptics),

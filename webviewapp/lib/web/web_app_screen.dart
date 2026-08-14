@@ -5,6 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:quick_actions/quick_actions.dart';
@@ -129,6 +130,73 @@ const String _hideScrollbarsScript = r"""
     document.body.style.msOverflowStyle = 'none';
   }
   window.__ddHideScroll = true;
+})();
+""";
+/// Routes the website's location requests through the app.
+///
+/// WKWebView does not give embedded pages working HTML5 geolocation the way
+/// Safari does, so `navigator.geolocation` is replaced with a bridge to native
+/// code. The same bridge is used on Android so both platforms behave
+/// identically. Nothing is requested up front: the OS permission sheet appears
+/// only when the site actually asks — i.e. when the shopper taps
+/// "use my location".
+const String _geoBridgeScript = r"""
+(function() {
+  if (window.__ddGeoBridge) { return; }
+  window.__ddGeoBridge = true;
+
+  var seq = 0;
+  var pending = {};
+
+  // Called from Dart once the device has answered.
+  window.__ddGeoResolve = function(id, payload) {
+    var cb = pending[id];
+    if (!cb) { return; }
+    delete pending[id];
+    if (payload && payload.ok) {
+      if (cb.ok) {
+        cb.ok({
+          coords: {
+            latitude: payload.lat,
+            longitude: payload.lng,
+            accuracy: payload.acc || 0,
+            altitude: null, altitudeAccuracy: null, heading: null, speed: null
+          },
+          timestamp: Date.now()
+        });
+      }
+    } else if (cb.err) {
+      cb.err({
+        code: (payload && payload.code) || 2,
+        message: (payload && payload.message) || 'Location unavailable',
+        PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3
+      });
+    }
+  };
+
+  function ask(ok, err) {
+    var id = ++seq;
+    pending[id] = { ok: ok, err: err };
+    if (window.GeoBridge && window.GeoBridge.postMessage) {
+      window.GeoBridge.postMessage(String(id));
+    } else if (err) {
+      err({ code: 2, message: 'Location unavailable', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 });
+    }
+  }
+
+  var shim = {
+    getCurrentPosition: function(ok, err) { ask(ok, err); },
+    // One-shot is enough for "detect my city"; a real watch would drain battery
+    // inside a shopping page.
+    watchPosition: function(ok, err) { ask(ok, err); return 0; },
+    clearWatch: function() {}
+  };
+
+  try {
+    Object.defineProperty(navigator, 'geolocation', { value: shim, configurable: true });
+  } catch (e) {
+    try { navigator.geolocation = shim; } catch (e2) {}
+  }
 })();
 """;
 const String _hideWebNavScript = r"""
@@ -269,6 +337,12 @@ class _WebAppScreenState extends State<WebAppScreen>
           _handlePullRefresh();
         },
       )
+      ..addJavaScriptChannel(
+        'GeoBridge',
+        onMessageReceived: (message) {
+          _handleGeoRequest(message.message);
+        },
+      )
       ..setNavigationDelegate(
         NavigationDelegate(
           onNavigationRequest: _handleNavigationRequest,
@@ -313,6 +387,7 @@ class _WebAppScreenState extends State<WebAppScreen>
             _injectFcmBridge();
             _injectPullToRefresh();
             _injectHideWebNav();
+            _injectGeoBridge();
           },
           onWebResourceError: (error) {
             if (!mounted) {
@@ -398,6 +473,64 @@ class _WebAppScreenState extends State<WebAppScreen>
       await _controller.runJavaScript(_pullToRefreshScript);
     } catch (_) {
       // Ignore injection failures on pages that block scripts.
+    }
+  }
+
+  Future<void> _injectGeoBridge() async {
+    try {
+      await _controller.runJavaScript(_geoBridgeScript);
+    } catch (_) {
+      // Ignore injection failures on pages that block scripts.
+    }
+  }
+
+  /// Answers one `navigator.geolocation` call from the page.
+  ///
+  /// The permission sheet is raised here, at the moment the site asks, so the
+  /// shopper sees it as a direct result of tapping "use my location" rather
+  /// than as an unexplained prompt at launch.
+  Future<void> _handleGeoRequest(String id) async {
+    Future<void> reply(Map<String, Object?> payload) async {
+      if (!mounted) return;
+      try {
+        await _controller.runJavaScript(
+          'window.__ddGeoResolve && window.__ddGeoResolve($id, ${jsonEncode(payload)});',
+        );
+      } catch (_) {
+        // Page navigated away before we could answer — nothing to do.
+      }
+    }
+
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        await reply({'ok': false, 'code': 2, 'message': 'Location is turned off on this device'});
+        return;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        await reply({'ok': false, 'code': 1, 'message': 'Location permission denied'});
+        return;
+      }
+
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 20),
+        ),
+      );
+      await reply({
+        'ok': true,
+        'lat': pos.latitude,
+        'lng': pos.longitude,
+        'acc': pos.accuracy,
+      });
+    } catch (e) {
+      await reply({'ok': false, 'code': 3, 'message': 'Could not get your location'});
     }
   }
 
