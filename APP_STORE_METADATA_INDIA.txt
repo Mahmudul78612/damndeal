@@ -1,0 +1,234 @@
+================================================================
+DAMNDEAL INDIA - APP STORE CONNECT METADATA
+Bundle ID: com.damndealappp.in   |   Version 1.0.2 (build 3)
+Sab text plain ASCII hai - koi emoji / smart quote nahi, isliye
+"invalid character" wala error nahi aayega. Seedha copy-paste karo.
+================================================================
+
+
+----------------------------------------------------------------
+1. APP NAME  (max 30 characters)
+----------------------------------------------------------------
+DamnDeal India
+
+Agar ye naam bhi "already used" bole to niche se koi ek lo:
+
+DamnDeal India Shopping
+DamnDeal: Shop and Save
+DamnDeal Online Shopping
+
+NOTE: Ye sirf App Store pe dikhne wala naam hai. Phone ki home
+screen pe icon ke niche "Damndeal" hi rahega - build me kuch
+badalne ki zaroorat nahi.
+
+
+----------------------------------------------------------------
+2. SUBTITLE  (max 30 characters)
+----------------------------------------------------------------
+Shop Deals, Offers and Coupons
+
+
+----------------------------------------------------------------
+3. PROMOTIONAL TEXT  (max 170 characters)
+----------------------------------------------------------------
+Claim free coupons from brands near you, right inside the app. Fresh deals every day, Cash on Delivery and fast delivery across India.
+
+NOTE: Ye field bina naya build bheje kabhi bhi badal sakte ho -
+sale ya festival offer ke time yahi update karna.
+
+
+----------------------------------------------------------------
+4. KEYWORDS  (max 100 characters, comma se separate, space mat dalna)
+----------------------------------------------------------------
+online shopping,discount,fashion,electronics,appliances,sale,cashback,voucher,store,cod,grocery,buy
+
+NOTE: App name aur subtitle ke words Apple pehle se index karta
+hai, isliye "shop", "deals", "offers", "coupons" yahan dobara
+nahi daale - unki jagah naye words lagaye hain.
+
+
+----------------------------------------------------------------
+5. DESCRIPTION  (max 4000 characters)
+----------------------------------------------------------------
+DamnDeal is an online shopping app made for India. Browse thousands of products across fashion, electronics, home appliances, kitchen, beauty and daily essentials, compare prices, claim coupons, and get your order delivered to your door.
+
+SHOP EVERYTHING IN ONE PLACE
+- Fashion for men, women and kids
+- Mobiles, laptops, audio and accessories
+- Home appliances and kitchen products
+- Beauty, personal care and daily needs
+- New products added every week
+
+DEALS AND COUPONS
+- Deal of the Day and limited time offers
+- Free coupons from brands near you, claim in one tap
+- Discount codes that apply straight at checkout
+- Price drop and clearance sections
+
+EASY, SAFE CHECKOUT
+- Cash on Delivery available
+- Pay by UPI, debit card, credit card or net banking
+- Payments handled by trusted payment partners
+- Wallet balance and refunds in one place
+
+TRACK EVERY ORDER
+- Live order status from packing to delivery
+- Full order history with invoices
+- Simple returns and refund requests
+- Help by phone, WhatsApp and email
+
+BUILT FOR YOUR PHONE
+- Native tab bar: Home, Categories, Offers, Cart and Account
+- Offers tab with fresh banners and handpicked deals
+- Pull to refresh on every main screen
+- Quick Actions: long press the app icon to jump to Offers, My Orders or My Cart
+- Works on slow networks and tells you clearly when you are offline
+
+DELIVERY ACROSS INDIA
+Enter your pincode, or tap to share your location, to check delivery availability and see the offers running near you. Location is requested only when you tap that button, never in the background.
+
+We are the DamnDeal team and we run the damndeal.in store ourselves. If something is not right with an order, write to support@damndeal.in and a real person will reply.
+
+Happy shopping.
+
+
+----------------------------------------------------------------
+6. WHAT'S NEW IN THIS VERSION  (agar field dikhe to)
+----------------------------------------------------------------
+First release of DamnDeal on iPhone.
+
+- Shop the full DamnDeal catalogue: fashion, electronics, appliances, beauty and daily needs
+- Coupons and Offers on the home screen: claim free codes from brands near you
+- Native Offers tab with banners, deals and pull to refresh
+- Quick Actions on the app icon for Offers, My Orders and My Cart
+- Cash on Delivery, UPI, cards and net banking at checkout
+- Live order tracking, invoices and easy returns
+
+NOTE: Pehli submission hai, to ho sakta hai ye field dikhe hi
+nahi. Tab skip kar dena.
+
+
+----------------------------------------------------------------
+7. URLs
+----------------------------------------------------------------
+Support URL          https://damndeal.in/contact
+Marketing URL        https://damndeal.in
+Privacy Policy URL   https://damndeal.in/legal/privacy
+
+(Purana /privacy-policy path 404 deta hai - use mat karna.)
+
+
+----------------------------------------------------------------
+8. CATEGORY / COPYRIGHT
+----------------------------------------------------------------
+Primary Category     Shopping
+Secondary Category   Lifestyle
+Copyright            2026 Damndeal Inc
+
+
+----------------------------------------------------------------
+9. APP REVIEW INFORMATION
+----------------------------------------------------------------
+Sign-In required: YES (tick karo)
+
+  User Name / Phone : 9876543210
+  Password / OTP    : 600265
+
+  (Login screen pe number daalne ke baad OTP maangega. Ye number
+   test ke liye fix hai - koi SMS nahi jata, hamesha 600265 hi
+   chalega. 14 Aug 2026 ko live test karke check kiya gaya.)
+
+Contact:
+  First / Last name : (apna naam)
+  Phone             : +91 7696827211
+  Email             : support@damndeal.in
+
+NOTES (poora ka poora copy karo - ye Guideline 4.2 se bachata hai):
+
+This is our official native shopping app for our own e-commerce
+platform. We own the damndeal.in website and the DamnDeal brand,
+and the same app is already published on Google Play.
+
+To sign in, enter phone number 9876543210 and OTP 600265. This is
+a permanent test number, so no SMS is involved.
+
+The app is not a plain web wrapper. It includes native iOS
+features: a native bottom tab bar (Home, Categories, Offers, Cart,
+Account) which replaces the website navigation, a fully native
+Offers and Updates tab with server-driven content, pull to refresh
+and haptic feedback, pull to refresh on the main screens, iOS Home
+Screen Quick Actions (long press the app icon for Offers, My
+Orders or My Cart), a custom splash screen, the native iOS share
+sheet, a native offline screen with retry, external payment app
+handoff for UPI, and native navigation handling.
+
+Location is requested only when the customer taps "use my current
+location" to check delivery availability and see nearby offers.
+Nothing is requested at launch and no location is collected in the
+background.
+
+
+----------------------------------------------------------------
+10. APP PRIVACY (questionnaire ke jawab)
+----------------------------------------------------------------
+Data collected, sab "Linked to the user", purpose = App Functionality,
+Tracking = NO (har cheez ke liye):
+
+  Contact Info      Name, Email Address, Phone Number
+  Contact Info      Physical Address (delivery address)
+  Purchases         Purchase History
+  Location          Precise Location   <- App Functionality ke liye
+  Identifiers       User ID
+  Usage Data        Product Interaction
+
+Tracking: NO. (Pichli baar reject isi wajah se hua tha - is
+sawaal ka jawab "No" hi rakhna.)
+
+Third-party advertising ke liye koi data use nahi hota - "Used for
+Tracking" har jagah unchecked rakho.
+
+
+----------------------------------------------------------------
+11. AGE RATING
+----------------------------------------------------------------
+Sab questions "None" - EXCEPT:
+
+  Contests  ->  "Infrequent or Mild"
+
+Kyun: website pe Magic Pools / Magic Club feature hai jisme order
+karne pe prize draw me entry milti hai. Apple ke form me ise
+Contests maana jata hai. Sach bolna behtar hai - jhooth pakde
+jaane pe app hat sakti hai. Isse rating 12+ ho jayegi, jo shopping
+app ke liye bilkul theek hai.
+
+
+----------------------------------------------------------------
+12. SCREENSHOTS
+----------------------------------------------------------------
+Sirf 6.9-inch iPhone chahiye (iPhone 17 Pro Max simulator).
+3 minimum, 6 best. iPad ki zaroorat NAHI - app iPhone-only hai.
+
+Order:
+  1. Home page (banner + Coupons & Offers strip dikhe)
+  2. Categories tab
+  3. Offers tab
+  4. Product detail page
+  5. Cart
+  6. Account / My Orders
+
+
+================================================================
+CHECKLIST - submit se pehle
+================================================================
+[ ] App record ban gaya (naam available mila)
+[ ] Build upload hui aur "Processing" khatam hua (15-30 min)
+[ ] Build version ke saath attach ki
+[ ] 6.9-inch screenshots upload kiye
+[ ] Description / keywords / promo text bhare
+[ ] Privacy Policy URL diya
+[ ] App Privacy questionnaire bhara, Tracking = No
+[ ] Age rating me Contests = Infrequent or Mild
+[ ] Sign-in required tick, 9876543210 / 600265 diya
+[ ] Review notes wala paragraph paste kiya
+[ ] Export compliance: kuch nahi poochhega (plist me already set hai)
+================================================================
