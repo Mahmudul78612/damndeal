@@ -77,6 +77,7 @@ export default function MyCouponsPage() {
                 <p className="text-[12px] text-gray-400 mt-0.5">
                   {cl.vendor?.businessName} · claimed {new Date(cl.claimedAt).toLocaleDateString()}
                 </p>
+                {cl.status === 'claimed' && <UseBefore at={cl.expiresAt} />}
               </div>
               {badge(cl.status)}
               <button onClick={() => copy(cl.code)}
@@ -117,5 +118,25 @@ export default function MyCouponsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+/** Countdown on a live code — the reason to walk into the shop this week. */
+function UseBefore({ at }: { at?: string | null }) {
+  if (!at) return null;
+  const ms = new Date(at).getTime() - Date.now();
+  if (!Number.isFinite(ms)) return null;
+  if (ms <= 0) return <p className="text-[11.5px] font-bold text-red-500 mt-0.5">Validity over</p>;
+
+  const days = Math.ceil(ms / 86400000);
+  const soon = days <= 3;
+  const label =
+    days <= 1
+      ? 'Use today'
+      : days <= 7
+        ? `Use within ${days} days`
+        : `Valid till ${new Date(at).toLocaleDateString()}`;
+  return (
+    <p className={`text-[11.5px] font-bold mt-0.5 ${soon ? 'text-amber-600' : 'text-gray-400'}`}>{label}</p>
   );
 }

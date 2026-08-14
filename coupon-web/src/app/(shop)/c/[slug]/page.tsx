@@ -160,6 +160,13 @@ export default async function CouponDetail({ params }: { params: P }) {
             </div>
 
             <ClaimButton campaign={c} big />
+            {/* Told before claiming, not after — a deadline discovered later
+                reads as a trick. */}
+            {!!c.claimValidityDays && c.claimValidityDays > 0 && (
+              <p className="mt-3 text-[11.5px] font-bold text-amber-600 text-center">
+                Use within {c.claimValidityDays} {c.claimValidityDays === 1 ? 'day' : 'days'} of claiming
+              </p>
+            )}
             <p className="mt-3 text-[11px] text-gray-400 flex items-center justify-center gap-1">
               <ShieldCheck size={12} className="text-emerald-500" /> Unique code + QR · one-time use · vendor verified
             </p>

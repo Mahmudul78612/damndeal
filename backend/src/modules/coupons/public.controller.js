@@ -236,15 +236,36 @@ function genCode() {
 
 /* Core claim logic (shared by direct claim + spin wheel). Returns
    { error } | { alreadyClaimed, claim } | { claim } */
+/**
+ * When a freshly claimed code stops working.
+ *
+ * The campaign's own end date is always the ceiling — a code can never outlive
+ * the offer it came from — and claimValidityDays pulls it in from there.
+ */
+function claimExpiry(c) {
+  const end = new Date(c.endAt);
+  const days = Number(c.claimValidityDays) || 0;
+  if (days <= 0) return end;
+  const window = new Date(Date.now() + days * 86400000);
+  return window < end ? window : end;
+}
+
 async function claimForUser(c, userId, region) {
   if (!c || c.status !== "active") return { error: "This coupon is not available" };
   if (c.endAt < new Date()) return { error: "This coupon has expired" };
   if (c.claimedCount >= c.totalQuota) return { error: "All coupons have been claimed" };
 
   const limit = c.perUserLimit || 1;
-  const mine = await CouponClaim.countDocuments({ campaign: c._id, user: userId, status: { $ne: "cancelled" } });
+  // Only live claims count against the allowance. A code that expired unused
+  // gives its slot back, so the customer may try again while the offer runs —
+  // matching the partial unique index on {campaign,user,slot}.
+  const mine = await CouponClaim.countDocuments({
+    campaign: c._id, user: userId, status: { $in: ["claimed", "redeemed"] },
+  });
   if (mine >= limit) {
-    const existing = await CouponClaim.findOne({ campaign: c._id, user: userId }).sort({ createdAt: -1 }).lean();
+    const existing = await CouponClaim.findOne({
+      campaign: c._id, user: userId, status: { $in: ["claimed", "redeemed"] },
+    }).sort({ createdAt: -1 }).lean();
     return { alreadyClaimed: true, claim: existing };
   }
 
@@ -267,6 +288,7 @@ async function claimForUser(c, userId, region) {
     // parallel requests both compute the same slot and only one insert wins.
     const doc = await CouponClaim.create({
       campaign: c._id, vendor: c.vendor, user: userId, code, region, slot: mine,
+      expiresAt: claimExpiry(c),
     });
     events.track("claim", { campaign: c._id, vendor: c.vendor, user: userId, region, source: "claim" });
     return { claim: doc };

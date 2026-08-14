@@ -327,6 +327,7 @@ function EditCampaign({ campaign, onClose, onSaved }: { campaign: any; onClose: 
     endAt: campaign.endAt ? new Date(campaign.endAt).toISOString().slice(0, 10) : '',
     totalQuota: campaign.totalQuota || 0,
     perUserLimit: campaign.perUserLimit || 1,
+    claimValidityDays: campaign.claimValidityDays || 0,
     bannerImage: campaign.bannerImage || '',
     tileImage: campaign.tileImage || '',
   });
@@ -344,6 +345,7 @@ function EditCampaign({ campaign, onClose, onSaved }: { campaign: any; onClose: 
       bannerImage: form.bannerImage,
       tileImage: form.tileImage,
       perUserLimit: form.perUserLimit,
+      claimValidityDays: form.claimValidityDays,
       totalQuota: form.totalQuota,
     };
     if (form.endAt) body.endAt = new Date(`${form.endAt}T23:59:59`).toISOString();
@@ -382,6 +384,12 @@ function EditCampaign({ campaign, onClose, onSaved }: { campaign: any; onClose: 
             </p>
           )}
 
+          <p className="text-[12px] bg-blue-50 border border-blue-200 text-blue-800 rounded-lg px-3 py-2">
+            Changing the wording, images or terms sends this coupon back for review, and it
+            stays off the marketplace until our team approves it. Dates, quota and limits
+            take effect straight away.
+          </p>
+
           <div className="grid sm:grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Title</label>
@@ -414,11 +422,30 @@ function EditCampaign({ campaign, onClose, onSaved }: { campaign: any; onClose: 
             </div>
           </div>
 
-          <div className="grid sm:grid-cols-3 gap-3">
+          <div className="grid sm:grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Ends on</label>
               <input type="date" className={inputCls} value={form.endAt}
                 onChange={(e) => set('endAt', e.target.value)} />
+              {campaign.status === 'expired' && (
+                <p className="text-[11px] text-amber-600 mt-1">
+                  Expired. Pick a future date to restart it — the unused credits that were
+                  returned will be charged again.
+                </p>
+              )}
+            </div>
+            <div>
+              <label className={labelCls}>Code valid for</label>
+              <select className={inputCls} value={form.claimValidityDays}
+                onChange={(e) => set('claimValidityDays', parseInt(e.target.value, 10))}>
+                <option value={0}>Till the coupon ends</option>
+                <option value={1}>1 day after claim</option>
+                <option value={3}>3 days after claim</option>
+                <option value={7}>7 days after claim</option>
+                <option value={15}>15 days after claim</option>
+                <option value={30}>30 days after claim</option>
+              </select>
+              <p className="text-[11px] text-gray-400 mt-1">Unredeemed codes expire and return to your quota. Applies to new claims.</p>
             </div>
             <div>
               <label className={labelCls}>Total coupons</label>
@@ -488,7 +515,7 @@ function CreateCampaign({ credits, onCreated }: { credits: number; onCreated: ()
   const [form, setForm] = useState<any>({
     title: '', category: '', offerType: 'percent', offerValue: '', offerText: '',
     description: '', instructions: '', terms: '', bannerImage: '', tileImage: '',
-    isOnline: false, redirectUrl: '', totalQuota: 50, perUserLimit: 1,
+    isOnline: false, redirectUrl: '', totalQuota: 50, perUserLimit: 1, claimValidityDays: 0,
     endAt: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
     nationwide: false, locStates: [] as string[], city: '', lat: null as number | null, lng: null as number | null, radiusKm: 10,
   });
@@ -754,7 +781,7 @@ function CreateCampaign({ credits, onCreated }: { credits: number; onCreated: ()
           <div className="fade-up">
             <p className="font-extrabold text-[16px] mb-1">Quota & schedule — phir review</p>
             <p className="text-[12.5px] text-gray-400 mb-4">Aapke paas <b className="text-primary">{credits}</b> coupon credits hain.</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
                 <label className={labelCls}>Coupons (quota) *</label>
                 <input type="number" className={inputCls} value={form.totalQuota} onChange={(e) => set('totalQuota', parseInt(e.target.value) || 0)} />
@@ -767,7 +794,23 @@ function CreateCampaign({ credits, onCreated }: { credits: number; onCreated: ()
                 <label className={labelCls}>Valid till *</label>
                 <input type="date" className={inputCls} value={form.endAt} onChange={(e) => set('endAt', e.target.value)} />
               </div>
+              <div>
+                <label className={labelCls}>Code valid for</label>
+                <select className={inputCls} value={form.claimValidityDays}
+                  onChange={(e) => set('claimValidityDays', parseInt(e.target.value, 10))}>
+                  <option value={0}>Till the coupon ends</option>
+                  <option value={1}>1 day after claim</option>
+                  <option value={3}>3 days after claim</option>
+                  <option value={7}>7 days after claim</option>
+                  <option value={15}>15 days after claim</option>
+                  <option value={30}>30 days after claim</option>
+                </select>
+              </div>
             </div>
+            <p className="text-[11.5px] text-gray-400 mt-2">
+              If a customer does not redeem inside that window, the code expires and its slot
+              goes back to your quota — so the coupon can be claimed by somebody else.
+            </p>
 
             {/* Review summary */}
             <div className="mt-5 bg-band rounded-2xl p-4 flex gap-5 flex-wrap items-start">

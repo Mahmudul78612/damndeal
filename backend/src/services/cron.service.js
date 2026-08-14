@@ -146,6 +146,24 @@ function initCronJobs() {
     }
   });
 
+  // Coupon lifecycle — every 15 minutes. Frequent because both halves hand
+  // value back: an unredeemed code returns its slot to the quota, and a
+  // finished campaign returns its unused credits to the vendor.
+  cron.schedule("*/15 * * * *", async () => {
+    try {
+      const { runCouponLifecycle } = require("./couponLifecycle.service");
+      const out = await runCouponLifecycle();
+      if (out.claims.expired || out.campaigns.closed) {
+        console.log(
+          `[CRON] Coupon lifecycle: ${out.claims.expired} claims expired, ` +
+          `${out.campaigns.closed} campaigns closed, ${out.campaigns.refunded} credits returned`
+        );
+      }
+    } catch (err) {
+      console.error("[CRON] Coupon lifecycle error:", err.message);
+    }
+  });
+
   console.log("[CRON] All cron jobs initialized");
 }
 

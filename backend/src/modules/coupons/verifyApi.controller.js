@@ -35,7 +35,10 @@ async function verify(req, res) {
   const vendor = await requireApiVendor(req, res); if (!vendor) return;
   const claim = await findClaim(vendor, req.body.code);
   if (!claim) return res.status(404).json({ success: false, valid: false, message: "Code not found" });
-  const expired = claim.campaign?.endAt && claim.campaign.endAt < new Date();
+  const nowTs = new Date();
+  const expired =
+    (claim.expiresAt && claim.expiresAt < nowTs) ||
+    (claim.campaign?.endAt && claim.campaign.endAt < nowTs);
   return res.json({
     success: true,
     valid: claim.status === "claimed" && !expired,
@@ -45,7 +48,7 @@ async function verify(req, res) {
       offerText: claim.campaign?.offerText,
       offerType: claim.campaign?.offerType,
       offerValue: claim.campaign?.offerValue,
-      expiresAt: claim.campaign?.endAt,
+      expiresAt: claim.expiresAt || claim.campaign?.endAt,
     },
     claimedAt: claim.claimedAt,
     redeemedAt: claim.redeemedAt,
@@ -59,11 +62,12 @@ async function redeem(req, res) {
   if (!claim) return res.status(404).json({ success: false, message: "Code not found" });
   if (claim.status === "redeemed") return res.status(409).json({ success: false, message: "Code already redeemed", redeemedAt: claim.redeemedAt });
   if (claim.status !== "claimed") return res.status(410).json({ success: false, message: `Code is ${claim.status}` });
+  if (claim.expiresAt && claim.expiresAt < new Date()) return res.status(410).json({ success: false, message: "Code validity window has passed" });
   if (claim.campaign?.endAt && claim.campaign.endAt < new Date()) return res.status(410).json({ success: false, message: "Coupon expired" });
 
   // Single atomic flip — concurrent POS calls must yield exactly one redemption.
   const won = await CouponClaim.findOneAndUpdate(
-    { _id: claim._id, status: "claimed" },
+    { _id: claim._id, status: "claimed", $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] },
     { $set: { status: "redeemed", redeemedAt: new Date(), redeemedVia: "api" } },
     { new: true }
   );

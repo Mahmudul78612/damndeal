@@ -94,8 +94,15 @@ const couponCampaignSchema = new mongoose.Schema(
     claimedCount: { type: Number, default: 0 },
     redeemedCount: { type: Number, default: 0 },
     perUserLimit: { type: Number, default: 1 },
+    // How long a claimed code stays usable. 0 = until the campaign itself ends.
+    // A short window is what keeps a campaign moving: an unredeemed code frees
+    // its slot back to the quota instead of sitting in someone's wallet.
+    claimValidityDays: { type: Number, default: 0 },
     startAt: { type: Date, default: Date.now },
     endAt: { type: Date, required: true },
+    // Set once when the leftover quota is credited back to the vendor, so an
+    // expiry sweep that runs twice (or a later reject) cannot pay out twice.
+    creditsRefundedAt: { type: Date, default: null },
     status: {
       type: String,
       enum: ["draft", "pending", "active", "paused", "expired", "rejected"],
@@ -161,6 +168,9 @@ const couponClaimSchema = new mongoose.Schema(
     code: { type: String, required: true, unique: true }, // DD-XXXX-XXXX
     status: { type: String, enum: ["claimed", "redeemed", "expired", "cancelled"], default: "claimed", index: true },
     claimedAt: { type: Date, default: Date.now },
+    // Deadline for showing this code at the counter. Derived at claim time from
+    // the campaign's claimValidityDays, never later than the campaign's own end.
+    expiresAt: { type: Date, default: null, index: true },
     redeemedAt: { type: Date, default: null },
     redeemedVia: { type: String, enum: [null, "portal", "api"], default: null },
     region: { type: String, enum: ["IN", "US"], default: "IN" },
@@ -178,7 +188,16 @@ const couponClaimSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-couponClaimSchema.index({ campaign: 1, user: 1, slot: 1 }, { unique: true });
+// Partial on purpose: the slot only needs to be unique among claims that are
+// still live. Once a code expires unredeemed it releases its slot, so the
+// customer can claim the offer again while it is still running — and the
+// campaign gets its quota back (see the coupon lifecycle cron).
+// Changing this index on an existing database needs
+// src/scripts/reindex-coupon-claim-slot.js — Mongoose will not alter it.
+couponClaimSchema.index(
+  { campaign: 1, user: 1, slot: 1 },
+  { unique: true, partialFilterExpression: { status: { $in: ["claimed", "redeemed"] } } }
+);
 couponClaimSchema.index({ redeemedOutlet: 1, redeemedAt: -1 });
 couponClaimSchema.index({ org: 1, status: 1 });
 couponClaimSchema.index({ user: 1, createdAt: -1 });      // my-coupons page

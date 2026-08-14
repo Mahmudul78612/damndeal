@@ -41,6 +41,9 @@ export interface Campaign {
   redirectUrl?: string;
   claimedCount: number;
   totalQuota: number;
+  perUserLimit?: number;
+  /** Days a claimed code stays usable; 0 = until the campaign's own end date. */
+  claimValidityDays?: number;
   endAt: string;
   featured?: { active: boolean };
   vendor?: Vendor;
@@ -53,6 +56,7 @@ export interface Claim {
   code: string;
   status: "claimed" | "redeemed" | "expired" | "cancelled";
   claimedAt: string;
+  expiresAt?: string | null;
   redeemedAt?: string | null;
   campaign?: Campaign;
   vendor?: Vendor;

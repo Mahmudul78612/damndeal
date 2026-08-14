@@ -104,7 +104,7 @@ async function createCampaign(req, res) {
   const {
     title, category, offerType = "percent", offerValue = 0, offerText,
     description = "", instructions = "", terms = "", bannerImage = "", tileImage = "", isOnline = false, redirectUrl = "",
-    totalQuota = 50, perUserLimit = 1, endAt, location = {},
+    totalQuota = 50, perUserLimit = 1, claimValidityDays = 0, endAt, location = {},
     scope, outlets = [],
   } = req.body;
 
@@ -160,6 +160,7 @@ async function createCampaign(req, res) {
     category, offerType, offerValue, offerText: String(offerText).trim(),
     description, instructions, terms, bannerImage, tileImage, isOnline: !!isOnline, redirectUrl,
     totalQuota: quota, perUserLimit: Math.max(1, parseInt(perUserLimit) || 1),
+    claimValidityDays: Math.max(0, parseInt(claimValidityDays) || 0),
     location: finalLoc,
     scope: effectiveScope,
     outlets: effectiveScope === "selected" ? outletIds : [],
@@ -191,8 +192,15 @@ async function updateCampaign(req, res) {
   if (action === "pause" && c.status === "active") c.status = "paused";
   else if (action === "resume" && c.status === "paused") c.status = "active";
 
+  // Anything a shopper reads has to pass moderation again. Operational knobs
+  // (dates, quota, limits, pause) are the merchant's own business and stay live.
+  let needsReview = false;
   const editable = ["description", "instructions", "terms", "bannerImage", "tileImage", "redirectUrl"];
-  for (const k of editable) if (req.body[k] !== undefined) c[k] = req.body[k];
+  for (const k of editable) {
+    if (req.body[k] === undefined) continue;
+    if (String(req.body[k] ?? "") !== String(c[k] ?? "")) needsReview = true;
+    c[k] = req.body[k];
+  }
 
   // The headline is what a customer decided to claim on, so it is only
   // editable while nobody has claimed yet — otherwise an offer could be
@@ -201,11 +209,13 @@ async function updateCampaign(req, res) {
     if (req.body.title !== undefined) {
       const t = String(req.body.title).trim();
       if (!t) return res.status(400).json({ success: false, message: "Title cannot be empty" });
+      if (t !== c.title) needsReview = true;
       c.title = t;
     }
     if (req.body.offerText !== undefined) {
       const o = String(req.body.offerText).trim();
       if (!o) return res.status(400).json({ success: false, message: "Offer text cannot be empty" });
+      if (o !== c.offerText) needsReview = true;
       c.offerText = o;
     }
   } else if (req.body.title !== undefined || req.body.offerText !== undefined) {
@@ -218,16 +228,38 @@ async function updateCampaign(req, res) {
   if (req.body.perUserLimit !== undefined) {
     c.perUserLimit = Math.max(1, parseInt(req.body.perUserLimit, 10) || 1);
   }
+  if (req.body.claimValidityDays !== undefined) {
+    // Only affects codes claimed from now on — already-issued codes keep the
+    // deadline they were given, which is what the customer was shown.
+    c.claimValidityDays = Math.max(0, parseInt(req.body.claimValidityDays, 10) || 0);
+  }
 
   // Extending is free; pulling the end date in early is allowed too, but it
   // can never land before what has already been claimed against.
+  let revived = false;
   if (req.body.endAt !== undefined) {
     const end = new Date(req.body.endAt);
     if (isNaN(end.getTime())) {
       return res.status(400).json({ success: false, message: "Invalid end date" });
     }
     c.endAt = end;
-    if (c.status === "expired" && end > new Date()) c.status = "active";
+    if (c.status === "expired" && end > new Date()) { c.status = "active"; revived = true; }
+  }
+
+  // Reviving a campaign whose leftover quota was already credited back means
+  // buying that quota a second time — otherwise a merchant could bank the
+  // refund and keep running the same offer for free.
+  if (revived && c.creditsRefundedAt) {
+    const owed = Math.max(0, c.totalQuota - c.claimedCount);
+    if (owed > vendor.claimCredits) {
+      return res.status(402).json({
+        success: false, code: "INSUFFICIENT_CREDITS",
+        message: `This coupon's ${owed} unused credits were returned when it expired. Restarting it costs ${owed} credits and you have ${vendor.claimCredits} — buy a pack, or lower the quota first.`,
+      });
+    }
+    vendor.claimCredits -= owed;
+    await vendor.save();
+    c.creditsRefundedAt = null;
   }
 
   // Growing the quota takes more credits, exactly like creating a campaign.
@@ -254,8 +286,25 @@ async function updateCampaign(req, res) {
     }
   }
 
+  // Content changed on a coupon that shoppers can already see → back in the
+  // queue. A campaign still awaiting its first approval just stays pending,
+  // and a rejected one gets a clean slate to be looked at again.
+  let resubmitted = false;
+  if (needsReview && ["active", "paused", "rejected"].includes(c.status)) {
+    c.status = "pending";
+    c.rejectReason = "";
+    resubmitted = true;
+  }
+
   await c.save();
-  return res.json({ success: true, campaign: c });
+  return res.json({
+    success: true,
+    campaign: c,
+    resubmitted,
+    message: resubmitted
+      ? "Saved — your changes are with our team for review and will go live once approved."
+      : "Saved",
+  });
 }
 
 /* GET /api/coupons/vendor/stats */
@@ -415,13 +464,20 @@ async function verifyCode(req, res) {
   const vendor = await requireVendor(req, res); if (!vendor) return;
   const claim = await findClaimForVendor(vendor, req.body.code || "");
   if (!claim) return res.status(404).json({ success: false, valid: false, message: "Code not found for your business" });
-  const expired = claim.campaign?.endAt && claim.campaign.endAt < new Date();
+  // Two deadlines can bite: the code's own validity window, and the campaign
+  // end. The sweep that flips status runs on a schedule, so read the dates
+  // here rather than trusting status alone.
+  const now = new Date();
+  const expired =
+    (claim.expiresAt && claim.expiresAt < now) ||
+    (claim.campaign?.endAt && claim.campaign.endAt < now);
   return res.json({
     success: true,
     valid: claim.status === "claimed" && !expired,
     status: expired && claim.status === "claimed" ? "expired" : claim.status,
     claim: {
       code: claim.code, status: claim.status, claimedAt: claim.claimedAt, redeemedAt: claim.redeemedAt,
+      expiresAt: claim.expiresAt,
       customer: { name: claim.user?.name || "Customer", phone: claim.user?.phone || "" },
       campaign: { title: claim.campaign?.title, offerText: claim.campaign?.offerText, endAt: claim.campaign?.endAt },
     },
@@ -435,6 +491,12 @@ async function redeemCode(req, res) {
   if (!claim) return res.status(404).json({ success: false, message: "Code not found for your business" });
   if (claim.status === "redeemed") return res.status(409).json({ success: false, message: `Already redeemed on ${claim.redeemedAt?.toLocaleString()}` });
   if (claim.status !== "claimed") return res.status(410).json({ success: false, message: `This coupon is ${claim.status}` });
+  if (claim.expiresAt && claim.expiresAt < new Date()) {
+    return res.status(410).json({
+      success: false,
+      message: `This code was only valid until ${claim.expiresAt.toLocaleDateString()} — ask the customer to claim it again.`,
+    });
+  }
   if (claim.campaign?.endAt && claim.campaign.endAt < new Date()) return res.status(410).json({ success: false, message: "This coupon has expired" });
 
   // A cashier is pinned to their outlet: they may only redeem there, and the
@@ -457,7 +519,13 @@ async function redeemCode(req, res) {
   const redeemedAt = new Date();
   const billValue = Number(req.body.billValue);
   const won = await CouponClaim.findOneAndUpdate(
-    { _id: claim._id, status: "claimed" },
+    // The expiry guard belongs in the filter too, so a code cannot be redeemed
+    // by a request that started a moment before its window closed.
+    {
+      _id: claim._id,
+      status: "claimed",
+      $or: [{ expiresAt: null }, { expiresAt: { $gt: redeemedAt } }],
+    },
     {
       $set: {
         status: "redeemed", redeemedAt, redeemedVia: "portal",

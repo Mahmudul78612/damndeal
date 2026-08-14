@@ -75,8 +75,14 @@ async function moderateCampaign(req, res) {
   if (action === "approve") { c.status = "active"; c.rejectReason = ""; }
   else if (action === "reject") {
     c.status = "rejected"; c.rejectReason = reason;
-    // return the reserved credits to the vendor
-    await CouponVendor.updateOne({ _id: c.vendor }, { $inc: { claimCredits: c.totalQuota } });
+    // Return the unused credits — but only once. A campaign can now come back
+    // for review after an edit, and its leftovers may already have been paid
+    // back by the expiry sweep, so a blind refund here would pay twice.
+    if (!c.creditsRefundedAt) {
+      const owed = Math.max(0, c.totalQuota - c.claimedCount);
+      if (owed > 0) await CouponVendor.updateOne({ _id: c.vendor }, { $inc: { claimCredits: owed } });
+      c.creditsRefundedAt = new Date();
+    }
   }
   else if (action === "feature") {
     c.featured.active = true;
