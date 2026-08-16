@@ -22,6 +22,7 @@ const PERMISSIONS = [
   { key: "manage_kyc", label: "KYC Requests", group: "Business" },
   { key: "manage_orders", label: "Orders", group: "Business" },
   { key: "manage_shipping", label: "Shipping", group: "Business" },
+  { key: "manage_ddgo_stores", label: "DDGo Stores", group: "Business" },
   { key: "manage_returns", label: "Returns", group: "Business" },
   { key: "manage_payouts", label: "Payouts", group: "Business" },
   // Users

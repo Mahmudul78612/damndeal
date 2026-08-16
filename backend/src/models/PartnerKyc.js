@@ -53,6 +53,14 @@ const kycSchema = new mongoose.Schema(
     // ── Delivery Preferences ──
     selfDeliveryEnabled: { type: Boolean, default: false },
     freeDeliveryAbove: { type: Number, default: 0 },
+    /* How far this shop delivers, from its own pin. 0 means "use the platform
+       DDGo default" — a shop that never sets one keeps the old behaviour, so
+       adding this field changes nothing for existing partners. */
+    deliveryRadiusKm: { type: Number, default: 0, min: 0, max: 50 },
+    // Which storefront this shop serves. Existing shops are all India.
+    regions: { type: [String], enum: ["IN", "US"], default: ["IN"], index: true },
+    // Temporary switch for a shop that is closed or swamped.
+    isAcceptingOrders: { type: Boolean, default: true },
 
     // ── Review ──
     status: {

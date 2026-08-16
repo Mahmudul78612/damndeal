@@ -98,4 +98,43 @@ async function getMyKyc(req, res) {
   return res.json({ success: true, kyc });
 }
 
-module.exports = { submitKyc, getMyKyc };
+
+/* PUT /api/partner/delivery-settings
+   A shop's own delivery reach. Kept out of submitKyc on purpose: KYC is a
+   verified, admin-reviewed record, while this is an operational dial the
+   owner should be able to turn any day without re-verification. */
+async function updateDeliverySettings(req, res) {
+  const kyc = await PartnerKyc.findOne({ partner: req.user.userId });
+  if (!kyc) return res.status(404).json({ success: false, message: "Complete your KYC first" });
+  if (kyc.status !== "approved") {
+    return res.status(403).json({ success: false, message: "Your shop is still under review" });
+  }
+
+  if (req.body.deliveryRadiusKm !== undefined) {
+    const r = parseFloat(req.body.deliveryRadiusKm);
+    if (!Number.isFinite(r) || r < 0 || r > 50) {
+      return res.status(400).json({ success: false, message: "Delivery radius must be between 0 and 50 km" });
+    }
+    // 0 is meaningful: it hands the decision back to the platform default.
+    kyc.deliveryRadiusKm = r;
+  }
+  if (req.body.freeDeliveryAbove !== undefined) {
+    const f = parseFloat(req.body.freeDeliveryAbove);
+    if (Number.isFinite(f) && f >= 0) kyc.freeDeliveryAbove = f;
+  }
+  if (req.body.selfDeliveryEnabled !== undefined) kyc.selfDeliveryEnabled = !!req.body.selfDeliveryEnabled;
+  if (req.body.isAcceptingOrders !== undefined) kyc.isAcceptingOrders = !!req.body.isAcceptingOrders;
+
+  await kyc.save();
+  return res.json({
+    success: true,
+    settings: {
+      deliveryRadiusKm: kyc.deliveryRadiusKm,
+      freeDeliveryAbove: kyc.freeDeliveryAbove,
+      selfDeliveryEnabled: kyc.selfDeliveryEnabled,
+      isAcceptingOrders: kyc.isAcceptingOrders,
+    },
+  });
+}
+
+module.exports = { submitKyc, getMyKyc, updateDeliverySettings };

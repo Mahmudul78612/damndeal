@@ -1,0 +1,113 @@
+================================================================
+DDGO GROCERY — LOCATION / RADIUS CONTROL (Blinkit-style)
+Roadmap · written 2026-08-17
+================================================================
+
+DECISIONS (aapse confirm ho chuke)
+  Store model   : apne dark stores + partner vendors, dono
+  Serviceability: circle radius in km from the store pin
+  Region        : damndeal.in (IN) aur damndeal.com (US) dono
+  Quality bar   : "best wala system as its blinkit"
+
+
+----------------------------------------------------------------
+PEHLE SE KYA HAI (verify karke likha, guess nahi)
+----------------------------------------------------------------
+[HAI] DDGo hi grocery platform hai. Koi alag module nahi —
+      `platform: 'ddgo' | 'damndeal'` field in par lagta hai:
+      Product, Category, Banner, HomeSection, DesktopHomeSection.
+      Grocery categories (Vegetables & Fruits, Atta/Dail/Rice,
+      Chips & Namkeen, Tea/Coffee, Bath & Body …) already
+      regions:["IN"] pe hain.
+
+[HAI] Partner shop ka location — PartnerKyc.location (GeoJSON
+      Point) + 2dsphere index. Shop ka pin already stored hai.
+
+[HAI] Nearby shops — shop.controller.js geo query se distance
+      ke saath shops laata hai.
+
+[HAI] Radius check — fee.service.js me:
+        distanceKm > maxRadius  →  "Delivery not available
+        beyond X km"
+
+[HAI] DDGo fee settings — admin → Quick Commerce Settings:
+        ddgo_min_order_amount, ddgo_delivery_fee,
+        ddgo_delivery_fee_per_km, ddgo_free_delivery_above,
+        ddgo_platform_fee, ddgo_max_delivery_radius
+
+
+----------------------------------------------------------------
+KYA NAHI HAI (yahi banana hai)
+----------------------------------------------------------------
+[BLOCKER] Radius EK GLOBAL NUMBER hai, per-store nahi.
+      `ddgo_max_delivery_radius` poore platform pe ek hi value.
+      Blinkit me har dark store apna radius rakhta hai — 5 km
+      dense city me, 12 km outskirts pe. Abhi wo possible nahi.
+
+[BLOCKER] Apne dark stores ka koi concept hi nahi. Har store
+      ek partner se juda hai (PartnerKyc). DamnDeal khud ka
+      store nahi bana sakta.
+
+[BLOCKER] Serviceability check SIRF CHECKOUT PE hota hai.
+      Customer poora catalogue browse karta hai, cart bharta
+      hai, aur checkout pe pata chalta hai "not available".
+      Blinkit pehle location poochta hai, phir wahi dikhata
+      hai jo mil sakta hai.
+
+[BLOCKER] US pe radius bypass hai. fee.service me:
+        maxRadius = isUS ? Number.MAX_SAFE_INTEGER : …
+      US CJ dropshipping ke liye bana tha. DDGo US pe chalane
+      se pehle ye hatana padega, warna koi radius lagega hi
+      nahi.
+
+[GAP] PartnerKyc me `regions` field nahi — partner shop IN ka
+      hai ya US ka, ye batane ka tarika nahi.
+
+[GAP] Store timings nahi. Band store bhi serviceable dikhega.
+
+[GAP] Per-store stock nahi. Product ka stock product pe hai,
+      store pe nahi — do stores ka alag stock possible nahi.
+
+
+----------------------------------------------------------------
+PHASE 1 — Store + serviceability core          [ABHI BAN RAHA]
+----------------------------------------------------------------
+ 1.1  DarkStore model — apne stores ke liye
+        name, code, location (Point + 2dsphere), radiusKm,
+        address/city/state/pincode, timings, isActive,
+        regions, priority, contact
+ 1.2  PartnerKyc me deliveryRadiusKm + regions add
+ 1.3  serviceability.service.js — ek hi resolver jo dark
+        stores aur partner shops dono dekhta hai, har ek ka
+        APNA radius lagata hai, nearest serving store return
+        karta hai (distance + ETA ke saath)
+ 1.4  GET /user/serviceability?lat&lng  (public)
+ 1.5  Admin: dark store CRUD API + "Stores" page
+        (pin + radius + timings, live coverage preview)
+ 1.6  Partner: apna radius set karne ka API
+ 1.7  fee.service — global radius ki jagah resolved store ka
+        radius; US bypass hatao jab platform=ddgo ho
+
+PHASE 2 — Browse-time gating
+ 2.1  Location gate: "Deliver to" — app/web pe pehle location
+ 2.2  Product listing store ke hisaab se filter
+ 2.3  Out-of-area screen ("Coming soon in your area" + notify me)
+ 2.4  Cart ek store pe pinned; store badla to cart warning
+
+PHASE 3 — Orders through stores
+ 3.1  Order pe store ref, per-store order queue
+ 3.2  Delivery boy store se attached
+ 3.3  Store-wise reporting
+
+PHASE 4 — Per-store inventory
+ 4.1  StoreInventory (store × product): stock, price override
+ 4.2  Out-of-stock sirf us store pe
+
+PHASE 5 — US launch (damndeal.com)
+ 5.1  DDGo platform US region pe enable
+ 5.2  US grocery categories (India ka catalogue clone NAHI —
+      Atta/Namkeen US pe fit nahi baithega)
+ 5.3  USD fee settings for ddgo
+ 5.4  miles vs km display
+
+================================================================

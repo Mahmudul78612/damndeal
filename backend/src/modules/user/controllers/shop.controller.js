@@ -209,3 +209,43 @@ async function getShopProducts(req, res) {
 }
 
 module.exports = { getShops, getShop, getShopProducts };
+
+/* GET /api/user/serviceability?lat=&lng=
+   The storefront's first question on a DDGo screen: can we deliver here, and
+   from where. Answered before the customer browses, not at checkout — finding
+   out after filling a cart is what the old flow did wrong. */
+async function getServiceability(req, res) {
+  const lat = parseFloat(req.query.lat);
+  const lng = parseFloat(req.query.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return res.status(400).json({ success: false, message: "lat and lng are required" });
+  }
+  const region = String(req.headers["x-region"] || "IN").toUpperCase() === "US" ? "US" : "IN";
+  const { resolveServiceability } = require("../../../services/serviceability.service");
+  const out = await resolveServiceability({ lat, lng, region });
+
+  return res.json({
+    success: true,
+    serviceable: out.serviceable,
+    reason: out.reason,
+    message: out.message || null,
+    // Only the winning store is public. The full list is an internal detail
+    // and would leak our whole footprint to anyone with a map.
+    store: out.store
+      ? {
+          id: out.store.id,
+          type: out.store.type,
+          name: out.store.name,
+          city: out.store.city,
+          distanceKm: out.store.distanceKm,
+          etaMins: out.store.etaMins,
+          isOpen: out.store.isOpen,
+          minOrderAmount: out.store.minOrderAmount,
+          deliveryFee: out.store.deliveryFee,
+          freeDeliveryAbove: out.store.freeDeliveryAbove,
+        }
+      : null,
+  });
+}
+
+module.exports.getServiceability = getServiceability;

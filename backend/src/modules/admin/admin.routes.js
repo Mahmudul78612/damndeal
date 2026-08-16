@@ -19,6 +19,7 @@ const homepage = require("./controllers/homepage.controller");
 const deliveryBoy = require("./controllers/deliveryBoy.controller");
 const order = require("./controllers/order.controller");
 const shippingCtrl = require("./controllers/shipping.controller");
+const darkStoreCtrl = require("./controllers/darkstore.controller");
 const coupon = require("./controllers/coupon.controller");
 const offer = require("./controllers/offer.controller");
 const returnCtrl = require("./controllers/return.controller");
@@ -52,6 +53,7 @@ router.use("/partners", P("manage_partners"));
 router.use("/kyc", P("manage_kyc"));
 router.use("/orders", P("manage_orders"));
 router.use("/shipping", P("manage_shipping"));
+router.use("/dark-stores", P("manage_ddgo_stores"));
 router.use("/returns", P("manage_returns"));
 router.use("/payouts", P("manage_payouts"));
 router.use("/delivery-boys", P("manage_delivery"));
@@ -281,5 +283,14 @@ router.put("/investors/:id/kyc", investor.updateKyc);
 router.post("/investors/:id/credit-points", investor.creditPoints);
 router.put("/investors/purchases/:purchaseId", investor.updatePurchase);
 router.put("/investors/withdrawals/:withdrawalId", investor.updateWithdrawal);
+
+// ── DDGo dark stores (quick commerce fulfilment points) ───────────────────
+// "coverage" sits above "/:id" so the word is never read as an id.
+router.get("/dark-stores/coverage", darkStoreCtrl.coverage);
+router.get("/dark-stores", darkStoreCtrl.list);
+router.post("/dark-stores", darkStoreCtrl.create);
+router.get("/dark-stores/:id", darkStoreCtrl.getOne);
+router.put("/dark-stores/:id", darkStoreCtrl.update);
+router.delete("/dark-stores/:id", darkStoreCtrl.remove);
 
 module.exports = router;

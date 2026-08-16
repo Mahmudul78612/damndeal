@@ -52,7 +52,7 @@ function calcDistanceKm(lat1, lng1, lat2, lng2) {
  *
  * @returns {{ deliveryFee, freeDeliveryApplied, platformFee, distanceKm, estimatedDeliveryMinutes, minOrderAmount }}
  */
-async function calculateFees({ subtotal, discount = 0, distanceKm, freeDeliveryAbove = 0, platform = "damndeal", productOverrides = [], paymentMethod = null, region = "IN" }) {
+async function calculateFees({ subtotal, discount = 0, distanceKm, freeDeliveryAbove = 0, platform = "damndeal", productOverrides = [], paymentMethod = null, region = "IN", maxRadiusKmOverride = null }) {
   const isDdgo = platform === "ddgo";
   const isUS = region === "US"; // USA (damndeal.com) = card-only via Stripe, no COD
 
@@ -84,8 +84,19 @@ async function calculateFees({ subtotal, discount = 0, distanceKm, freeDeliveryA
     : (isDdgo && settings.ddgo_free_delivery_above != null) ? settings.ddgo_free_delivery_above : (settings.free_delivery_above ?? 0);
   const platformFee = isUS ? Number(settings.platform_fee_US ?? 0)
     : (isDdgo && settings.ddgo_platform_fee != null) ? settings.ddgo_platform_fee : (settings.platform_fee ?? 0);
-  const maxRadius = isUS ? Number.MAX_SAFE_INTEGER
-    : (isDdgo && settings.ddgo_max_delivery_radius != null) ? settings.ddgo_max_delivery_radius : (settings.max_delivery_radius_km ?? 20);
+  /* Delivery reach, most specific first:
+       1. the store that is actually fulfilling this order (passed in by the
+          caller, which is the only place that knows which store won);
+       2. the DDGo platform default;
+       3. the global default.
+     US used to be unbounded because it was CJ dropshipping, where a courier
+     ships anywhere. That must not survive into DDGo — a quick-commerce order
+     is delivered by a rider from one shop, and an unbounded radius there means
+     accepting orders nobody can fulfil. */
+  const maxRadius = Number.isFinite(maxRadiusKmOverride) && maxRadiusKmOverride > 0
+    ? maxRadiusKmOverride
+    : (isUS && !isDdgo) ? Number.MAX_SAFE_INTEGER
+      : (isDdgo && settings.ddgo_max_delivery_radius != null) ? settings.ddgo_max_delivery_radius : (settings.max_delivery_radius_km ?? 20);
   const minOrderAmount = isUS ? Number(settings.min_order_amount_US ?? 0)
     : (isDdgo && settings.ddgo_min_order_amount != null) ? settings.ddgo_min_order_amount : (settings.min_order_amount ?? 0);
 

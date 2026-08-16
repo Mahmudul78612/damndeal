@@ -88,10 +88,13 @@ async function getDeliveryEstimate(req, res) {
   let distanceKm = 0;
   let freeDeliveryAbove = 0;
 
+  let maxRadiusKmOverride = null;
   if (kyc && kyc.location && kyc.location.coordinates) {
     const [shopLng, shopLat] = kyc.location.coordinates;
     distanceKm = calcDistanceKm(address.lat, address.lng, shopLat, shopLng);
     freeDeliveryAbove = kyc.freeDeliveryAbove || 0;
+    // This shop's own reach beats the platform-wide number.
+    if (kyc.deliveryRadiusKm > 0) maxRadiusKmOverride = kyc.deliveryRadiusKm;
   }
 
   // Per-product overrides
@@ -113,6 +116,7 @@ async function getDeliveryEstimate(req, res) {
     productOverrides,
     paymentMethod,
     region: req.region === "US" ? "US" : "IN",
+    maxRadiusKmOverride,
   });
 
   if (fees.error) {
@@ -233,6 +237,8 @@ async function placeOrder(req, res) {
       productOverrides: products.map((p) => p.deliveryFee),
       paymentMethod,
       region: req.region === "US" ? "US" : "IN",
+      // This shop's own reach beats the platform-wide number.
+      maxRadiusKmOverride: kyc.deliveryRadiusKm > 0 ? kyc.deliveryRadiusKm : null,
     });
   } else {
     // Platform/admin order — use default fees

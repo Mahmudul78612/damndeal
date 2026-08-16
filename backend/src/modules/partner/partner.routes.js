@@ -24,6 +24,7 @@ router.get("/dashboard", dashboard.getDashboard);
 // KYC
 router.post("/kyc", uploadKycDocuments, kyc.submitKyc);
 router.get("/kyc", kyc.getMyKyc);
+router.put("/delivery-settings", kyc.updateDeliverySettings);
 
 // Products
 router.post("/products", uploadProductImages, product.createProduct);
