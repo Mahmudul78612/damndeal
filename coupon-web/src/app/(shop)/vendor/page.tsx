@@ -22,11 +22,19 @@ export default function VendorPortal() {
   const [checked, setChecked] = useState(false);
   const [tab, setTab] = useState<Tab>('dashboard');
 
+  const [loadError, setLoadError] = useState('');
+
   const loadVendor = useCallback(async () => {
     try {
       const r = await api.get('/coupons/vendor/me');
-      setVendor(r.vendor);
-    } catch {}
+      setVendor(r.vendor);          // null here genuinely means "not registered yet"
+      setLoadError('');
+    } catch (e: any) {
+      // A failed call is NOT the same as having no business. Swallowing it sent
+      // an existing merchant to the registration form, where re-registering
+      // was the obvious next move.
+      setLoadError(e?.message || 'Could not load your business right now');
+    }
     setChecked(true);
   }, []);
 
@@ -41,6 +49,14 @@ export default function VendorPortal() {
     <Center>
       <p className="font-bold text-gray-600 mb-4">Sign in to open your vendor portal</p>
       <button onClick={() => openLoginModal('/vendor')} className="px-6 py-2.5 bg-primary text-white rounded-xl font-bold text-sm">Sign in</button>
+    </Center>
+  );
+  if (loadError) return (
+    <Center>
+      <p className="font-bold text-gray-600 mb-1">Could not open your vendor portal</p>
+      <p className="text-[12.5px] text-gray-400 mb-4">{loadError}</p>
+      <button onClick={() => { setChecked(false); loadVendor(); }}
+        className="px-6 py-2.5 bg-primary text-white rounded-xl font-bold text-sm">Try again</button>
     </Center>
   );
   if (!vendor) return <Onboard onDone={loadVendor} />;

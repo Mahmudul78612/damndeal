@@ -1,3 +1,5 @@
+import { clearSsoCookie, syncSsoCookie } from './sso';
+
 const SERVER_API = process.env.NEXT_PUBLIC_API_URL || 'https://damndeal.in/api';
 const API_BASE = typeof window !== 'undefined' ? '/proxy-api' : SERVER_API;
 
@@ -87,27 +89,62 @@ async function request<T = any>(endpoint: string, options: FetchOptions = {}): P
   return res.json();
 }
 
+/**
+ * Swap the refresh token for a fresh access token.
+ *
+ * Three things beyond the obvious:
+ *  - concurrent 401s share one call, so a page that fires several requests at
+ *    once cannot rotate the refresh token out from under itself;
+ *  - the SSO cookie is rewritten on success, so the sibling site never adopts
+ *    a token that has already been replaced;
+ *  - a session that cannot be refreshed is cleared and announced, so the UI
+ *    can ask for a sign-in instead of showing "Invalid or expired token"
+ *    against a page that still looks signed in.
+ */
+let refreshing: Promise<string | null> | null = null;
+
+function endSession() {
+  localStorage.removeItem('dd_token');
+  localStorage.removeItem('dd_refresh');
+  clearSsoCookie();
+  window.dispatchEvent(new Event('dd:session-expired'));
+}
+
 async function tryRefresh(): Promise<string | null> {
-  const refreshToken = localStorage.getItem('dd_refresh');
-  if (!refreshToken) return null;
-  try {
-    const res = await fetch(`${API_BASE}/auth/refresh-token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
-    if (!res.ok) {
-      localStorage.removeItem('dd_token');
-      localStorage.removeItem('dd_refresh');
+  if (typeof window === 'undefined') return null;
+  if (refreshing) return refreshing;
+
+  refreshing = (async () => {
+    const refreshToken = localStorage.getItem('dd_refresh');
+    // No refresh token means this session was adopted from an older SSO cookie
+    // that only carried an access token. Nothing to renew — end it cleanly.
+    if (!refreshToken) {
+      if (localStorage.getItem('dd_token')) endSession();
       return null;
     }
-    const data = await res.json();
-    localStorage.setItem('dd_token', data.accessToken);
-    localStorage.setItem('dd_refresh', data.refreshToken);
-    return data.accessToken;
-  } catch {
-    return null;
-  }
+    try {
+      const res = await fetch(`${API_BASE}/auth/refresh-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!res.ok) { endSession(); return null; }
+      const data = await res.json();
+      if (!data?.accessToken) { endSession(); return null; }
+      localStorage.setItem('dd_token', data.accessToken);
+      if (data.refreshToken) localStorage.setItem('dd_refresh', data.refreshToken);
+      syncSsoCookie();
+      return data.accessToken as string;
+    } catch {
+      // A network blip must not sign anyone out — keep the session and let the
+      // caller surface the failure.
+      return null;
+    } finally {
+      setTimeout(() => { refreshing = null; }, 0);
+    }
+  })();
+
+  return refreshing;
 }
 
 // Simple in-flight deduplication for GET requests (prevents duplicate simultaneous calls)

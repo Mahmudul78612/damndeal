@@ -55,13 +55,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { loadUser(); }, [loadUser]);
 
+  // The API client raises this when a session can no longer be refreshed.
+  // Without it the page kept rendering as signed in while every call failed
+  // with "Invalid or expired token" — so ask for a sign-in instead.
+  useEffect(() => {
+    const onExpired = () => {
+      setUser(null);
+      setShowLoginModal(true);
+    };
+    window.addEventListener('dd:session-expired', onExpired);
+    return () => window.removeEventListener('dd:session-expired', onExpired);
+  }, []);
+
   const login = async (phone: string) => api.post('/auth/send-otp', { phone });
 
   const verifyOtp = async (phone: string, otp: string) => {
     const res = await api.post('/auth/verify-otp', { phone, otp });
     localStorage.setItem('dd_token', res.accessToken);
     localStorage.setItem('dd_refresh', res.refreshToken);
-    writeSsoCookie(res.accessToken);
+    writeSsoCookie(res.accessToken, res.refreshToken);
     setUser(res.user);
     return res;
   };
@@ -70,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await api.post('/auth/firebase-verify', { idToken });
     localStorage.setItem('dd_token', res.accessToken);
     localStorage.setItem('dd_refresh', res.refreshToken);
-    writeSsoCookie(res.accessToken);
+    writeSsoCookie(res.accessToken, res.refreshToken);
     setUser(res.user);
     return res;
   };
