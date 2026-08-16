@@ -207,3 +207,33 @@ ssh root@server "cd /var/www/damndeal && node src/scripts/<script>.js"
 - **"How do I deploy?"** → `SETUP.md` Section 8 + the deploy snippet above.
 - **Before editing files** → use `read_file` first; many files are large.
 - **Before running terminal commands on Windows** → prepend `$env:Path = "C:\Windows\System32\OpenSSH\;" + $env:Path` so `ssh`/`scp` are found.
+
+---
+
+## 💾 Database backups
+
+Nightly `mongodump` at **03:30 server time** via root crontab → `/root/mongo-backup.sh`
+(source of truth: `ops/mongo-backup.sh` in this repo).
+
+- Databases: `damndeal`, `adsservices`, `magicclub`, `roadhustler`
+- Output: `/var/backups/mongo/daily/<db>-YYYY-MM-DD.gz` (gzipped archives)
+- The 1st of each month is also copied to `/var/backups/mongo/monthly/`
+- Retention: 30 daily, 12 monthly · Log: `/var/log/mongo-backup.log`
+- An archive under 1KB is treated as a failed dump and deleted, so a truncated
+  file never masquerades as a backup
+
+**Restore one collection into a scratch database first — never straight over live:**
+```bash
+mongorestore --gzip --archive=/var/backups/mongo/daily/damndeal-2026-08-16.gz \
+  --nsInclude='damndeal.couponcampaigns' \
+  --nsFrom='damndeal.couponcampaigns' --nsTo='damndeal_verify.couponcampaigns' --drop
+# inspect damndeal_verify, copy back only what you need, then dropDatabase()
+```
+
+⚠️ These archives live on the **same disk as the database**. They cover a bad
+write or a dropped collection; they do NOT cover losing the VPS. Off-site copies
+are still an open item.
+
+⚠️ **Before editing production data to test something, dump the document first**
+(`mongosh --eval 'printjson(db.coll.findOne({_id:...}))'`). A coupon description
+was lost this way on 2026-08-15, before these backups existed.
