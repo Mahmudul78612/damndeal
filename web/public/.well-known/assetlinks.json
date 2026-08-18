@@ -1,0 +1,22 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.damndealappp.in",
+      "sha256_cert_fingerprints": [
+        "E6:BB:20:AE:5F:CC:7C:2B:19:47:5F:3B:94:AB:B0:C3:2D:D0:8E:CF:29:0D:E0:6D:D6:B9:66:79:C7:25:7B:DB"
+      ]
+    }
+  },
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.damndealcom.in",
+      "sha256_cert_fingerprints": [
+        "E6:BB:20:AE:5F:CC:7C:2B:19:47:5F:3B:94:AB:B0:C3:2D:D0:8E:CF:29:0D:E0:6D:D6:B9:66:79:C7:25:7B:DB"
+      ]
+    }
+  }
+]
