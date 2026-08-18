@@ -5,9 +5,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api, imgUrl, CURRENCY_SYMBOL } from '@/lib/api';
-import { useCart } from '@/context/CartContext';
+import { useDdgoCart } from '@/context/DdgoCartContext';
 import {
   ArrowLeft, Clock, Bike, Store, LoaderCircle, Plus, Minus, ShoppingBasket, MapPin,
+  AlertTriangle,
 } from 'lucide-react';
 import { readLocation } from '@/lib/ddgoLocation';
 
@@ -40,6 +41,7 @@ interface Item {
   name: string;
   images?: string[];
   unit?: string;
+  description?: string;
   sellingPrice: number;
   mrp: number;
   stock: number;
@@ -49,10 +51,13 @@ interface Item {
 export default function StorePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const cart = useCart();
+  const cart = useDdgoCart();
 
   const [store, setStore] = useState<StoreInfo | null>(null);
   const [items, setItems] = useState<Item[]>([]);
+  const [cats, setCats] = useState<{ _id: string; name: string }[]>([]);
+  const [activeCat, setActiveCat] = useState('');
+  const [detail, setDetail] = useState<Item | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -68,6 +73,7 @@ export default function StorePage() {
       const r = await api.get(`/user/ddgo/stores/${id}?lat=${loc.lat}&lng=${loc.lng}&limit=50`);
       setStore(r.store);
       setItems(r.products || []);
+      setCats(r.categories || []);
       setError('');
     } catch (e: any) {
       setError(e?.message || 'Could not open this store.');
@@ -144,49 +150,202 @@ export default function StorePage() {
           </div>
         )}
 
+        {cats.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-3 -mx-4 px-4">
+            <Chip label="All" active={!activeCat} onClick={() => setActiveCat('')} />
+            {cats.map((c) => (
+              <Chip key={c._id} label={c.name} active={activeCat === String(c._id)}
+                onClick={() => setActiveCat(activeCat === String(c._id) ? '' : String(c._id))} />
+            ))}
+          </div>
+        )}
+
         {items.length === 0 ? (
           <div className="py-20 text-center text-gray-400">
             <ShoppingBasket size={28} className="mx-auto mb-3" />
             <p className="font-semibold text-gray-600">Nothing on the shelf right now</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            {items.map((it) => (
-              <ItemCard key={it._id} it={it} store={store} cart={cart} />
-            ))}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pb-24">
+            {items
+              .filter((it) => !activeCat || String(it.category?._id) === activeCat)
+              .map((it) => (
+                <ItemCard key={it._id} it={it} store={store} cart={cart} onOpen={() => setDetail(it)} />
+              ))}
           </div>
         )}
+      </div>
+
+      {detail && <ProductSheet it={detail} store={store} cart={cart} onClose={() => setDetail(null)} />}
+      <SwitchStoreDialog cart={cart} />
+    </div>
+  );
+}
+
+/* ── Product detail ──
+   A bottom sheet rather than a page: in a fast tap-tap flow, navigating away
+   to read about a tomato and losing your scroll position is exactly the wrong
+   trade. All the information is already in the shelf payload. */
+function ProductSheet({ it, store, cart, onClose }: { it: Item; store: StoreInfo; cart: any; onClose: () => void }) {
+  const qty = cart.getQty(it._id);
+  const off = it.mrp > it.sellingPrice ? Math.round(((it.mrp - it.sellingPrice) / it.mrp) * 100) : 0;
+
+  const add = () => {
+    cart.addItem(
+      {
+        productId: it._id, name: it.name, image: (it.images || [])[0] || '',
+        price: it.sellingPrice, mrp: it.mrp, unit: it.unit, quantity: 1, stock: it.stock,
+      },
+      { id: store.id, name: store.name, type: store.type }
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/45" onClick={onClose}>
+      <div
+        className="bg-white w-full md:max-w-md rounded-t-2xl md:rounded-2xl max-h-[85vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative aspect-square md:aspect-[4/3] bg-gray-50">
+          {(it.images || [])[0]
+            ? <img src={imgUrl(it.images![0])} alt={it.name} className="w-full h-full object-cover" />
+            : <div className="w-full h-full grid place-items-center text-gray-200"><ShoppingBasket size={40} /></div>}
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 shadow grid place-items-center text-gray-600"
+          >
+            ✕
+          </button>
+          {off > 0 && (
+            <span className="absolute top-3 left-3 bg-[#0D7A30] text-white text-[11px] font-extrabold px-2 py-0.5 rounded">
+              {off}% OFF
+            </span>
+          )}
+        </div>
+
+        <div className="p-4">
+          <h2 className="text-[17px] font-extrabold text-gray-900 leading-snug">{it.name}</h2>
+          {it.unit && <p className="text-[12.5px] text-gray-400 mt-0.5">{it.unit}</p>}
+
+          <div className="flex items-center gap-2 mt-2">
+            <p className="text-[19px] font-extrabold text-gray-900">{CURRENCY_SYMBOL}{it.sellingPrice}</p>
+            {off > 0 && <p className="text-[13px] text-gray-400 line-through">{CURRENCY_SYMBOL}{it.mrp}</p>}
+            {it.stock <= 5 && (
+              <span className="ml-auto text-[11px] font-bold text-amber-600">Only {it.stock} left</span>
+            )}
+          </div>
+
+          {it.description && (
+            <p className="text-[13px] text-gray-600 leading-relaxed mt-3 whitespace-pre-line">{it.description}</p>
+          )}
+
+          <p className="text-[11.5px] text-gray-400 mt-3">
+            Sold by {store.name}{store.isOpen ? ` · delivery in ${store.etaMins} mins` : ' · currently closed'}
+          </p>
+
+          <div className="mt-4">
+            {qty > 0 ? (
+              <div className="flex items-center justify-between bg-[#0D7A30] text-white rounded-xl px-2 py-1">
+                <button onClick={() => cart.updateQty(it._id, qty - 1)} className="p-2.5"><Minus size={17} /></button>
+                <span className="text-[15px] font-extrabold">{qty} in basket</span>
+                <button
+                  onClick={() => cart.updateQty(it._id, Math.min(qty + 1, it.stock))}
+                  disabled={qty >= it.stock}
+                  className="p-2.5 disabled:opacity-40"
+                >
+                  <Plus size={17} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={add}
+                className="w-full py-3 rounded-xl bg-[#0D7A30] text-white font-extrabold text-[15px]"
+              >
+                Add to basket
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function ItemCard({ it, store, cart }: { it: Item; store: StoreInfo; cart: any }) {
+/* A rider collects from one shop, so a basket belongs to one shop. Switching
+   is offered as a decision rather than done silently. */
+function SwitchStoreDialog({ cart }: { cart: any }) {
+  if (!cart.pending) return null;
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center px-4 bg-black/45" onClick={cart.cancelSwitch}>
+      <div className="bg-white rounded-2xl max-w-sm w-full p-5 text-center" onClick={(e) => e.stopPropagation()}>
+        <div className="w-12 h-12 rounded-full bg-amber-50 grid place-items-center mx-auto mb-3">
+          <AlertTriangle size={22} className="text-amber-500" />
+        </div>
+        <h3 className="font-extrabold text-[16px] text-gray-900">Start a new basket?</h3>
+        <p className="text-[13px] text-gray-500 mt-1.5 leading-relaxed">
+          Your basket has items from <b className="text-gray-700">{cart.storeName}</b>. One rider
+          collects from one store, so adding from <b className="text-gray-700">{cart.pending.storeName}</b> will
+          empty it.
+        </p>
+        <div className="flex gap-2 mt-5">
+          <button
+            onClick={cart.cancelSwitch}
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 font-bold text-[13.5px] text-gray-600"
+          >
+            Keep it
+          </button>
+          <button
+            onClick={cart.confirmSwitch}
+            className="flex-1 py-2.5 rounded-xl bg-[#0D7A30] text-white font-extrabold text-[13.5px]"
+          >
+            Start new
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`shrink-0 px-3.5 py-1.5 rounded-full text-[12.5px] font-bold transition border ${
+        active
+          ? 'bg-[#0D7A30] text-white border-[#0D7A30]'
+          : 'bg-white text-gray-600 border-gray-200 hover:border-[#0D7A30]/50'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function ItemCard({ it, store, cart, onOpen }: { it: Item; store: StoreInfo; cart: any; onOpen: () => void }) {
   const qty = cart.getQty ? cart.getQty(it._id) : 0;
   const off = it.mrp > it.sellingPrice ? Math.round(((it.mrp - it.sellingPrice) / it.mrp) * 100) : 0;
 
   const add = () => {
-    cart.addItem({
-      productId: it._id,
-      name: it.name,
-      image: (it.images || [])[0] || '',
-      price: it.sellingPrice,
-      mrp: it.mrp,
-      unit: it.unit,
-      quantity: 1,
-      platform: 'ddgo',
-      /* The shop packing this order. The cart already refuses to hold two
-         shops at once, and this is the key it compares. For an onboarded
-         store that is the partner id checkout needs; for one of our own dark
-         stores it is the store id, whose checkout path is not wired yet. */
-      partnerId: store.id,
-      partnerName: store.name,
-    });
+    // Returns false when the basket belongs to another shop; the provider
+    // raises the switch dialog and nothing is lost in the meantime.
+    cart.addItem(
+      {
+        productId: it._id,
+        name: it.name,
+        image: (it.images || [])[0] || '',
+        price: it.sellingPrice,
+        mrp: it.mrp,
+        unit: it.unit,
+        quantity: 1,
+        stock: it.stock,
+      },
+      { id: store.id, name: store.name, type: store.type }
+    );
   };
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col">
-      <div className="relative aspect-square bg-gray-50">
+      <button onClick={onOpen} className="relative aspect-square bg-gray-50 block w-full text-left cursor-pointer">
         {(it.images || [])[0]
           ? <img src={imgUrl(it.images![0])} alt={it.name} className="w-full h-full object-cover" loading="lazy" />
           : <div className="w-full h-full grid place-items-center text-gray-200"><ShoppingBasket size={26} /></div>}
@@ -200,10 +359,12 @@ function ItemCard({ it, store, cart }: { it: Item; store: StoreInfo; cart: any }
             Only {it.stock} left
           </span>
         )}
-      </div>
+      </button>
 
       <div className="p-2 flex-1 flex flex-col">
-        <p className="text-[12.5px] font-semibold text-gray-800 leading-snug line-clamp-2">{it.name}</p>
+        <button onClick={onOpen} className="text-left">
+          <p className="text-[12.5px] font-semibold text-gray-800 leading-snug line-clamp-2">{it.name}</p>
+        </button>
         {it.unit && <p className="text-[11px] text-gray-400 mt-0.5">{it.unit}</p>}
 
         <div className="mt-auto pt-2 flex items-end justify-between gap-1">

@@ -2,6 +2,7 @@
 
 import { AuthProvider } from '@/context/AuthContext';
 import { CartProvider } from '@/context/CartContext';
+import { DdgoCartProvider } from '@/context/DdgoCartContext';
 import { ConfigProvider } from '@/context/ConfigContext';
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -9,7 +10,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <ConfigProvider>
       <AuthProvider>
         <CartProvider>
-          {children}
+          <DdgoCartProvider>
+            {children}
+          </DdgoCartProvider>
         </CartProvider>
       </AuthProvider>
     </ConfigProvider>

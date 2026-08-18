@@ -78,7 +78,7 @@ router.get("/app-config", async (req, res) => {
       // Coupon marketplace entry point (same-login via the shared .damndeal cookie)
       "coupon_market_enabled", "coupon_market_url", "coupon_market_label",
       // DDGo quick commerce — controls whether the storefront tab is offered
-      "ddgo_enabled"
+      "ddgo_enabled", "ddgo_logo_url"
     ];
     const docs = await AppSettings.find({ key: { $in: keys } });
     const config = {};

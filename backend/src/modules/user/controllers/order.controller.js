@@ -526,13 +526,20 @@ async function forwardCJForOrder(orderId) {
 
 // GET /user/orders
 async function getMyOrders(req, res) {
-  const { page = 1, limit = 20, status } = req.query;
+  const { page = 1, limit = 20, status, platform } = req.query;
   const filter = { user: req.user.userId };
   if (status) filter.status = status;
+  // The two storefronts keep separate order histories: a DDGo basket and a
+  // marketplace shipment are different promises, and mixing them in one list
+  // makes neither readable. Orders placed before this field existed have no
+  // platform, and read as marketplace.
+  if (platform === "ddgo") filter.platform = "ddgo";
+  else if (platform === "damndeal") filter.platform = { $in: ["damndeal", null] };
 
   const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
   const [orders, total] = await Promise.all([
     Order.find(filter).populate("partner", "name phone")
+      .populate("store", "name code city contactPhone")
       .populate("items.product", "images")
       .sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit, 10)),
     Order.countDocuments(filter),
@@ -548,6 +555,7 @@ async function getMyOrders(req, res) {
 async function getOrderDetail(req, res) {
   const order = await Order.findOne({ _id: req.params.id, user: req.user.userId })
     .populate("partner", "name phone")
+    .populate("store", "name code city address contactPhone")
     .populate("deliveryBoy", "name phone")
     .populate("items.product", "images");
 

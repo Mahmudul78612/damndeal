@@ -314,8 +314,9 @@ async function decorateStores(stores) {
       itemCount = await StoreInventory.countDocuments({
         store: st.id, isActive: true, stock: { $gt: 0 },
       });
-      const d = await DarkStore.findById(st.id).select("address").lean();
+      const d = await DarkStore.findById(st.id).select("address image").lean();
       st.address = d?.address || st.address;
+      logo = d?.image || "";
     } else {
       itemCount = await Product.countDocuments({
         partner: st.partner, platform: "ddgo",
@@ -404,13 +405,14 @@ async function ddgoStoreDetail(req, res) {
 
   let products = [];
   let total = 0;
+  const allCats = new Map();
 
   if (match.type === "darkstore") {
     const StoreInventory = require("../../../models/StoreInventory");
     const rows = await StoreInventory.find({ store: match.id, isActive: true, stock: { $gt: 0 } })
       .populate({
         path: "product",
-        select: "name images sellingPrice mrp unit category isActive approvalStatus",
+        select: "name images sellingPrice mrp unit description category isActive approvalStatus",
         populate: { path: "category", select: "name slug" },
       })
       .lean();
@@ -421,11 +423,18 @@ async function ddgoStoreDetail(req, res) {
       live = live.filter((r) => String(r.product.category?._id || r.product.category) === String(req.query.category));
     }
     total = live.length;
+    // Chips must span the whole shelf, not whichever page happens to be
+    // loaded — otherwise page one hides every other aisle.
+    for (const r of live) {
+      const c = r.product.category;
+      if (c && c._id) allCats.set(String(c._id), { _id: c._id, name: c.name });
+    }
     products = live.slice(skip, skip + limit).map((r) => ({
       _id: r.product._id,
       name: r.product.name,
       images: r.product.images,
       unit: r.product.unit,
+      description: r.product.description || "",
       category: r.product.category,
       // The shelf decides the price and the count; 0 means "use the catalogue".
       sellingPrice: r.sellingPrice > 0 ? r.sellingPrice : r.product.sellingPrice,
@@ -440,19 +449,24 @@ async function ddgoStoreDetail(req, res) {
     if (req.query.category) filter.category = req.query.category;
     const [list, count] = await Promise.all([
       Product.find(filter)
-        .select("name images sellingPrice mrp unit stock category")
+        .select("name images sellingPrice mrp unit stock description category")
         .populate("category", "name slug")
         .sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       Product.countDocuments(filter),
     ]);
     products = list;
     total = count;
+    const catIds = await Product.distinct("category", filter.category ? { ...filter, category: undefined } : filter);
+    const catDocs = await require("../../../models/Category").find({ _id: { $in: catIds } }).select("name").lean();
+    for (const c of catDocs) allCats.set(String(c._id), { _id: c._id, name: c.name });
   }
 
   return res.json({
     success: true,
     store,
     products,
+    // Every category this shop carries, independent of the current page.
+    categories: [...allCats.values()],
     pagination: { page, limit, total, pages: Math.ceil(total / limit) },
   });
 }

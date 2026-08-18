@@ -4,9 +4,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { api, imgUrl } from '@/lib/api';
+import { api, imgUrl, CURRENCY_SYMBOL } from '@/lib/api';
 import {
-  MapPin, Navigation, Clock, ChevronRight, Store, LoaderCircle, BellRing, Bike, ShoppingBasket,
+  MapPin, Navigation, Clock, ChevronRight, Store, LoaderCircle, BellRing, Bike, ShoppingBasket, Package,
 } from 'lucide-react';
 import {
   readLocation, saveLocation, clearLocation, requestBrowserLocation, DdgoLocation,
@@ -182,12 +182,12 @@ export default function GroceryPage() {
               </div>
             ) : stores.length ? (
               <>
-                <h2 className="text-[17px] font-bold text-gray-900 mb-1">
-                  {stores.length} {stores.length === 1 ? 'store' : 'stores'} near you
-                </h2>
-                <p className="text-[12.5px] text-gray-500 mb-4">
-                  Pick a store to see what it has in stock right now.
-                </p>
+                <div className="flex items-baseline justify-between gap-3 mb-3">
+                  <h2 className="text-[15px] font-extrabold text-gray-900">
+                    {stores.length} {stores.length === 1 ? 'store' : 'stores'} near you
+                  </h2>
+                  <span className="text-[11.5px] text-gray-400">Nearest first</span>
+                </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   {stores.map((st) => <StoreCard key={st.id} s={st} />)}
                 </div>
@@ -202,35 +202,63 @@ export default function GroceryPage() {
   );
 }
 
-/* ── Sticky header: where we are delivering, and how soon ── */
+/* ── Sticky header ──
+   The two things a customer checks constantly are how long it will take and
+   which address it is coming to, so those are the header rather than a logo. */
 function Header({ gate, loc, onChange }: { gate: Gate; loc: DdgoLocation | null; onChange: () => void }) {
   const store = gate.state === 'ok' || gate.state === 'closed' ? gate.store : null;
   return (
-    <div className="sticky top-0 z-30 bg-[#0D7A30] text-white">
-      <div className="max-w-[1200px] mx-auto px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[15px] font-extrabold leading-tight">DamnDeal Go</p>
-            {store ? (
-              <p className="text-[12px] text-white/85 flex items-center gap-1 mt-0.5">
-                <Clock size={12} />
-                {store.isOpen ? `Delivery in ${store.etaMins} mins` : 'Closed right now'}
-                <span className="text-white/50">·</span>
-                <span className="truncate">{store.name}</span>
+    <div className="sticky top-0 z-30 bg-white border-b border-gray-100 shadow-[0_1px_3px_rgba(16,24,40,.04)]">
+      <div className="max-w-[1200px] mx-auto px-4 py-2.5 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          {store && store.isOpen ? (
+            <>
+              <p className="text-[17px] font-extrabold text-gray-900 leading-tight">
+                Delivery in {store.etaMins} minutes
               </p>
-            ) : (
-              <p className="text-[12px] text-white/85 mt-0.5">Groceries in minutes</p>
-            )}
-          </div>
-
-          {loc && (
-            <button
-              onClick={onChange}
-              className="shrink-0 flex items-center gap-1 bg-white/15 hover:bg-white/25 rounded-full px-3 py-1.5 text-[12px] font-semibold transition"
-            >
-              <MapPin size={13} /> {loc.label} <ChevronRight size={13} />
-            </button>
+              <p className="text-[12px] text-gray-500 truncate mt-0.5">
+                From {store.name}
+              </p>
+            </>
+          ) : store ? (
+            <>
+              <p className="text-[17px] font-extrabold text-gray-900 leading-tight">Currently closed</p>
+              <p className="text-[12px] text-gray-500 truncate mt-0.5">{store.name}</p>
+            </>
+          ) : (
+            <>
+              <p className="text-[17px] font-extrabold text-gray-900 leading-tight">DamnDeal Go</p>
+              <p className="text-[12px] text-gray-500 mt-0.5">Groceries in minutes</p>
+            </>
           )}
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+        <Link
+          href="/grocery/orders"
+          prefetch
+          className="w-9 h-9 rounded-xl border border-gray-200 grid place-items-center text-gray-500 hover:border-[#0D7A30] hover:text-[#0D7A30] transition"
+          title="Your orders"
+        >
+          <Package size={16} />
+        </Link>
+        {loc && (
+          <button
+            onClick={onChange}
+            className="shrink-0 flex items-center gap-1.5 border border-gray-200 hover:border-[#0D7A30] rounded-xl px-3 py-2 transition text-left"
+          >
+            <MapPin size={15} className="text-[#0D7A30] shrink-0" />
+            <span className="min-w-0">
+              <span className="block text-[9.5px] font-bold uppercase tracking-wide text-gray-400 leading-none">
+                Deliver to
+              </span>
+              <span className="block text-[12.5px] font-semibold text-gray-800 truncate max-w-[120px] leading-tight mt-0.5">
+                {loc.label}
+              </span>
+            </span>
+            <ChevronRight size={14} className="text-gray-300 shrink-0" />
+          </button>
+        )}
         </div>
       </div>
     </div>
@@ -336,43 +364,55 @@ function StoreCard({ s }: { s: NearbyStore }) {
   return (
     <Link
       href={`/grocery/s/${s.id}`}
-      className={`flex gap-3 items-center bg-white border border-gray-200 rounded-2xl p-3 transition hover:shadow-md ${
-        s.isOpen ? '' : 'opacity-70'
+      prefetch
+      className={`group flex gap-3.5 items-center bg-white border border-gray-200 rounded-2xl p-3.5 transition-all hover:border-[#0D7A30]/40 hover:shadow-[0_4px_14px_rgba(16,24,40,.07)] ${
+        s.isOpen ? '' : 'opacity-65'
       }`}
     >
-      <div className="w-16 h-16 rounded-xl bg-gray-100 overflow-hidden shrink-0 grid place-items-center">
+      <div className="w-[60px] h-[60px] rounded-xl bg-gray-50 border border-gray-100 overflow-hidden shrink-0 grid place-items-center">
         {s.logo ? (
-          <Image src={imgUrl(s.logo)} alt={s.name} width={64} height={64} className="object-cover w-full h-full" />
+          <Image src={imgUrl(s.logo)} alt={s.name} width={60} height={60} className="object-cover w-full h-full" />
         ) : (
-          <Store size={24} className="text-gray-300" />
+          <Store size={22} className="text-gray-300" />
         )}
       </div>
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <p className="font-bold text-[14.5px] text-gray-900 truncate">{s.name}</p>
+          <p className="font-bold text-[15px] text-gray-900 truncate group-hover:text-[#0D7A30] transition">
+            {s.name}
+          </p>
           {!s.isOpen && (
-            <span className="shrink-0 text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+            <span className="shrink-0 text-[9.5px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
               Closed
             </span>
           )}
         </div>
-        <p className="text-[12px] text-gray-500 truncate mt-0.5">
-          {s.itemCount} {s.itemCount === 1 ? 'item' : 'items'}
-          {s.city ? ` · ${s.city}` : ''}
-        </p>
-        <div className="flex items-center gap-3 mt-1.5 text-[12px] text-gray-600">
-          <span className="flex items-center gap-1">
-            <Clock size={12} className={s.isOpen ? 'text-[#0D7A30]' : 'text-gray-400'} />
-            {s.isOpen ? `${s.etaMins} mins` : 'Opens later'}
-          </span>
-          <span className="flex items-center gap-1">
-            <Bike size={12} className="text-gray-400" /> {s.distanceKm} km
+
+        {/* ETA is the number people actually compare shops on, so it leads. */}
+        <div className="flex items-center gap-2 mt-1.5">
+          {s.isOpen ? (
+            <span className="inline-flex items-center gap-1 bg-[#E3F6E9] text-[#0D7A30] text-[11.5px] font-extrabold px-2 py-0.5 rounded-md">
+              <Clock size={11} /> {s.etaMins} min
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-500 text-[11.5px] font-bold px-2 py-0.5 rounded-md">
+              <Clock size={11} /> Opens later
+            </span>
+          )}
+          <span className="text-[11.5px] text-gray-500 flex items-center gap-1">
+            <Bike size={11} className="text-gray-400" /> {s.distanceKm} km
           </span>
         </div>
+
+        <p className="text-[11.5px] text-gray-400 truncate mt-1">
+          {s.itemCount} {s.itemCount === 1 ? 'item' : 'items'}
+          {s.city ? ` · ${s.city}` : ''}
+          {s.minOrderAmount > 0 ? ` · Min ${CURRENCY_SYMBOL}${s.minOrderAmount}` : ''}
+        </p>
       </div>
 
-      <ChevronRight size={18} className="text-gray-300 shrink-0" />
+      <ChevronRight size={18} className="text-gray-300 group-hover:text-[#0D7A30] transition shrink-0" />
     </Link>
   );
 }
