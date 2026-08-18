@@ -119,39 +119,6 @@ export default function MobileHeader() {
           }`}
           style={{ boxShadow: scrolled ? '0 2px 12px -6px rgba(17,9,40,.35)' : 'none' }}
         >
-          {/* Logo + cart row — folds away once the shopper scrolls in */}
-          <div
-            className={`flex items-center justify-between overflow-hidden transition-all duration-200 ${
-              compact ? 'max-h-0 opacity-0 mb-0' : 'max-h-14 opacity-100 mb-3'
-            }`}
-          >
-            {/* Logo */}
-            <Link href="/" className="shrink-0">
-              <Image 
-                src={brandLogo} 
-                alt={brandName} 
-                width={140} 
-                height={40}
-                className="h-8 w-auto object-contain"
-                priority
-                unoptimized
-              />
-            </Link>
-
-            {/* Cart Icon */}
-            <Link 
-              href="/cart" 
-              className="relative flex items-center justify-center p-2 rounded-lg transition hover:bg-white/20"
-            >
-              <ShoppingCart size={20} className="text-white" strokeWidth={2} />
-              {itemCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-4.5 h-4.5 flex items-center justify-center">
-                  {itemCount > 9 ? '9+' : itemCount}
-                </span>
-              )}
-            </Link>
-          </div>
-
           {/* Search Bar with Suggestions */}
           {/* Search row. When the logo row is folded away the cart rides here,
               so it is never out of reach while scrolling. */}
@@ -244,9 +211,7 @@ export default function MobileHeader() {
           <Link
             href="/cart"
             aria-label="Cart"
-            className={`relative shrink-0 grid place-items-center rounded-full bg-white/20 overflow-hidden transition-all duration-200 ${
-              compact ? 'w-9 h-9 opacity-100' : 'w-0 h-9 opacity-0 pointer-events-none'
-            }`}
+            className="relative shrink-0 grid place-items-center rounded-full bg-white/20 w-9 h-9"
           >
             <ShoppingCart size={18} className="text-white" strokeWidth={2} />
             {itemCount > 0 && (

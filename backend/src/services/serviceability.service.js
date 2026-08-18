@@ -21,8 +21,27 @@ const PartnerKyc = require("../models/PartnerKyc");
 // this way: fee.service must never require this file, or the two would cycle.
 const { getSettings, calcDistanceKm } = require("./fee.service");
 
-// Nothing can serve further than this, so it bounds the geo query.
-const MAX_POSSIBLE_RADIUS_KM = 50;
+// The geo query has to fetch every store that COULD cover the point, so its
+// ceiling is the largest radius any store currently has — not a fixed number.
+// A single tiny query, cached briefly, keeps normal operation tight (a few km)
+// while still finding a deliberately huge test store from across the country.
+const DEFAULT_CEILING_KM = 50;
+let _ceilingKm = DEFAULT_CEILING_KM;
+let _ceilingAt = 0;
+
+async function maxCoverageKm(region) {
+  // Reused for a run of calls before re-checking, so the extra query is rare.
+  if (_ceilingAt > 0) { _ceilingAt--; return _ceilingKm; }
+  const [ds, kyc] = await Promise.all([
+    DarkStore.findOne({ isActive: true, regions: region }).sort({ radiusKm: -1 }).select("radiusKm").lean(),
+    PartnerKyc.findOne({ status: "approved", regions: region, deliveryRadiusKm: { $gt: 0 } })
+      .sort({ deliveryRadiusKm: -1 }).select("deliveryRadiusKm").lean(),
+  ]);
+  const biggest = Math.max(DEFAULT_CEILING_KM, ds?.radiusKm || 0, kyc?.deliveryRadiusKm || 0);
+  _ceilingKm = biggest;
+  _ceilingAt = 200; // reuse for the next ~200 calls before re-checking
+  return biggest;
+}
 
 /** Rider time, rounded to something a customer can believe. */
 function etaMinutes(distanceKm, prepMins) {
@@ -49,10 +68,11 @@ function isPartnerOpen(kyc) {
 async function storesCovering({ lat, lng, region = "IN", includeClosed = false }) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return [];
 
+  const ceilingKm = await maxCoverageKm(region);
   const near = {
     $near: {
       $geometry: { type: "Point", coordinates: [lng, lat] },
-      $maxDistance: MAX_POSSIBLE_RADIUS_KM * 1000,
+      $maxDistance: ceilingKm * 1000,
     },
   };
 

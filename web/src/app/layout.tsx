@@ -118,9 +118,9 @@ export default function RootLayout({
       <body className="min-h-full">
         <InAppShellClass />
         <Providers>
+          <PlatformTabs />
           <MobileHeader />
           <DesktopNavbar />
-          <PlatformTabs />
           <main className="min-h-screen max-w-[1400px] mx-auto pb-16 md:pb-0">{children}</main>
           <Footer />
           <MobileNav />

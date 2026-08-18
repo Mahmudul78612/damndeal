@@ -473,3 +473,61 @@ async function ddgoStoreDetail(req, res) {
 
 module.exports.ddgoStores = ddgoStores;
 module.exports.ddgoStoreDetail = ddgoStoreDetail;
+
+/* GET /api/user/ddgo/stores/:id/product/:pid?lat=&lng=
+   One product as sold by one store — for the full-page product view.
+   Re-checks serviceability and reads the store's own price/stock, so a
+   bookmarked product link cannot show something unorderable or mispriced. */
+async function ddgoProduct(req, res) {
+  const lat = parseFloat(req.query.lat);
+  const lng = parseFloat(req.query.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return res.status(400).json({ success: false, message: "lat and lng are required" });
+  }
+  const region = String(req.headers["x-region"] || "IN").toUpperCase() === "US" ? "US" : "IN";
+  const { storesCovering } = require("../../../services/serviceability.service");
+
+  const covering = await storesCovering({ lat, lng, region, includeClosed: true });
+  const match = covering.find((sx) => String(sx.id) === String(req.params.id));
+  if (!match) {
+    return res.status(404).json({ success: false, code: "OUT_OF_RANGE", message: "This store does not deliver to your address." });
+  }
+  const [store] = await decorateStores([match]);
+
+  const product = await Product.findById(req.params.pid)
+    .select("name images sellingPrice mrp unit description category isActive approvalStatus platform")
+    .populate("category", "name slug")
+    .lean();
+  if (!product || product.platform !== "ddgo" || !product.isActive || product.approvalStatus !== "approved") {
+    return res.status(404).json({ success: false, message: "Product not available" });
+  }
+
+  let price = product.sellingPrice, mrp = product.mrp, stock = product.stock;
+  if (match.type === "darkstore") {
+    const StoreInventory = require("../../../models/StoreInventory");
+    const row = await StoreInventory.findOne({ store: match.id, product: product._id, isActive: true }).lean();
+    if (!row || row.stock <= 0) {
+      return res.status(404).json({ success: false, message: "This store is out of stock of that item." });
+    }
+    price = row.sellingPrice > 0 ? row.sellingPrice : product.sellingPrice;
+    mrp = row.mrp > 0 ? row.mrp : product.mrp;
+    stock = row.stock;
+  } else {
+    const p = await Product.findOne({ _id: product._id, partner: match.partner, stock: { $gt: 0 } }).select("stock").lean();
+    if (!p) return res.status(404).json({ success: false, message: "This store is out of stock of that item." });
+    stock = p.stock;
+  }
+
+  return res.json({
+    success: true,
+    store,
+    product: {
+      _id: product._id, name: product.name, images: product.images || [],
+      unit: product.unit, description: product.description || "",
+      category: product.category, sellingPrice: price, mrp, stock,
+    },
+  });
+}
+
+module.exports.ddgoProduct = ddgoProduct;
+

@@ -57,7 +57,6 @@ export default function StorePage() {
   const [items, setItems] = useState<Item[]>([]);
   const [cats, setCats] = useState<{ _id: string; name: string }[]>([]);
   const [activeCat, setActiveCat] = useState('');
-  const [detail, setDetail] = useState<Item | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -170,103 +169,13 @@ export default function StorePage() {
             {items
               .filter((it) => !activeCat || String(it.category?._id) === activeCat)
               .map((it) => (
-                <ItemCard key={it._id} it={it} store={store} cart={cart} onOpen={() => setDetail(it)} />
+                <ItemCard key={it._id} it={it} store={store} cart={cart} />
               ))}
           </div>
         )}
       </div>
 
-      {detail && <ProductSheet it={detail} store={store} cart={cart} onClose={() => setDetail(null)} />}
       <SwitchStoreDialog cart={cart} />
-    </div>
-  );
-}
-
-/* ── Product detail ──
-   A bottom sheet rather than a page: in a fast tap-tap flow, navigating away
-   to read about a tomato and losing your scroll position is exactly the wrong
-   trade. All the information is already in the shelf payload. */
-function ProductSheet({ it, store, cart, onClose }: { it: Item; store: StoreInfo; cart: any; onClose: () => void }) {
-  const qty = cart.getQty(it._id);
-  const off = it.mrp > it.sellingPrice ? Math.round(((it.mrp - it.sellingPrice) / it.mrp) * 100) : 0;
-
-  const add = () => {
-    cart.addItem(
-      {
-        productId: it._id, name: it.name, image: (it.images || [])[0] || '',
-        price: it.sellingPrice, mrp: it.mrp, unit: it.unit, quantity: 1, stock: it.stock,
-      },
-      { id: store.id, name: store.name, type: store.type }
-    );
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/45" onClick={onClose}>
-      <div
-        className="bg-white w-full md:max-w-md rounded-t-2xl md:rounded-2xl max-h-[85vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="relative aspect-square md:aspect-[4/3] bg-gray-50">
-          {(it.images || [])[0]
-            ? <img src={imgUrl(it.images![0])} alt={it.name} className="w-full h-full object-cover" />
-            : <div className="w-full h-full grid place-items-center text-gray-200"><ShoppingBasket size={40} /></div>}
-          <button
-            onClick={onClose}
-            className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 shadow grid place-items-center text-gray-600"
-          >
-            ✕
-          </button>
-          {off > 0 && (
-            <span className="absolute top-3 left-3 bg-[#0D7A30] text-white text-[11px] font-extrabold px-2 py-0.5 rounded">
-              {off}% OFF
-            </span>
-          )}
-        </div>
-
-        <div className="p-4">
-          <h2 className="text-[17px] font-extrabold text-gray-900 leading-snug">{it.name}</h2>
-          {it.unit && <p className="text-[12.5px] text-gray-400 mt-0.5">{it.unit}</p>}
-
-          <div className="flex items-center gap-2 mt-2">
-            <p className="text-[19px] font-extrabold text-gray-900">{CURRENCY_SYMBOL}{it.sellingPrice}</p>
-            {off > 0 && <p className="text-[13px] text-gray-400 line-through">{CURRENCY_SYMBOL}{it.mrp}</p>}
-            {it.stock <= 5 && (
-              <span className="ml-auto text-[11px] font-bold text-amber-600">Only {it.stock} left</span>
-            )}
-          </div>
-
-          {it.description && (
-            <p className="text-[13px] text-gray-600 leading-relaxed mt-3 whitespace-pre-line">{it.description}</p>
-          )}
-
-          <p className="text-[11.5px] text-gray-400 mt-3">
-            Sold by {store.name}{store.isOpen ? ` · delivery in ${store.etaMins} mins` : ' · currently closed'}
-          </p>
-
-          <div className="mt-4">
-            {qty > 0 ? (
-              <div className="flex items-center justify-between bg-[#0D7A30] text-white rounded-xl px-2 py-1">
-                <button onClick={() => cart.updateQty(it._id, qty - 1)} className="p-2.5"><Minus size={17} /></button>
-                <span className="text-[15px] font-extrabold">{qty} in basket</span>
-                <button
-                  onClick={() => cart.updateQty(it._id, Math.min(qty + 1, it.stock))}
-                  disabled={qty >= it.stock}
-                  className="p-2.5 disabled:opacity-40"
-                >
-                  <Plus size={17} />
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={add}
-                className="w-full py-3 rounded-xl bg-[#0D7A30] text-white font-extrabold text-[15px]"
-              >
-                Add to basket
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -321,7 +230,8 @@ function Chip({ label, active, onClick }: { label: string; active: boolean; onCl
   );
 }
 
-function ItemCard({ it, store, cart, onOpen }: { it: Item; store: StoreInfo; cart: any; onOpen: () => void }) {
+function ItemCard({ it, store, cart }: { it: Item; store: StoreInfo; cart: any }) {
+  const href = `/grocery/s/${store.id}/p/${it._id}`;
   const qty = cart.getQty ? cart.getQty(it._id) : 0;
   const off = it.mrp > it.sellingPrice ? Math.round(((it.mrp - it.sellingPrice) / it.mrp) * 100) : 0;
 
@@ -345,7 +255,7 @@ function ItemCard({ it, store, cart, onOpen }: { it: Item; store: StoreInfo; car
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col">
-      <button onClick={onOpen} className="relative aspect-square bg-gray-50 block w-full text-left cursor-pointer">
+      <Link href={href} prefetch className="relative aspect-square bg-gray-50 block w-full">
         {(it.images || [])[0]
           ? <img src={imgUrl(it.images![0])} alt={it.name} className="w-full h-full object-cover" loading="lazy" />
           : <div className="w-full h-full grid place-items-center text-gray-200"><ShoppingBasket size={26} /></div>}
@@ -359,12 +269,12 @@ function ItemCard({ it, store, cart, onOpen }: { it: Item; store: StoreInfo; car
             Only {it.stock} left
           </span>
         )}
-      </button>
+      </Link>
 
       <div className="p-2 flex-1 flex flex-col">
-        <button onClick={onOpen} className="text-left">
+        <Link href={href} prefetch className="text-left">
           <p className="text-[12.5px] font-semibold text-gray-800 leading-snug line-clamp-2">{it.name}</p>
-        </button>
+        </Link>
         {it.unit && <p className="text-[11px] text-gray-400 mt-0.5">{it.unit}</p>}
 
         <div className="mt-auto pt-2 flex items-end justify-between gap-1">

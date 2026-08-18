@@ -28,7 +28,7 @@ const darkStoreSchema = new mongoose.Schema(
       },
     },
     // How far this store delivers, measured straight from its pin.
-    radiusKm: { type: Number, default: 5, min: 0.5, max: 50 },
+    radiusKm: { type: Number, default: 5, min: 0.5, max: 6000 },
 
     // Storefront photo shown on the customer-facing store list. A URL or an
     // uploaded path — imgUrl on the client handles both.

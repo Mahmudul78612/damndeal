@@ -24,7 +24,7 @@ export default function DdgoCartBar() {
   if (pathname.startsWith('/grocery/cart') || pathname.startsWith('/checkout')) return null;
 
   return (
-    <div className="fixed bottom-0 inset-x-0 z-40 px-3 pb-3 pointer-events-none md:pb-4">
+    <div className="fixed inset-x-0 z-40 px-3 pointer-events-none bottom-16 pb-2 md:bottom-0 md:pb-4">
       <div className="max-w-[1200px] mx-auto pointer-events-auto">
         <div className="bg-[#0D7A30] text-white rounded-2xl shadow-[0_8px_28px_rgba(13,122,48,.35)] px-4 py-3 flex items-center justify-between gap-3">
           <div className="min-w-0">
