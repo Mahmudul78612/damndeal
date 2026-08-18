@@ -337,11 +337,26 @@ async function placeOrder(req, res) {
     }
   }
 
+  /* Commission, frozen now. The shop's negotiated rate wins; otherwise the
+     platform default for this storefront. Charged on the item subtotal - the
+     delivery fee belongs to whoever rode, not to the margin. */
+  let commissionAmount = 0;
+  if (kyc) {
+    let pct = kyc.commissionPercent > 0 ? kyc.commissionPercent : 0;
+    let flat = kyc.commissionFlat > 0 ? kyc.commissionFlat : 0;
+    if (!pct && !flat) {
+      const key = platform === "ddgo" ? "ddgo_commission_percent" : "commission_percent";
+      pct = parseFloat(await getSetting(key, 0)) || 0;
+    }
+    commissionAmount = Math.round((subtotal * pct / 100 + flat) * 100) / 100;
+  }
+
   const order = await Order.create({
     orderNumber: generateOrderNumber(),
     user: userId, partner: partnerId,
     platform: platform === "ddgo" ? "ddgo" : "damndeal",
     store: fulfillingStore,
+    commissionAmount,
     region: orderRegion,
     currency: orderRegion === "US" ? "USD" : "INR",
     taxAmount: salesTaxAmount,

@@ -50,6 +50,14 @@ const kycSchema = new mongoose.Schema(
     billingAddress: addressBlock,
     billingAddressSameAsShop: { type: Boolean, default: false },
 
+    /* ── Commission ──
+       What the platform keeps per order from this shop. Percent applies to
+       the item subtotal; flat is added per order. Zero means "use the
+       platform default from Settings", so a shop only carries a number when
+       someone deliberately negotiated one. */
+    commissionPercent: { type: Number, default: 0, min: 0, max: 50 },
+    commissionFlat: { type: Number, default: 0, min: 0 },
+
     // ── Delivery Preferences ──
     selfDeliveryEnabled: { type: Boolean, default: false },
     freeDeliveryAbove: { type: Number, default: 0 },

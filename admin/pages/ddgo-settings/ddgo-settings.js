@@ -7,12 +7,14 @@
 
   /* ── DDGO-specific settings keys ── */
   const DDGO_KEYS = [
+    { key: 'ddgo_logo_url',            label: 'DDGo logo URL',                    desc: 'Uploaded logo path or full URL. Leave blank to use the built-in DDGo wordmark.', type: 'text', icon: '🏷️' },
     { key: 'ddgo_enabled',             label: 'Show the DDGo tab',                desc: 'Type true to show the DamnDeal / DDGo tabs on the site. Keep it off until stores are stocked.', type: 'text', icon: '🟢' },
     { key: 'ddgo_min_order_amount',    label: 'Minimum Order Value (₹)',          desc: 'Orders below this amount will be blocked',       type: 'number', icon: '🛒' },
     { key: 'ddgo_delivery_fee',        label: 'Base Delivery Fee (₹)',            desc: 'Fixed delivery charge added to each order',       type: 'number', icon: '🚚' },
     { key: 'ddgo_delivery_fee_per_km', label: 'Delivery Fee Per KM (₹)',          desc: 'Extra charge per kilometer distance',             type: 'number', icon: '📏' },
     { key: 'ddgo_free_delivery_above', label: 'Free Delivery Above (₹)',          desc: 'Delivery is free for orders above this amount',   type: 'number', icon: '🎁' },
     { key: 'ddgo_platform_fee',        label: 'Platform Fee (₹)',                 desc: 'Platform service charge per order',               type: 'number', icon: '💳' },
+    { key: 'ddgo_commission_percent',  label: 'Default Commission (%)',           desc: 'Platform commission on each DDGo order. A shop with its own negotiated rate (Partners page) is not affected.', type: 'number', icon: '💰' },
     { key: 'ddgo_max_delivery_radius', label: 'Max Delivery Radius (KM)',         desc: 'Orders beyond this radius will be rejected',      type: 'number', icon: '📍' },
   ];
 

@@ -104,6 +104,8 @@ router.delete("/subcategories/:id", category.deleteSubCategory);
 router.get("/partners", partner.listPartners);
 router.get("/partners/:id", partner.getPartner);
 router.put("/partners/:id/toggle", partner.togglePartner);
+router.put("/partners/:id/commission", partner.setCommission);
+router.get("/partners/:id/settlement", partner.settlement);
 
 // KYC
 router.get("/kyc", kyc.listKyc);

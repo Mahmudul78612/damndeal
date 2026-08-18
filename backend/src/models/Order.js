@@ -129,6 +129,11 @@ const orderSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    /* Commission owed to the platform for this order, frozen at placement.
+       Recomputing at settlement from today's rate would silently reprice
+       history every time a rate changes. */
+    commissionAmount: { type: Number, default: 0 },
+
     platformFee: {
       type: Number,
       default: 0,
