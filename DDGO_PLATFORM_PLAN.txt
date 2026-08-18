@@ -1,0 +1,147 @@
+================================================================
+DDGO — QUICK COMMERCE MARKETPLACE (Blinkit / Zomato model)
+Plan · 2026-08-19
+================================================================
+
+AAPKA SCOPE (jo aapne bola)
+  - Store onboarding page
+  - Store ka apna panel
+  - Store bechega, hum payout denge
+  - Store khud delivery karega, apne panel se delivery boy add karega
+  - Store ke apne analytics
+  - Store products upload karega, hum approve karenge
+  - damndeal.com pe user ki location fetch
+  - DDGo pe aas-paas ke store ke products dikhenge (Zomato jaisa)
+  - Order store ke panel me aayega -> accept -> delivery boy assign
+  - DDGo ka ALAG admin panel, powerful
+  - Store portal me sab kuch
+
+
+----------------------------------------------------------------
+SACH: ISME SE BAHUT KUCH PEHLE SE BANA HAI
+(verify karke likha hai, guess nahi)
+----------------------------------------------------------------
+Backend partner API — LIVE hai aur poora hai:
+
+  [HAI] KYC onboarding        POST /partner/kyc  (docs upload ke saath)
+  [HAI] Products upload       POST /partner/products
+                              -> approvalStatus = "pending"
+                              -> admin approve karta hai (already wired)
+  [HAI] Order queue           GET  /partner/orders
+        accept                PUT  /partner/orders/:id/accept
+        reject                PUT  /partner/orders/:id/reject
+        ready                 PUT  /partner/orders/:id/ready
+        rider assign          PUT  /partner/orders/:id/assign-delivery
+        delivered             PUT  /partner/orders/:id/mark-delivered
+  [HAI] Apne delivery boys    POST/GET/PUT/DELETE /partner/delivery-boys
+  [HAI] Payouts               GET  /partner/payouts
+  [HAI] Dashboard/analytics   GET  /partner/dashboard
+  [HAI] Customers, returns, offers, subscription
+
+  Matlab aapka "store panel ka flow" backend me PEHLE SE poora hai.
+  Order aana -> accept -> rider assign -> delivered: sab maujood.
+
+Partner portal UI bhi bana hua hai (13 pages):
+  dashboard, kyc, products, orders, delivery-boys, payouts,
+  customers, returns, offers, subscription, tickets, recharges
+
+  [BLOCKER] Lekin ye LIVE NAHI HAI. config.js me
+            API_BASE = http://localhost:5000/api
+            aur nginx me koi partner subdomain nahi hai.
+            Bana hua hai, kabhi deploy nahi hua.
+
+Customer side:
+  [HAI] Zomato-style nearby shops — GET /user/shops?lat&lng
+        (2dsphere, distance ke saath) + /user/shops/:id/products
+  [HAI] Location gate + serviceability — /grocery (Phase 2 me banaya)
+  [HAI] Per-store radius, dark stores, shelf, order->store attribution
+        (Phase 1-4 me banaya)
+
+Product ka platform default = "ddgo"
+  -> partner jo product banata hai wo apne aap DDGo ka hota hai. Sahi hai.
+
+
+----------------------------------------------------------------
+JO SACH ME MISSING HAI
+----------------------------------------------------------------
+[1] Public onboarding page — "apni dukaan list karo" wala page
+    website pe hai hi nahi. Store apply kaise karega?
+
+[2] Partner portal live nahi. Deploy + prod API + apna subdomain.
+
+[3] /grocery flat product list dikhata hai, STORES nahi.
+    Zomato me pehle dukaanein dikhti hain, phir uski menu.
+    Abhi wo store-first flow nahi hai.
+
+[4] DDGo ka alag admin panel nahi. Abhi sab damndeal ke admin me
+    mila-jula hai (DDGo Stores ek page hai bas).
+
+[5] Store ke panel me DDGo wali cheezein nahi:
+    - live order queue (naya order aaye to awaaz/alert)
+    - store khula/band toggle
+    - apna delivery radius
+    - shelf/stock quick view
+
+[6] Payout DDGo ke liye tuned nahi (commission %, settlement cycle).
+
+
+----------------------------------------------------------------
+ARCHITECTURE — ek zaroori faisla
+----------------------------------------------------------------
+ALAG PANEL = HAAN.  ALAG DATABASE = NAHI.
+
+  DDGo admin panel aur store portal alag UI honge (aapne bola,
+  aur sahi bhi hai — quick commerce ka kaam alag hai).
+
+  LEKIN dono usi backend/models pe chalenge jo already live aur
+  tested hai: Product, Order, PartnerKyc, DeliveryBoy, Payout +
+  naye DarkStore, StoreInventory.
+
+  Kyun: alag database banane se ek hi cheez do jagah rehti hai —
+  ek order do jagah, ek payout do jagah. Wo hamesha aage jaake
+  aapas me mismatch karta hai. Panel alag, data ek.
+
+  Store ke do type, dono ek hi serviceability resolver se:
+    - DarkStore   = hamara apna store
+    - PartnerKyc  = onboard kiya hua vendor (geo + radius + region)
+
+
+----------------------------------------------------------------
+PHASES — is order me banega
+----------------------------------------------------------------
+P1  Store onboarding
+     1.1 Public page: /sell-on-ddgo  (kya milega + apply form)
+     1.2 Apply API: phone OTP -> basic details -> pin on map
+         -> radius -> docs
+     1.3 Admin approval queue (approve/reject + reason)
+     1.4 Approve pe store live: serviceability me aa jata hai
+
+P2  Store portal LIVE
+     2.1 partnerportal ko prod API pe point karo
+     2.2 nginx + subdomain (store.damndeal.in / .com)
+     2.3 Login (partner OTP) + KYC flow test
+     2.4 DDGo screens: live order queue, open/closed toggle,
+         delivery radius, shelf/stock
+
+P3  Customer side — Zomato flow
+     3.1 /grocery pe pehle NEARBY STORES dikhein
+     3.2 Store page -> us store ke products
+     3.3 Cart ek store ka (pehle se pinned hai)
+     3.4 damndeal.com pe bhi wahi (region-aware)
+
+P4  DDGo admin panel (alag, powerful)
+     4.1 Stores: apne + partner, approvals, radius, timings
+     4.2 Live orders: saare stores ke, filter, intervene
+     4.3 Products approval queue (DDGo only)
+     4.4 Payouts + commission
+     4.5 Analytics: store-wise, demand map, fulfilment
+     4.6 Riders: kis store ka kaun
+
+P5  Paisa
+     5.1 Commission % per store
+     5.2 Settlement cycle + payout generation
+     5.3 Store ko invoice
+
+================================================================
+ABHI KAHAN HAIN: P1 se shuru
+================================================================
