@@ -557,3 +557,60 @@ async function ddgoProduct(req, res) {
 
 module.exports.ddgoProduct = ddgoProduct;
 
+/* GET /api/user/ddgo/stores/:id/checkout-info?lat=&lng=
+   The one thing the DDGo checkout page needs that the store page does not:
+   which partner account the order is placed against. A partner shop IS that
+   account; a dark store's catalogue is owned by the platform account that its
+   shelf products belong to. Exactly one owner is required - a mixed-owner
+   shelf cannot be settled as one order, so it is refused loudly rather than
+   billed wrongly. */
+async function ddgoCheckoutInfo(req, res) {
+  const lat = parseFloat(req.query.lat);
+  const lng = parseFloat(req.query.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return res.status(400).json({ success: false, message: "lat and lng are required" });
+  }
+  const region = String(req.headers["x-region"] || "IN").toUpperCase() === "US" ? "US" : "IN";
+  const { storesCovering } = require("../../../services/serviceability.service");
+
+  const covering = await storesCovering({ lat, lng, region, includeClosed: true });
+  const match = covering.find((sx) => String(sx.id) === String(req.params.id));
+  if (!match) {
+    return res.status(404).json({ success: false, code: "OUT_OF_RANGE", message: "This store does not deliver to your address." });
+  }
+  if (!match.isOpen) {
+    return res.status(409).json({ success: false, code: "CLOSED", message: "This store is closed right now. You can order when it opens." });
+  }
+
+  let partnerId;
+  if (match.type === "partner") {
+    partnerId = match.partner;
+  } else {
+    const StoreInventory = require("../../../models/StoreInventory");
+    const rows = await StoreInventory.find({ store: match.id, isActive: true, stock: { $gt: 0 } })
+      .select("product").lean();
+    const owners = await Product.distinct("partner", { _id: { $in: rows.map((r) => r.product) } });
+    if (owners.length !== 1) {
+      return res.status(409).json({
+        success: false,
+        message: "This store cannot take orders right now. Please try another store.",
+      });
+    }
+    partnerId = String(owners[0]);
+  }
+
+  return res.json({
+    success: true,
+    partnerId,
+    store: {
+      id: match.id, type: match.type, name: match.name,
+      etaMins: match.etaMins, distanceKm: match.distanceKm,
+      minOrderAmount: match.minOrderAmount, deliveryFee: match.deliveryFee,
+      freeDeliveryAbove: match.freeDeliveryAbove,
+    },
+  });
+}
+
+module.exports.ddgoCheckoutInfo = ddgoCheckoutInfo;
+
+

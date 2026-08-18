@@ -25,6 +25,7 @@ export default function DdgoCartBar() {
   // checkout, and the product detail (its own Add bar).
   if (
     pathname.startsWith('/grocery/cart') ||
+    pathname.startsWith('/grocery/checkout') ||
     pathname.startsWith('/checkout') ||
     /\/grocery\/s\/[^/]+\/p\//.test(pathname)
   ) return null;

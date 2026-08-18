@@ -136,7 +136,7 @@ export default function DdgoCartPage() {
             </p>
           </div>
           <Link
-            href="/checkout"
+            href="/grocery/checkout"
             prefetch
             className="flex-1 py-3 rounded-xl bg-[#0D7A30] text-white font-extrabold text-[15px] text-center"
           >

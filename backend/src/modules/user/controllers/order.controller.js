@@ -180,6 +180,44 @@ async function placeOrder(req, res) {
   }
 
   const productMap = Object.fromEntries(products.map((p) => [p._id.toString(), p]));
+  /* DDGo: pin the fulfilling store now, before prices and stock are read.
+     A dark-store order is priced and counted from that store's SHELF - the
+     catalogue rows deliberately carry stock 0 (the shelf owns the count) and
+     a shelf line may override the price. Reading the catalogue here rejected
+     every dark-store order as out of stock. */
+  let fulfillingStore = null;
+  let shelfByProduct = {};
+  if (platform === "ddgo" && Number.isFinite(address.lat) && Number.isFinite(address.lng)) {
+    try {
+      const { storesCovering } = require("../../../services/serviceability.service");
+      const covering = await storesCovering({
+        lat: address.lat, lng: address.lng,
+        region: req.region === "US" ? "US" : "IN",
+        includeClosed: true,
+      });
+      const own = covering.find((c) => c.type === "darkstore");
+      if (own) fulfillingStore = own.id;
+    } catch (e) {
+      console.error("[ORDER] store resolve failed:", e.message);
+    }
+
+    // A quick-commerce order the rider cannot reach must not be accepted.
+    if (!kyc && !fulfillingStore) {
+      return res.status(400).json({
+        success: false,
+        message: "We do not deliver to this address yet. Change the delivery address or check back soon.",
+      });
+    }
+
+    if (fulfillingStore) {
+      const StoreInventoryM = require("../../../models/StoreInventory");
+      const rows = await StoreInventoryM.find({
+        store: fulfillingStore, product: { $in: productIds }, isActive: true,
+      }).lean();
+      shelfByProduct = Object.fromEntries(rows.map((r) => [String(r.product), r]));
+    }
+  }
+
   let subtotal = 0, totalGst = 0, costTotal = 0;
   const orderItems = [];
 
@@ -190,9 +228,16 @@ async function placeOrder(req, res) {
       ? p.cjVariants.find((v) => String(v.cjVid) === String(item.cjVid))
       : null;
 
-    const effectivePrice = selectedCjVariant?.sellingPrice ?? p.sellingPrice;
-    const effectiveMrp = selectedCjVariant?.mrp ?? p.mrp;
-    const effectiveStock = selectedCjVariant?.stock ?? p.stock;
+    const shelfRow = shelfByProduct[String(p._id)] || null;
+    const effectivePrice = shelfRow && shelfRow.sellingPrice > 0
+      ? shelfRow.sellingPrice
+      : (selectedCjVariant?.sellingPrice ?? p.sellingPrice);
+    const effectiveMrp = shelfRow && shelfRow.mrp > 0
+      ? shelfRow.mrp
+      : (selectedCjVariant?.mrp ?? p.mrp);
+    const effectiveStock = shelfRow
+      ? shelfRow.stock
+      : (selectedCjVariant?.stock ?? p.stock);
 
     if (effectiveStock < item.quantity) {
       return res.status(400).json({ success: false, message: `"${p.name}" is out of stock (${effectiveStock} left)` });
@@ -314,28 +359,6 @@ async function placeOrder(req, res) {
 
   // Region/currency from the request (damndeal.com => US/USD, else IN/INR)
   const orderRegion = req.region === "US" ? "US" : "IN";
-
-  /* Pin the fulfilling store onto the order.
-     Resolved once, here, and never recomputed: a store's radius or hours can
-     change tomorrow, but this order was packed by whoever covered the address
-     tonight, and the queue, the rider and the reporting all have to keep
-     pointing at them. Only our own stores are recorded - a partner-shop order
-     is already answered by `partner`. */
-  let fulfillingStore = null;
-  if (platform === "ddgo" && Number.isFinite(address.lat) && Number.isFinite(address.lng)) {
-    try {
-      const { storesCovering } = require("../../../services/serviceability.service");
-      const covering = await storesCovering({
-        lat: address.lat, lng: address.lng, region: orderRegion, includeClosed: true,
-      });
-      const own = covering.find((c) => c.type === "darkstore");
-      if (own) fulfillingStore = own.id;
-    } catch (e) {
-      // A resolver failure must not block a paid order; it only costs the
-      // store attribution, which an admin can set later.
-      console.error("[ORDER] store resolve failed:", e.message);
-    }
-  }
 
   /* Commission, frozen now. The shop's negotiated rate wins; otherwise the
      platform default for this storefront. Charged on the item subtotal - the

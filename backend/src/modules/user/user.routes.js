@@ -36,6 +36,7 @@ router.get("/ddgo/banners", shop.ddgoBanners);
 router.get("/ddgo/stores", shop.ddgoStores);
 router.get("/ddgo/stores/:id", shop.ddgoStoreDetail);
 router.get("/ddgo/stores/:id/product/:pid", shop.ddgoProduct);
+router.get("/ddgo/stores/:id/checkout-info", shop.ddgoCheckoutInfo);
 router.post("/serviceability/notify", shop.requestArea);
 router.get("/shops", shop.getShops);
 router.get("/shops/:id", shop.getShop);
