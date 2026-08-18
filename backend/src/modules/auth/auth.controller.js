@@ -34,7 +34,12 @@ async function handleVerifyOtp(req, res) {
   if (error) return res.status(400).json({ success: false, message: error.details[0].message });
 
   const { phone, otp } = req.body;
-  const result = await verifyOtp(phone, otp);
+
+  /* The console never accepts a fixed test code. sendOtp has already served
+     this request a real, expiring, rate-limited OTP (see otp.service), so the
+     owner signs in normally while the permanent code stops being a way in. */
+  const isAdminClient = (req.clientRole || "user") === "admin";
+  const result = await verifyOtp(phone, otp, { allowFixed: !isAdminClient });
   if (!result.success) return res.status(401).json(result);
 
   let role = req.clientRole || "user";
@@ -44,8 +49,14 @@ async function handleVerifyOtp(req, res) {
   // never as admin (ADMIN_PHONES stay full admins).
   if (role === "admin") {
     const allowedAdmins = (process.env.ADMIN_PHONES || "").split(",").map((p) => p.trim()).filter(Boolean);
-    const isAdminPhone = allowedAdmins.length === 0 || allowedAdmins.includes(phone);
-    if (!isAdminPhone) {
+    /* Fail closed. This used to read `length === 0 || includes(phone)`, so an
+       empty or unloaded ADMIN_PHONES handed full admin to every phone that
+       asked. An empty allow-list means nobody, not everybody. */
+    if (!allowedAdmins.length) {
+      console.error("[SECURITY] ADMIN_PHONES is empty — refusing all admin logins");
+      return res.status(403).json({ success: false, message: "Admin access is not configured" });
+    }
+    if (!allowedAdmins.includes(phone)) {
       staffDoc = await Staff.findOne({ phone, isActive: true });
       if (!staffDoc) {
         return res.status(403).json({ success: false, message: "This phone number is not authorized for admin access" });

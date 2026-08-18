@@ -237,3 +237,37 @@ are still an open item.
 ⚠️ **Before editing production data to test something, dump the document first**
 (`mongosh --eval 'printjson(db.coll.findOne({_id:...}))'`). A coupon description
 was lost this way on 2026-08-15, before these backups existed.
+
+
+---
+
+## 🔐 Admin access & the fixed-OTP rule
+
+Admin sign-in is OTP-based and gated by `ADMIN_PHONES` in `.env`.
+`x-client-type: admin` asks for the console; the phone must be on that list,
+otherwise it must match an active `Staff` record and logs in as `staff`.
+Role `admin` bypasses every `requirePermission` check — staff do not.
+
+**A number with a fixed test OTP can never sign into the console.**
+`TEST_PHONE_OTPS` / `TEST_PHONES` exist so the owner and the app-store reviewer
+can sign in without waiting for an SMS. That code never changes, never expires,
+skips the send rate limit, and one unauthenticated send resets the attempt
+counter — so it is a permanent 6-digit password with unlimited guesses. Fine for
+a shopping account; a standing back door for an admin one.
+
+How it is enforced (all three, so config alone cannot reopen it):
+- `sendOtp` ignores the fixed code when the request carries
+  `x-client-type: admin` and sends a real, expiring OTP instead.
+- `verifyOtp(phone, otp, { allowFixed:false })` is what the admin path calls,
+  so the fixed code falls through to the normal attempt-limited check.
+- The send rate limiter no longer exempts admin-panel requests.
+
+Allow-listed admin phones DO skip the bot guard's IP reputation block, so a VPN
+or a flagged ISP cannot lock the owner out. The security boundary there is the
+real OTP on a handset, not the IP; rate limits and attempt counts still apply.
+
+`ADMIN_PHONES` **fails closed**: an empty or unloaded value refuses every admin
+login. It previously granted full admin to any phone that asked.
+
+⚠️ Never add an `ADMIN_PHONES` number to `TEST_PHONE_OTPS`. The code will refuse
+it, but the intent is wrong — use a separate number for testing.

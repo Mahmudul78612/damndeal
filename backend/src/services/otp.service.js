@@ -110,11 +110,19 @@ async function sendOtp(phone, ipOrReq) {
   const clientIp = req ? botGuard.clientIp(req) : ipOrReq;
   const redis = await getRedisClient();
 
-  // --- Fixed-OTP numbers (owner/admin + store review accounts) ---
-  // Deliberately first: these skip every rate limit, cooldown, daily cap and
-  // bot check, and never send a real SMS. Nothing is spent and repeated
-  // testing is never throttled. Safe because it is a fixed allow-list.
-  const fixed = fixedOtpFor(phone);
+  /* --- Fixed-OTP numbers (the owner + the app-store review accounts) ---
+     Deliberately first: these skip every rate limit, cooldown, daily cap and
+     bot check, and never send a real SMS, so repeated testing costs nothing
+     and is never throttled.
+
+     Being on the allow-list is NOT by itself safe. The code never changes,
+     never expires and cannot be throttled, and the attempt counter resets on
+     one unauthenticated send - so it is a permanent six digit password with
+     unlimited guesses. That is fine for a shopping account and unacceptable
+     for the console, which is why an admin-panel request always takes the
+     real SMS path below and handleVerifyOtp refuses these numbers for admin. */
+  const wantsAdmin = String(req?.headers?.["x-client-type"] || "").toLowerCase() === "admin";
+  const fixed = wantsAdmin ? null : fixedOtpFor(phone);
   if (fixed) {
     await redis.setEx(otpKey(phone), OTP_EXPIRY, fixed);
     await redis.del(attemptKey(phone));
@@ -134,7 +142,19 @@ async function sendOtp(phone, ipOrReq) {
   // who rotates both, so this looks at the signals rotation cannot hide:
   // subnet velocity, one device asking for many numbers, scripted clients,
   // sequential number patterns, and a platform-wide daily spend cap.
-  if (req) {
+  /* An allow-listed admin phone is never locked out by IP reputation.
+     The bot guard exists to stop an attacker burning SMS credit on numbers we
+     do not know; here the number is on a fixed list and the code still goes to
+     a handset the attacker does not hold, so the IP is not the security
+     boundary and blocking on it only risks locking the owner out of the
+     console from a VPN or a flagged ISP. Rate limits, real expiry and the
+     attempt counter all still apply. */
+  // Both sides normalised: the env holds +91XXXXXXXXXX while normPhone yields
+  // the last ten digits, so a raw comparison would never match.
+  const adminList = (process.env.ADMIN_PHONES || "").split(",").map(normPhone).filter(Boolean);
+  const isAllowlistedAdmin = wantsAdmin && adminList.includes(normPhone(phone));
+
+  if (req && !isAllowlistedAdmin) {
     const verdict = await botGuard.assess(req, phone);
     if (verdict.action === "block") {
       await botGuard.recordBlock(req, phone, verdict);
@@ -281,11 +301,20 @@ async function sendOtp(phone, ipOrReq) {
   return { success: true, message: "OTP sent successfully" };
 }
 
-async function verifyOtp(phone, otp) {
+/**
+ * @param {Object} [opts]
+ * @param {Boolean} [opts.allowFixed=true]  accept this number's fixed test code.
+ *   The admin console passes false: it is served a real, expiring, rate-limited
+ *   OTP by sendOtp, so the permanent code must not also open it. Refusing the
+ *   number outright would lock the owner out instead, since the real code is
+ *   the one they are now holding.
+ */
+async function verifyOtp(phone, otp, opts = {}) {
   const redis = await getRedisClient();
+  const allowFixed = opts.allowFixed !== false;
 
   // --- Fixed-OTP numbers: their code always verifies, with no attempt limit ---
-  const fixed = fixedOtpFor(phone);
+  const fixed = allowFixed ? fixedOtpFor(phone) : null;
   if (fixed && String(otp) === fixed) {
     await redis.del(otpKey(phone));
     await redis.del(attemptKey(phone));

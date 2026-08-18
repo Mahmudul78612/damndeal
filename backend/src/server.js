@@ -106,7 +106,12 @@ const otpLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
-    try { return !!fixedOtpFor(req.body && req.body.phone); } catch { return false; }
+    try {
+      // An admin-panel request sends a real SMS and guards the console, so it
+      // is throttled like any other, fixed-OTP number or not.
+      if (String(req.headers["x-client-type"] || "").toLowerCase() === "admin") return false;
+      return !!fixedOtpFor(req.body && req.body.phone);
+    } catch { return false; }
   },
 });
 app.use("/api/auth/send-otp", otpLimiter);
