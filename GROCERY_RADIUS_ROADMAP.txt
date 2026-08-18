@@ -136,9 +136,44 @@ PHASE 3 — Orders through stores                       [HO GAYA]
  Admin → DDGo Stores pe ab 3 tabs hain:
    Stores · Where people ask · Performance
 
-PHASE 4 — Per-store inventory
- 4.1  StoreInventory (store × product): stock, price override
- 4.2  Out-of-stock sirf us store pe
+----------------------------------------------------------------
+PHASE 4 — Per-store inventory                         [HO GAYA]
+----------------------------------------------------------------
+ 4.1  [x] StoreInventory (store x product): stock, price
+          override, MRP override, low-stock threshold, on/off.
+          Unique index {store, product}.
+ 4.2  [x] Stock ab store ka apna hai. Ek store pe khatam hone se
+          doosre pe koi asar nahi, aur catalogue stock alag.
+          Order pe guarded decrement — do customer ek saath
+          aakhri item nahi le sakte.
+ 4.3  [x] Cancel pe stock usi shelf pe wapas jaata hai jahan se
+          gaya tha.
+ 4.4  [x] Admin APIs: shelf list (low-stock filter ke saath),
+          single upsert, bulk stocking (500 tak), remove, aur
+          "abhi tak nahi rakha" wale products ka picker.
+
+ Rule: jis product ki shelf pe row nahi, wo store rakhta hi
+ nahi. Naya store KHAALI shuru hota hai — apne aap poora
+ catalogue claim nahi karta.
+
+ Price: 0 ka matlab "catalogue wala price use karo". Isliye
+ catalogue me price badlo to har us store pe pahunchega jisne
+ apna alag price set nahi kiya.
+
+----------------------------------------------------------------
+PLATFORM TABS — DamnDeal / DDGo                       [HO GAYA]
+----------------------------------------------------------------
+ [x] Website ke upar do tabs, Flipkart jaisa:
+       DamnDeal (Shopping)  |  DDGo (In minutes)
+     DamnDeal -> /          DDGo -> /grocery
+ [x] Setting se controlled: `ddgo_enabled` = true karne pe hi
+     dikhenge. Abhi OFF hain — khaali store ka tab dikhane se
+     accha hai na dikhaye.
+     Admin -> Quick Commerce Settings -> "Show the DDGo tab"
+
+ NOTE: app bhi damndeal.in ka webview hai, isliye website pe
+ tabs aate hi app me bhi aa jayenge — app update ki zarurat
+ nahi.
 
 PHASE 5 — US launch (damndeal.com)
  5.1  DDGo platform US region pe enable

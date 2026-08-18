@@ -110,6 +110,7 @@ async function browseProducts(req, res) {
      narrows the listing to the shops that actually reach them; without one it
      stays open, because the storefront asks for location before it lists
      anything and an early call should not look like an empty catalogue. */
+  let shelf = null;          // store's own stock/price, applied after the query
   if (platform === "ddgo" && lat && lng) {
     const { storesCovering } = require("../../../services/serviceability.service");
     const stores = await storesCovering({
@@ -123,14 +124,41 @@ async function browseProducts(req, res) {
         pagination: { page: pageNum, limit: limitNum, total: 0, pages: 0 },
       });
     }
+
     const partnerIds = stores.filter((s) => s.type === "partner").map((s) => s.partner);
-    const hasDarkStore = stores.some((s) => s.type === "darkstore");
-    // A dark store carries the central catalogue, which is the stock that
-    // belongs to no partner. Per-store inventory is a later phase; until then
-    // "covered by our own store" means those items are reachable.
-    filter.$or = hasDarkStore
-      ? [{ partner: { $in: partnerIds } }, { partner: null }]
-      : [{ partner: { $in: partnerIds } }];
+    const darkStore = stores.find((s) => s.type === "darkstore");
+
+    const or = [];
+    if (partnerIds.length) or.push({ partner: { $in: partnerIds } });
+
+    if (darkStore) {
+      /* A dark store sells exactly what is on its shelf. A product with no row
+         is not carried here — that is the default, so a new store starts empty
+         and is stocked deliberately instead of silently claiming the whole
+         catalogue. */
+      const StoreInventory = require("../../../models/StoreInventory");
+      const rows = await StoreInventory.find({
+        store: darkStore.id, isActive: true, stock: { $gt: 0 },
+      }).select("product stock sellingPrice mrp").lean();
+
+      if (rows.length) {
+        shelf = Object.fromEntries(rows.map((r) => [String(r.product), r]));
+        or.push({ _id: { $in: rows.map((r) => r.product) } });
+      }
+    }
+
+    if (!or.length) {
+      // Covered, but nothing is actually stocked for this address.
+      return res.json({
+        success: true, products: [], serviceable: true,
+        pagination: { page: pageNum, limit: limitNum, total: 0, pages: 0 },
+      });
+    }
+    filter.$or = or;
+    /* The product-level stock check would hide an item the store has in the
+       aisle but head office marked as zero. On this path the shelf is the
+       authority, so drop it and let the inventory rows decide. */
+    if (shelf) delete filter.stock;
   }
 
   let sort = { createdAt: -1 };
@@ -157,6 +185,17 @@ async function browseProducts(req, res) {
     const kyc = kycMap[p.partner?._id?.toString()];
     obj.shopName = kyc?.organizationName || "";
     obj.shopCity = kyc?.city || "";
+
+    /* What this store charges and holds wins over the catalogue defaults.
+       A zero override means "no override", so a catalogue-wide price change
+       still reaches every store that has not set its own. */
+    const row = shelf ? shelf[String(p._id)] : null;
+    if (row) {
+      obj.stock = row.stock;
+      if (row.sellingPrice > 0) obj.sellingPrice = row.sellingPrice;
+      if (row.mrp > 0) obj.mrp = row.mrp;
+      obj.fromStore = true;
+    }
     return obj;
   });
 

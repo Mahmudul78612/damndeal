@@ -7,6 +7,7 @@
 
   /* ── DDGO-specific settings keys ── */
   const DDGO_KEYS = [
+    { key: 'ddgo_enabled',             label: 'Show the DDGo tab',                desc: 'Type true to show the DamnDeal / DDGo tabs on the site. Keep it off until stores are stocked.', type: 'text', icon: '🟢' },
     { key: 'ddgo_min_order_amount',    label: 'Minimum Order Value (₹)',          desc: 'Orders below this amount will be blocked',       type: 'number', icon: '🛒' },
     { key: 'ddgo_delivery_fee',        label: 'Base Delivery Fee (₹)',            desc: 'Fixed delivery charge added to each order',       type: 'number', icon: '🚚' },
     { key: 'ddgo_delivery_fee_per_km', label: 'Delivery Fee Per KM (₹)',          desc: 'Extra charge per kilometer distance',             type: 'number', icon: '📏' },
@@ -96,17 +97,24 @@
       var val = input.value.trim();
       if (val === '') continue;
 
-      var numVal = parseFloat(val);
-      if (isNaN(numVal) || numVal < 0) {
-        showToast(cfg.label + ' must be a valid positive number', 'error');
-        input.focus();
-        btn.disabled = false;
-        btn.textContent = '💾 Save All';
-        return;
+      // Not every setting on this page is a number any more — the DDGo
+      // on/off switch is a plain value, and forcing it through parseFloat
+      // would reject it as invalid.
+      var outVal = val;
+      if (cfg.type === 'number') {
+        var numVal = parseFloat(val);
+        if (isNaN(numVal) || numVal < 0) {
+          showToast(cfg.label + ' must be a valid positive number', 'error');
+          input.focus();
+          btn.disabled = false;
+          btn.textContent = '💾 Save All';
+          return;
+        }
+        outVal = numVal;
       }
 
       try {
-        await API.put('/admin/settings/' + encodeURIComponent(cfg.key), { value: numVal });
+        await API.put('/admin/settings/' + encodeURIComponent(cfg.key), { value: outVal });
         success++;
       } catch(e) {
         fail++;

@@ -5,6 +5,7 @@ import { Providers } from "./providers";
 import MobileNav from "@/components/layout/MobileNav";
 import MobileHeader from "@/components/layout/MobileHeader";
 import DesktopNavbar from "@/components/layout/DesktopNavbar";
+import PlatformTabs from "@/components/layout/PlatformTabs";
 import Footer from "@/components/layout/Footer";
 import GlobalLoginModal from "@/components/GlobalLoginModal";
 import InAppShellClass from "@/components/InAppShellClass";
@@ -119,6 +120,7 @@ export default function RootLayout({
         <Providers>
           <MobileHeader />
           <DesktopNavbar />
+          <PlatformTabs />
           <main className="min-h-screen max-w-[1400px] mx-auto pb-16 md:pb-0">{children}</main>
           <Footer />
           <MobileNav />

@@ -20,6 +20,7 @@ const deliveryBoy = require("./controllers/deliveryBoy.controller");
 const order = require("./controllers/order.controller");
 const shippingCtrl = require("./controllers/shipping.controller");
 const darkStoreCtrl = require("./controllers/darkstore.controller");
+const storeInv = require("./controllers/storeInventory.controller");
 const coupon = require("./controllers/coupon.controller");
 const offer = require("./controllers/offer.controller");
 const returnCtrl = require("./controllers/return.controller");
@@ -296,5 +297,13 @@ router.post("/dark-stores", darkStoreCtrl.create);
 router.get("/dark-stores/:id", darkStoreCtrl.getOne);
 router.put("/dark-stores/:id", darkStoreCtrl.update);
 router.delete("/dark-stores/:id", darkStoreCtrl.remove);
+
+// Per-store shelf. Declared after the store routes so ":id/inventory" is never
+// swallowed by the plain ":id" handlers above.
+router.get("/dark-stores/:id/inventory", storeInv.list);
+router.put("/dark-stores/:id/inventory", storeInv.upsert);
+router.post("/dark-stores/:id/inventory/bulk", storeInv.bulk);
+router.delete("/dark-stores/:id/inventory/:productId", storeInv.remove);
+router.get("/dark-stores/:id/stockable", storeInv.stockable);
 
 module.exports = router;

@@ -395,9 +395,34 @@ async function placeOrder(req, res) {
     }
   }
 
-  // Deduct stock
+  /* Deduct stock from wherever it actually lives.
+     A dark-store order comes off that store's shelf: two stores hold the same
+     milk independently, and one selling out must not empty the other. The
+     decrement is a guarded findOneAndUpdate rather than a read-modify-write,
+     so two customers buying the last unit at the same moment cannot both win. */
+  const StoreInventory = require("../../../models/StoreInventory");
   for (const item of rawItems) {
     const p = productMap[item.product];
+
+    if (fulfillingStore) {
+      const row = await StoreInventory.findOneAndUpdate(
+        { store: fulfillingStore, product: p._id, stock: { $gte: item.quantity } },
+        { $inc: { stock: -item.quantity } },
+        { new: true }
+      );
+      if (row) {
+        await InventoryLog.create({
+          partner: partnerId, product: p._id, type: "sale",
+          quantity: -item.quantity, stockAfter: row.stock, reference: order.orderNumber,
+        });
+        continue;
+      }
+      // Shelf row missing or already emptied by a parallel order. Fall through
+      // to the catalogue count rather than silently shipping nothing — the
+      // order is placed and paid, and an operator can reconcile.
+      console.error(`[ORDER] ${order.orderNumber}: store shelf short for ${p._id}, using catalogue stock`);
+    }
+
     p.stock -= item.quantity;
     await p.save();
     await InventoryLog.create({
@@ -545,8 +570,29 @@ async function cancelOrder(req, res) {
     return res.status(400).json({ success: false, message: "Order can only be cancelled within 24 hours" });
   }
 
-  // Restore stock
+  /* Put the stock back where it came from.
+     A cancelled dark-store order returns to that store's shelf; crediting the
+     catalogue instead would leave the store short by exactly the amount it
+     never sold. */
+  const StoreInventoryC = require("../../../models/StoreInventory");
   for (const item of order.items) {
+    if (order.store) {
+      const row = await StoreInventoryC.findOneAndUpdate(
+        { store: order.store, product: item.product },
+        { $inc: { stock: item.quantity } },
+        { new: true }
+      );
+      if (row) {
+        await InventoryLog.create({
+          partner: order.partner, product: item.product, type: "return",
+          quantity: item.quantity, stockAfter: row.stock, reference: order.orderNumber,
+        });
+        continue;
+      }
+      // No shelf row: this line was fulfilled from the catalogue (see the
+      // fallback in placeOrder), so it goes back there.
+    }
+
     const product = await Product.findById(item.product);
     if (product) {
       product.stock += item.quantity;
