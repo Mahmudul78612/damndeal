@@ -114,8 +114,8 @@ export default function MobileHeader() {
       />
       <div className="relative z-10">
         <div
-          className={`relative z-10 px-3 safe-top transition-[padding] duration-200 ${
-            compact ? 'pt-1.5 pb-2' : 'pt-3 pb-3'
+          className={`relative z-10 px-3 transition-[padding] duration-200 ${
+            compact ? 'pt-2 pb-2' : 'pt-2.5 pb-3'
           }`}
           style={{ boxShadow: scrolled ? '0 2px 12px -6px rgba(17,9,40,.35)' : 'none' }}
         >
