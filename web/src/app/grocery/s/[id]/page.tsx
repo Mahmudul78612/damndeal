@@ -27,6 +27,7 @@ interface StoreInfo {
   logo?: string;
   city?: string;
   address?: string;
+  coverImage?: string;
   distanceKm: number;
   etaMins: number;
   isOpen: boolean;
@@ -56,6 +57,7 @@ export default function StorePage() {
   const [store, setStore] = useState<StoreInfo | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [cats, setCats] = useState<{ _id: string; name: string }[]>([]);
+  const [recommended, setRecommended] = useState<Item[]>([]);
   const [activeCat, setActiveCat] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -73,6 +75,7 @@ export default function StorePage() {
       setStore(r.store);
       setItems(r.products || []);
       setCats(r.categories || []);
+      setRecommended(r.recommended || []);
       setError('');
     } catch (e: any) {
       setError(e?.message || 'Could not open this store.');
@@ -105,40 +108,43 @@ export default function StorePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Store header */}
-      <div className="bg-[#0D7A30] text-white">
-        <div className="max-w-[1200px] mx-auto px-4 py-3">
-          <Link href="/grocery" className="inline-flex items-center gap-1.5 text-[13px] font-semibold opacity-90 hover:opacity-100">
-            <ArrowLeft size={16} /> All stores
-          </Link>
-        </div>
-      </div>
-
-      <div className="bg-white border-b border-gray-100">
-        <div className="max-w-[1200px] mx-auto px-4 py-4 flex gap-3 items-center">
-          <div className="w-16 h-16 rounded-xl bg-gray-100 overflow-hidden shrink-0 grid place-items-center">
-            {store.logo
-              ? <img src={imgUrl(store.logo)} alt={store.name} className="object-cover w-full h-full" />
-              : <Store size={24} className="text-gray-300" />}
+      {/* Cover header */}
+      <div className="relative">
+        <div className="relative aspect-[2.6/1] md:aspect-[4/1] bg-gray-200 max-w-[1200px] mx-auto">
+          {store.coverImage
+            ? <img src={imgUrl(store.coverImage)} alt={store.name} className="w-full h-full object-cover" />
+            : <div className="w-full h-full bg-gradient-to-br from-[#0D7A30] to-[#0a5f26]" />}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-black/20" />
+          <div className="absolute top-0 inset-x-0 max-w-[1200px] mx-auto px-4 py-3">
+            <Link href="/grocery" prefetch className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-white bg-black/30 backdrop-blur px-3 py-1.5 rounded-full">
+              <ArrowLeft size={15} /> All stores
+            </Link>
           </div>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-[17px] font-extrabold text-gray-900 truncate">{store.name}</h1>
-            {store.address && (
-              <p className="text-[12px] text-gray-500 truncate flex items-center gap-1 mt-0.5">
-                <MapPin size={11} /> {store.address}
-              </p>
-            )}
-            <div className="flex items-center gap-3 mt-1.5 text-[12.5px] text-gray-600">
-              <span className="flex items-center gap-1">
-                <Clock size={12} className={store.isOpen ? 'text-[#0D7A30]' : 'text-gray-400'} />
-                {store.isOpen ? `${store.etaMins} mins` : 'Closed right now'}
-              </span>
-              <span className="flex items-center gap-1"><Bike size={12} className="text-gray-400" /> {store.distanceKm} km</span>
-              {store.minOrderAmount > 0 && (
-                <span className="text-gray-500">Min {CURRENCY_SYMBOL}{store.minOrderAmount}</span>
-              )}
+        </div>
+
+        <div className="max-w-[1200px] mx-auto px-4">
+          <div className="flex gap-3 items-end -mt-9 relative z-10">
+            <div className="w-[72px] h-[72px] rounded-2xl bg-white border-2 border-white shadow-lg overflow-hidden shrink-0 grid place-items-center">
+              {store.logo
+                ? <img src={imgUrl(store.logo)} alt={store.name} className="object-cover w-full h-full" />
+                : <Store size={26} className="text-gray-300" />}
+            </div>
+            <div className="min-w-0 flex-1 pb-1">
+              <h1 className="text-[19px] font-extrabold text-gray-900 truncate leading-tight">{store.name}</h1>
+              <div className="flex items-center gap-2.5 mt-1 text-[12.5px] text-gray-600 flex-wrap">
+                <span className={`inline-flex items-center gap-1 font-bold ${store.isOpen ? 'text-[#0D7A30]' : 'text-gray-500'}`}>
+                  <Clock size={12} /> {store.isOpen ? `${store.etaMins} mins` : 'Closed'}
+                </span>
+                <span className="flex items-center gap-1"><Bike size={12} className="text-gray-400" /> {store.distanceKm} km</span>
+                {store.minOrderAmount > 0 && <span className="text-gray-500">Min {CURRENCY_SYMBOL}{store.minOrderAmount}</span>}
+              </div>
             </div>
           </div>
+          {store.address && (
+            <p className="text-[12px] text-gray-500 flex items-center gap-1 mt-2">
+              <MapPin size={11} /> {store.address}
+            </p>
+          )}
         </div>
       </div>
 
@@ -146,6 +152,19 @@ export default function StorePage() {
         {!store.isOpen && (
           <div className="mb-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-[13px] text-amber-800">
             This store is closed right now. You can look through the shelf and order when it opens.
+          </div>
+        )}
+
+        {recommended.length > 0 && !activeCat && (
+          <div className="mb-5">
+            <h2 className="text-[15px] font-extrabold text-gray-900 mb-2.5">Recommended for you</h2>
+            <div className="flex gap-3 overflow-x-auto no-scrollbar -mx-4 px-4 pb-1">
+              {recommended.map((it) => (
+                <div key={it._id} className="w-[140px] shrink-0">
+                  <ItemCard it={it} store={store} cart={cart} />
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -165,6 +184,10 @@ export default function StorePage() {
             <p className="font-semibold text-gray-600">Nothing on the shelf right now</p>
           </div>
         ) : (
+          <>
+          <h2 className="text-[15px] font-extrabold text-gray-900 mb-3">
+            {activeCat ? (cats.find((c) => String(c._id) === activeCat)?.name || 'Products') : 'All products'}
+          </h2>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pb-24">
             {items
               .filter((it) => !activeCat || String(it.category?._id) === activeCat)
@@ -172,6 +195,7 @@ export default function StorePage() {
                 <ItemCard key={it._id} it={it} store={store} cart={cart} />
               ))}
           </div>
+          </>
         )}
       </div>
 

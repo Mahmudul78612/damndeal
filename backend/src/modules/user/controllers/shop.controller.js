@@ -314,9 +314,10 @@ async function decorateStores(stores) {
       itemCount = await StoreInventory.countDocuments({
         store: st.id, isActive: true, stock: { $gt: 0 },
       });
-      const d = await DarkStore.findById(st.id).select("address image").lean();
+      const d = await DarkStore.findById(st.id).select("address image logo coverImage").lean();
       st.address = d?.address || st.address;
-      logo = d?.image || "";
+      logo = d?.logo || d?.image || "";
+      st.coverImage = d?.coverImage || "";
     } else {
       itemCount = await Product.countDocuments({
         partner: st.partner, platform: "ddgo",
@@ -324,6 +325,7 @@ async function decorateStores(stores) {
       });
       const kyc = await PartnerKyc.findOne({ partner: st.partner }).select("photo").lean();
       logo = kyc?.photo || "";
+      st.coverImage = "";
     }
 
     return {
@@ -333,6 +335,7 @@ async function decorateStores(stores) {
       logo,
       city: st.city,
       address: st.address,
+      coverImage: st.coverImage || "",
       distanceKm: st.distanceKm,
       etaMins: st.etaMins,
       isOpen: st.isOpen,
@@ -465,12 +468,35 @@ async function ddgoStoreDetail(req, res) {
     success: true,
     store,
     products,
+    // A short highlight row for the top of the store page — only meaningful on
+    // page one, where the customer first lands.
+    recommended: page === 1 ? products.slice(0, 8) : [],
     // Every category this shop carries, independent of the current page.
     categories: [...allCats.values()],
     pagination: { page, limit, total, pages: Math.ceil(total / limit) },
   });
 }
 
+/* GET /api/user/ddgo/banners
+   Promotional banners for the DDGo home. Reuses the Banner model (which already
+   has a platform field), so the admin creates them on the existing Banners
+   page with platform = ddgo and a link — no new admin surface needed. */
+async function ddgoBanners(req, res) {
+  const Banner = require("../../../models/Banner");
+  const region = String(req.headers["x-region"] || "IN").toUpperCase() === "US" ? "US" : "IN";
+  const now = new Date();
+  const banners = await Banner.find({
+    platform: "ddgo", isActive: true, regions: region,
+  })
+    .select("title image linkType linkValue subtitle")
+    .sort({ sortOrder: 1, createdAt: -1 })
+    .limit(10)
+    .lean();
+  void now;
+  return res.json({ success: true, banners });
+}
+
+module.exports.ddgoBanners = ddgoBanners;
 module.exports.ddgoStores = ddgoStores;
 module.exports.ddgoStoreDetail = ddgoStoreDetail;
 

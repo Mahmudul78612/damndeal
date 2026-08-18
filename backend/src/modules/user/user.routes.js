@@ -32,6 +32,7 @@ router.get("/app-categories-page", home.getAppCategoriesPage);
 const desktopHome = require("./controllers/desktopHome.controller");
 router.get("/desktop-home", desktopHome.getDesktopHome);
 router.get("/serviceability", shop.getServiceability);
+router.get("/ddgo/banners", shop.ddgoBanners);
 router.get("/ddgo/stores", shop.ddgoStores);
 router.get("/ddgo/stores/:id", shop.ddgoStoreDetail);
 router.get("/ddgo/stores/:id/product/:pid", shop.ddgoProduct);

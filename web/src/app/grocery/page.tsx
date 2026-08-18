@@ -43,6 +43,7 @@ interface NearbyStore {
   logo?: string;
   city?: string;
   address?: string;
+  coverImage?: string;
   distanceKm: number;
   etaMins: number;
   isOpen: boolean;
@@ -74,6 +75,7 @@ export default function GroceryPage() {
   const [loc, setLoc] = useState<DdgoLocation | null>(null);
   const [gate, setGate] = useState<Gate>({ state: 'asking' });
   const [stores, setStores] = useState<NearbyStore[]>([]);
+  const [banners, setBanners] = useState<DdgoBanner[]>([]);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   // Set when the pin moved to a different store while a cart was still open.
   const [staleCart, setStaleCart] = useState(false);
@@ -114,6 +116,7 @@ export default function GroceryPage() {
     if (gate.state !== 'ok' && gate.state !== 'closed') return;
     if (!loc) return;
     setLoadingCatalog(true);
+    api.get('/user/ddgo/banners').then((r) => setBanners(r.banners || [])).catch(() => {});
     api.get(`/user/ddgo/stores?lat=${loc.lat}&lng=${loc.lng}`)
       .then((r) => setStores(r.stores || []))
       .catch(() => setStores([]))
@@ -182,13 +185,14 @@ export default function GroceryPage() {
               </div>
             ) : stores.length ? (
               <>
-                <div className="flex items-baseline justify-between gap-3 mb-3">
-                  <h2 className="text-[15px] font-extrabold text-gray-900">
+                {banners.length > 0 && <BannerCarousel banners={banners} />}
+                <div className="flex items-baseline justify-between gap-3 mb-3 mt-1">
+                  <h2 className="text-[16px] font-extrabold text-gray-900">
                     {stores.length} {stores.length === 1 ? 'store' : 'stores'} near you
                   </h2>
                   <span className="text-[11.5px] text-gray-400">Nearest first</span>
                 </div>
-                <div className="grid gap-3 md:grid-cols-2">
+                <div className="grid gap-3.5 sm:grid-cols-2">
                   {stores.map((st) => <StoreCard key={st.id} s={st} />)}
                 </div>
               </>
@@ -360,59 +364,109 @@ function OutOfArea({ message, loc, onRetry }: { message: string; loc: DdgoLocati
   );
 }
 
+interface DdgoBanner {
+  _id: string;
+  title?: string;
+  subtitle?: string;
+  image: string;
+  linkType?: string;
+  linkValue?: string;
+}
+
+/* Promotional banners for the DDGo home — a swipeable rail with dots, the way
+   the marketplace carousel works. The link is admin-set; an internal path
+   routes client-side, an external URL opens as-is. */
+function BannerCarousel({ banners }: { banners: DdgoBanner[] }) {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (banners.length <= 1) return;
+    const t = setInterval(() => setI((v) => (v + 1) % banners.length), 4000);
+    return () => clearInterval(t);
+  }, [banners.length]);
+
+  const href = (b: DdgoBanner) => {
+    const v = (b.linkValue || '').trim();
+    if (!v) return '';
+    if (/^https?:\/\//i.test(v) || v.startsWith('/')) return v;
+    if (b.linkType === 'category') return `/categories/${v}`;
+    if (b.linkType === 'product') return `/product/${v}`;
+    return '';
+  };
+
+  const b = banners[i];
+  const to = href(b);
+  const Img = (
+    <div className="relative w-full aspect-[2.6/1] rounded-2xl overflow-hidden bg-gray-100">
+      <img src={imgUrl(b.image)} alt={b.title || 'Offer'} className="w-full h-full object-cover" />
+    </div>
+  );
+
+  return (
+    <div className="mb-4">
+      {to ? <a href={to}>{Img}</a> : Img}
+      {banners.length > 1 && (
+        <div className="flex justify-center gap-1.5 mt-2">
+          {banners.map((_, n) => (
+            <span key={n} className={`h-1.5 rounded-full transition-all ${n === i ? 'w-5 bg-[#0D7A30]' : 'w-1.5 bg-gray-300'}`} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StoreCard({ s }: { s: NearbyStore }) {
+  const cover = s.coverImage || '';
   return (
     <Link
       href={`/grocery/s/${s.id}`}
       prefetch
-      className={`group flex gap-3.5 items-center bg-white border border-gray-200 rounded-2xl p-3.5 transition-all hover:border-[#0D7A30]/40 hover:shadow-[0_4px_14px_rgba(16,24,40,.07)] ${
-        s.isOpen ? '' : 'opacity-65'
+      className={`group block bg-white border border-gray-200 rounded-2xl overflow-hidden transition-all hover:shadow-[0_6px_20px_rgba(16,24,40,.10)] ${
+        s.isOpen ? '' : 'opacity-70'
       }`}
     >
-      <div className="w-[60px] h-[60px] rounded-xl bg-gray-50 border border-gray-100 overflow-hidden shrink-0 grid place-items-center">
-        {s.logo ? (
-          <Image src={imgUrl(s.logo)} alt={s.name} width={60} height={60} className="object-cover w-full h-full" />
+      {/* Cover */}
+      <div className="relative aspect-[2.4/1] bg-gray-100">
+        {cover ? (
+          <img src={imgUrl(cover)} alt={s.name} className="w-full h-full object-cover" loading="lazy" />
         ) : (
-          <Store size={22} className="text-gray-300" />
+          <div className="w-full h-full bg-gradient-to-br from-[#0D7A30]/15 to-[#0D7A30]/5 grid place-items-center">
+            <Store size={26} className="text-[#0D7A30]/40" />
+          </div>
+        )}
+        {/* ETA chip */}
+        <span className={`absolute bottom-2 left-2 inline-flex items-center gap-1 text-[11.5px] font-extrabold px-2 py-1 rounded-lg shadow ${
+          s.isOpen ? 'bg-white text-[#0D7A30]' : 'bg-white text-gray-500'
+        }`}>
+          <Clock size={11} /> {s.isOpen ? `${s.etaMins} min` : 'Closed'}
+        </span>
+        {!s.isOpen && (
+          <span className="absolute inset-0 bg-black/35 grid place-items-center">
+            <span className="text-white text-[12px] font-extrabold uppercase tracking-wide">Opens at 7 AM</span>
+          </span>
         )}
       </div>
 
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="font-bold text-[15px] text-gray-900 truncate group-hover:text-[#0D7A30] transition">
-            {s.name}
-          </p>
-          {!s.isOpen && (
-            <span className="shrink-0 text-[9.5px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
-              Closed
-            </span>
-          )}
-        </div>
-
-        {/* ETA is the number people actually compare shops on, so it leads. */}
-        <div className="flex items-center gap-2 mt-1.5">
-          {s.isOpen ? (
-            <span className="inline-flex items-center gap-1 bg-[#E3F6E9] text-[#0D7A30] text-[11.5px] font-extrabold px-2 py-0.5 rounded-md">
-              <Clock size={11} /> {s.etaMins} min
-            </span>
+      {/* Row: logo + details */}
+      <div className="flex gap-3 items-center p-3">
+        <div className="w-11 h-11 rounded-xl bg-white border border-gray-100 shadow-sm overflow-hidden shrink-0 grid place-items-center -mt-7 relative z-10">
+          {s.logo ? (
+            <Image src={imgUrl(s.logo)} alt={s.name} width={44} height={44} className="object-cover w-full h-full" />
           ) : (
-            <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-500 text-[11.5px] font-bold px-2 py-0.5 rounded-md">
-              <Clock size={11} /> Opens later
-            </span>
+            <Store size={18} className="text-gray-300" />
           )}
-          <span className="text-[11.5px] text-gray-500 flex items-center gap-1">
-            <Bike size={11} className="text-gray-400" /> {s.distanceKm} km
-          </span>
         </div>
-
-        <p className="text-[11.5px] text-gray-400 truncate mt-1">
-          {s.itemCount} {s.itemCount === 1 ? 'item' : 'items'}
-          {s.city ? ` · ${s.city}` : ''}
-          {s.minOrderAmount > 0 ? ` · Min ${CURRENCY_SYMBOL}${s.minOrderAmount}` : ''}
-        </p>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-[15px] text-gray-900 truncate group-hover:text-[#0D7A30] transition">{s.name}</p>
+          <p className="text-[11.5px] text-gray-500 truncate mt-0.5 flex items-center gap-1.5">
+            <span className="flex items-center gap-1"><Bike size={11} className="text-gray-400" /> {s.distanceKm} km</span>
+            <span className="text-gray-300">·</span>
+            <span>{s.itemCount} items</span>
+            {s.minOrderAmount > 0 && <><span className="text-gray-300">·</span><span>Min {CURRENCY_SYMBOL}{s.minOrderAmount}</span></>}
+          </p>
+        </div>
+        <ChevronRight size={18} className="text-gray-300 group-hover:text-[#0D7A30] transition shrink-0" />
       </div>
-
-      <ChevronRight size={18} className="text-gray-300 group-hover:text-[#0D7A30] transition shrink-0" />
     </Link>
   );
 }

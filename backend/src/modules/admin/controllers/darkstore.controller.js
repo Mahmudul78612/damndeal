@@ -91,6 +91,8 @@ async function create(req, res) {
     location: { type: "Point", coordinates: point.coordinates },
     radiusKm: Number.isFinite(radiusKm) ? radiusKm : 5,
     image: req.body.image || "",
+    logo: req.body.logo || "",
+    coverImage: req.body.coverImage || "",
     address: req.body.address || "",
     city: req.body.city || "",
     state: req.body.state || "",
@@ -147,7 +149,7 @@ async function update(req, res) {
       if (Number.isFinite(n)) store[k] = n;
     }
   }
-  const text = ["name", "image", "address", "city", "state", "pincode", "contactName", "contactPhone", "notes"];
+  const text = ["name", "image", "logo", "coverImage", "address", "city", "state", "pincode", "contactName", "contactPhone", "notes"];
   for (const k of text) if (req.body[k] !== undefined) store[k] = req.body[k];
 
   if (req.body.isActive !== undefined) store.isActive = !!req.body.isActive;
