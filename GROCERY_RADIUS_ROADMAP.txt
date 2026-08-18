@@ -70,7 +70,7 @@ KYA NAHI HAI (yahi banana hai)
 
 
 ----------------------------------------------------------------
-PHASE 1 — Store + serviceability core          [ABHI BAN RAHA]
+PHASE 1 — Store + serviceability core                 [HO GAYA]
 ----------------------------------------------------------------
  1.1  DarkStore model — apne stores ke liye
         name, code, location (Point + 2dsphere), radiusKm,
@@ -88,11 +88,29 @@ PHASE 1 — Store + serviceability core          [ABHI BAN RAHA]
  1.7  fee.service — global radius ki jagah resolved store ka
         radius; US bypass hatao jab platform=ddgo ho
 
-PHASE 2 — Browse-time gating
- 2.1  Location gate: "Deliver to" — app/web pe pehle location
- 2.2  Product listing store ke hisaab se filter
- 2.3  Out-of-area screen ("Coming soon in your area" + notify me)
- 2.4  Cart ek store pe pinned; store badla to cart warning
+----------------------------------------------------------------
+PHASE 2 — Browse-time gating                          [HO GAYA]
+----------------------------------------------------------------
+ 2.1  [x] /grocery — DDGo ka web storefront, location gate ke
+          saath. Pehle location, phir catalogue.
+ 2.2  [x] Product listing lat/lng ke hisaab se filter. Jo store
+          nahi pahunchta, uska saamaan dikhta hi nahi.
+ 2.3  [x] Out-of-area screen + notify me. Pin save hota hai —
+          isi se pata chalega agla store kahan kholna hai
+          (admin API: /admin/dark-stores/demand).
+ 2.4  [ ] Cart ek store pe pinned; store badla to warning
+          — Phase 3 ke saath, jab order pe store ref aayega
+
+ NOTE: yahan ek purana bug bhi mila — browseProducts me
+ platform ka filter tha hi nahi. Website ?platform=damndeal
+ bhejti thi par backend use padhta hi nahi tha, matlab grocery
+ aur damndeal ka saamaan ek hi listing me mil sakta tha. Ab
+ filter lagta hai.
+
+ NOTE: DDGo kabhi launch nahi hua — 16 grocery categories hain
+ par sirf 1 product (wo bhi isActive:false) aur 0 orders. Store
+ khada karke products daalne padenge, tabhi /grocery pe kuch
+ dikhega.
 
 PHASE 3 — Orders through stores
  3.1  Order pe store ref, per-store order queue

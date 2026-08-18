@@ -287,6 +287,7 @@ router.put("/investors/withdrawals/:withdrawalId", investor.updateWithdrawal);
 // ── DDGo dark stores (quick commerce fulfilment points) ───────────────────
 // "coverage" sits above "/:id" so the word is never read as an id.
 router.get("/dark-stores/coverage", darkStoreCtrl.coverage);
+router.get("/dark-stores/demand", darkStoreCtrl.demand);
 router.get("/dark-stores", darkStoreCtrl.list);
 router.post("/dark-stores", darkStoreCtrl.create);
 router.get("/dark-stores/:id", darkStoreCtrl.getOne);

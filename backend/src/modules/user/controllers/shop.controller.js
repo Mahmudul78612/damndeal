@@ -249,3 +249,47 @@ async function getServiceability(req, res) {
 }
 
 module.exports.getServiceability = getServiceability;
+
+/* POST /api/user/serviceability/notify  { lat, lng, address?, pincode?, phone? }
+   Records an address we cannot reach yet. This is the only signal we get about
+   where to open next, so it is stored even when the visitor leaves no phone
+   number — the pin alone is worth keeping. */
+async function requestArea(req, res) {
+  const lat = parseFloat(req.body.lat);
+  const lng = parseFloat(req.body.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return res.status(400).json({ success: false, message: "lat and lng are required" });
+  }
+
+  const AreaRequest = require("../../../models/AreaRequest");
+  const region = String(req.headers["x-region"] || "IN").toUpperCase() === "US" ? "US" : "IN";
+  const phone = String(req.body.phone || "").trim().slice(0, 20);
+
+  // One row per person per spot: a visitor who reloads the page three times is
+  // one request, not three, or the demand map lies.
+  const near = {
+    region,
+    location: {
+      $near: { $geometry: { type: "Point", coordinates: [lng, lat] }, $maxDistance: 500 },
+    },
+    ...(phone ? { phone } : req.user ? { user: req.user.userId } : {}),
+  };
+  const existing = await AreaRequest.findOne(near).select("_id").lean();
+  if (existing) {
+    return res.json({ success: true, message: "We already have your area on the list — we'll let you know." });
+  }
+
+  await AreaRequest.create({
+    location: { type: "Point", coordinates: [lng, lat] },
+    address: String(req.body.address || "").slice(0, 300),
+    pincode: String(req.body.pincode || "").slice(0, 12),
+    city: String(req.body.city || "").slice(0, 100),
+    phone,
+    user: req.user?.userId || null,
+    region,
+  });
+
+  return res.json({ success: true, message: "Thanks — we'll tell you the moment we start delivering there." });
+}
+
+module.exports.requestArea = requestArea;

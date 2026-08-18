@@ -89,7 +89,7 @@ module.exports = { searchProducts, browseProducts };
 
 // GET /user/products?category=xxx&subCategory=xxx&_id=xxx&page=1&limit=20
 async function browseProducts(req, res) {
-  const { page = 1, limit = 20, category, subCategory, sortBy, _id } = req.query;
+  const { page = 1, limit = 20, category, subCategory, sortBy, _id, platform, lat, lng } = req.query;
   const pageNum = Math.max(parseInt(page, 10) || 1, 1);
   // Cap page size — stops one-request catalog dumps by scrapers
   const limitNum = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
@@ -99,6 +99,39 @@ async function browseProducts(req, res) {
   if (_id) filter._id = _id;
   if (category) filter.category = category;
   if (subCategory) filter.subCategory = subCategory;
+
+  // Storefronts are separate catalogues. Without this, DDGo grocery items and
+  // damndeal items shared one listing — the caller has always sent ?platform=,
+  // it was simply never read.
+  if (platform === "ddgo" || platform === "damndeal") filter.platform = platform;
+
+  /* Quick commerce is delivered by a rider from one shop, so what a customer
+     may browse depends on where they are standing. Given a location, this
+     narrows the listing to the shops that actually reach them; without one it
+     stays open, because the storefront asks for location before it lists
+     anything and an early call should not look like an empty catalogue. */
+  if (platform === "ddgo" && lat && lng) {
+    const { storesCovering } = require("../../../services/serviceability.service");
+    const stores = await storesCovering({
+      lat: parseFloat(lat),
+      lng: parseFloat(lng),
+      region: req.region === "US" ? "US" : "IN",
+    });
+    if (!stores.length) {
+      return res.json({
+        success: true, products: [], serviceable: false,
+        pagination: { page: pageNum, limit: limitNum, total: 0, pages: 0 },
+      });
+    }
+    const partnerIds = stores.filter((s) => s.type === "partner").map((s) => s.partner);
+    const hasDarkStore = stores.some((s) => s.type === "darkstore");
+    // A dark store carries the central catalogue, which is the stock that
+    // belongs to no partner. Per-store inventory is a later phase; until then
+    // "covered by our own store" means those items are reachable.
+    filter.$or = hasDarkStore
+      ? [{ partner: { $in: partnerIds } }, { partner: null }]
+      : [{ partner: { $in: partnerIds } }];
+  }
 
   let sort = { createdAt: -1 };
   if (sortBy === "price_low") sort = { sellingPrice: 1 };

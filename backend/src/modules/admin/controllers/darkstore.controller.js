@@ -189,4 +189,50 @@ async function coverage(req, res) {
   return res.json({ success: true, serviceable: stores.some((s) => s.isOpen), stores });
 }
 
-module.exports = { list, getOne, create, update, remove, coverage };
+
+/* GET /admin/dark-stores/demand?days=90
+   Where people asked for delivery and did not get it, clustered so the answer
+   reads as "open here next" rather than a list of a thousand pins.
+
+   Clustering is done by rounding each pin to ~1.1 km (3 decimal places is far
+   too fine, 2 is ~1.1 km) and counting the buckets. Crude on purpose: a real
+   k-means would be slower to run and no more useful for choosing a
+   neighbourhood. */
+async function demand(req, res) {
+  const AreaRequest = require("../../../models/AreaRequest");
+  const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 90));
+  const since = new Date(Date.now() - days * 86400000);
+
+  const rows = await AreaRequest.aggregate([
+    { $match: { region: R(req), createdAt: { $gte: since } } },
+    {
+      $group: {
+        _id: {
+          lat: { $round: [{ $arrayElemAt: ["$location.coordinates", 1] }, 2] },
+          lng: { $round: [{ $arrayElemAt: ["$location.coordinates", 0] }, 2] },
+        },
+        requests: { $sum: 1 },
+        withPhone: { $sum: { $cond: [{ $ne: ["$phone", ""] }, 1, 0] } },
+        lastAt: { $max: "$createdAt" },
+        city: { $first: "$city" },
+        pincode: { $first: "$pincode" },
+      },
+    },
+    { $sort: { requests: -1 } },
+    { $limit: 100 },
+  ]);
+
+  return res.json({
+    success: true,
+    days,
+    total: rows.reduce((n, r) => n + r.requests, 0),
+    clusters: rows.map((r) => ({
+      lat: r._id.lat, lng: r._id.lng,
+      requests: r.requests, withPhone: r.withPhone,
+      city: r.city || "", pincode: r.pincode || "",
+      lastAt: r.lastAt,
+    })),
+  });
+}
+
+module.exports = { list, getOne, create, update, remove, coverage, demand };
