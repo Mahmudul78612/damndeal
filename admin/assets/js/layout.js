@@ -75,6 +75,7 @@ function buildLayout(activePageId) {
       { id: "payouts", label: "Payouts", icon: "💰", href: basePath + "/pages/payouts/payouts.html", perm: "manage_payouts" },
     ]},
     { group: "Users", items: [
+      { id: "ddgo", label: "DDGo Command Center", icon: "⚡", href: basePath + "/pages/ddgo/ddgo.html", perm: "manage_ddgo_stores" },
       { id: "dark-stores", label: "DDGo Stores", icon: "🏬", href: basePath + "/pages/dark-stores/dark-stores.html", perm: "manage_ddgo_stores" },
       { id: "delivery-boys", label: "Delivery Boys", icon: "🚴", href: basePath + "/pages/delivery-boys/delivery-boys.html", perm: "manage_delivery" },
       { id: "staff", label: "Staff", icon: "👥", href: basePath + "/pages/staff/staff.html", perm: "manage_staff" },

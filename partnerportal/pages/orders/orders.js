@@ -6,6 +6,35 @@
 
   let page = 1, statusFilter = '';
 
+  /* ── Live queue ──
+     Poll quietly every 20s; when a NEW placed order appears, beep and reload
+     the table. The shop keeps this page open on the counter, so it has to
+     announce orders itself instead of waiting for a manual refresh. */
+  const seenOrders = {};
+  let firstPoll = true;
+  function beep(){
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = 920; g.gain.value = 0.09;
+      o.start(); setTimeout(() => { o.stop(); ctx.close(); }, 400);
+    } catch(e){ /* audio needs one user interaction first — fine */ }
+  }
+  setInterval(async () => {
+    try {
+      const d = await API.get('/partner/orders?page=1&limit=10&status=placed');
+      const fresh = (d.orders || []).filter(o => !seenOrders[o._id]);
+      (d.orders || []).forEach(o => { seenOrders[o._id] = 1; });
+      if (!firstPoll && fresh.length) {
+        beep();
+        showToast('🔔 ' + fresh.length + ' new order' + (fresh.length > 1 ? 's' : '') + '!');
+        if (page === 1) load(1);
+      }
+      firstPoll = false;
+    } catch(e){ /* one failed poll is not worth an error banner */ }
+  }, 20000);
+
   async function load(p=1){
     page = p;
     content.innerHTML = '<div class="text-center"><div class="spinner"></div></div>';

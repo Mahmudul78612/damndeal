@@ -14,7 +14,7 @@ export default function ProductCard({ product }: { product: Product }) {
     <Link
       href={`/product/${product._id}`}
       prefetch={false}
-      className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group block"
+      className="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-[0_1px_2px_rgba(16,24,40,.04)] hover:shadow-[0_8px_20px_-6px_rgba(16,24,40,.12)] hover:border-gray-200 hover:-translate-y-0.5 transition-all duration-200 group block"
     >
       <div className="relative aspect-square overflow-hidden bg-gray-50">
         <Image
@@ -30,13 +30,13 @@ export default function ProductCard({ product }: { product: Product }) {
           </span>
         )}
         {discount > 0 && (
-          <span className="absolute top-1.5 left-1.5 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
+          <span className="absolute top-1.5 left-1.5 bg-gradient-to-r from-[#EC1A74] to-[#FF7A00] text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-md shadow-sm">
             {discount}% OFF
           </span>
         )}
         {product.stock <= 0 && (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-            <span className="text-white font-bold text-xs bg-black/60 px-2 py-0.5 rounded">Out of Stock</span>
+          <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] flex items-center justify-center">
+            <span className="text-gray-700 font-bold text-[11px] bg-white border border-gray-200 shadow-sm px-2.5 py-1 rounded-full">Out of stock</span>
           </div>
         )}
       </div>
@@ -69,9 +69,9 @@ export default function ProductCard({ product }: { product: Product }) {
           </div>
         )}
         <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
-          <span className="text-sm font-bold text-gray-900">{CURRENCY_SYMBOL}{product.sellingPrice}</span>
+          <span className="text-[14.5px] font-extrabold text-gray-900">{CURRENCY_SYMBOL}{product.sellingPrice}</span>
           {discount > 0 && (
-            <span className="text-[10px] text-gray-400 line-through">{CURRENCY_SYMBOL}{product.mrp || product.price}</span>
+            <span className="text-[10.5px] text-gray-400 line-through">{CURRENCY_SYMBOL}{product.mrp || product.price}</span>
           )}
           {product.rating && product.rating > 0 ? (
             <span className="flex items-center gap-0.5 bg-green-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded ml-auto">
