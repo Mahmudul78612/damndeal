@@ -101,3 +101,63 @@ export function requestBrowserLocation(): Promise<{ lat: number; lng: number }> 
     );
   });
 }
+
+
+/**
+ * Search an area by name, so a customer can set their location without GPS —
+ * needed inside the app where the WebView may not grant geolocation, and handy
+ * on any device. Uses OpenStreetMap's Nominatim (no key, permissive CORS).
+ */
+export interface GeoResult { label: string; lat: number; lng: number; }
+
+export async function geocodeSearch(q: string): Promise<GeoResult[]> {
+  const query = q.trim();
+  if (query.length < 3) return [];
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=6&addressdetails=1&q=${encodeURIComponent(query)}`,
+      { headers: { Accept: 'application/json' } }
+    );
+    if (!res.ok) return [];
+    const rows = await res.json();
+    return (rows || []).map((r: any) => ({
+      label: shortLabel(r.display_name),
+      lat: parseFloat(r.lat),
+      lng: parseFloat(r.lon),
+    })).filter((r: GeoResult) => Number.isFinite(r.lat) && Number.isFinite(r.lng));
+  } catch {
+    return [];
+  }
+}
+
+/** Trim Nominatim's long comma path to the first few, most specific parts. */
+function shortLabel(display: string): string {
+  return String(display || '').split(',').slice(0, 3).map((x) => x.trim()).join(', ');
+}
+
+/**
+ * Turn a GPS fix into a readable area name, so the header shows "Zoo Road,
+ * Guwahati" instead of "Current location". Best-effort; falls back silently.
+ */
+export async function reverseGeocode(lat: number, lng: number): Promise<string> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&zoom=16&lat=${lat}&lon=${lng}`,
+      { headers: { Accept: 'application/json' } }
+    );
+    if (!res.ok) return '';
+    const r = await res.json();
+    return shortLabel(r?.display_name || '');
+  } catch {
+    return '';
+  }
+}
+
+/** A few demo-friendly presets, so a location can be set in one tap. */
+export const PRESET_AREAS: GeoResult[] = [
+  { label: 'Guwahati, Assam', lat: 26.1445, lng: 91.7362 },
+  { label: 'Patiala, Punjab', lat: 30.3398, lng: 76.3869 },
+  { label: 'New Delhi', lat: 28.6315, lng: 77.2167 },
+  { label: 'Manhattan, New York', lat: 40.7549, lng: -73.9840 },
+  { label: 'Los Angeles', lat: 34.0614, lng: -118.3082 },
+];

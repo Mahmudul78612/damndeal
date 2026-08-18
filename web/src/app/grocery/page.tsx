@@ -6,12 +6,13 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { api, imgUrl, CURRENCY_SYMBOL } from '@/lib/api';
 import {
-  MapPin, Navigation, Clock, ChevronRight, Store, LoaderCircle, BellRing, Bike, ShoppingBasket, Package,
+  MapPin, Navigation, Clock, ChevronRight, Store, LoaderCircle, BellRing, Bike, ShoppingBasket, Package, Zap, Search,
 } from 'lucide-react';
 import {
   readLocation, saveLocation, clearLocation, requestBrowserLocation, DdgoLocation,
   readServingStore, saveServingStore, clearServingStore,
 } from '@/lib/ddgoLocation';
+import LocationPicker from '@/components/ddgo/LocationPicker';
 import { useCart } from '@/context/CartContext';
 
 /**
@@ -79,6 +80,7 @@ export default function GroceryPage() {
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   // Set when the pin moved to a different store while a cart was still open.
   const [staleCart, setStaleCart] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const cart = useCart();
 
   const check = useCallback(async (l: DdgoLocation) => {
@@ -123,33 +125,31 @@ export default function GroceryPage() {
       .finally(() => setLoadingCatalog(false));
   }, [gate.state, loc]);
 
-  const useMyLocation = async () => {
-    setGate({ state: 'checking' });
-    try {
-      const { lat, lng } = await requestBrowserLocation();
-      saveLocation({ lat, lng, label: 'Current location' });
-      const full: DdgoLocation = { lat, lng, label: 'Current location', savedAt: Date.now() };
-      setLoc(full);
-      check(full);
-    } catch (e: any) {
-      setGate({ state: 'out', message: e.message });
-    }
+  const applyLocation = (l: { lat: number; lng: number; label: string }) => {
+    saveLocation(l);
+    const full: DdgoLocation = { ...l, savedAt: Date.now() };
+    setLoc(full);
+    setPickerOpen(false);
+    check(full);
   };
 
-  const changeLocation = () => {
-    clearLocation();
-    clearServingStore();
-    setLoc(null);
-    setStores([]);
-    setGate({ state: 'asking' });
+  // GPS may be blocked (notably inside the app's WebView), so failure opens
+  // the picker to search by name rather than dead-ending.
+  const useMyLocation = async () => {
+    try {
+      const { lat, lng } = await requestBrowserLocation();
+      applyLocation({ lat, lng, label: 'Current location' });
+    } catch {
+      setPickerOpen(true);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header gate={gate} loc={loc} onChange={changeLocation} />
+      <Header gate={gate} loc={loc} onChange={() => setPickerOpen(true)} />
 
       <div className="max-w-[1200px] mx-auto px-4 py-5">
-        {gate.state === 'asking' && <LocationGate onUseLocation={useMyLocation} />}
+        {gate.state === 'asking' && <LocationGate onUseLocation={useMyLocation} onSearch={() => setPickerOpen(true)} />}
         {gate.state === 'checking' && <Checking />}
         {gate.state === 'out' && <OutOfArea message={gate.message} loc={loc} onRetry={useMyLocation} />}
 
@@ -202,74 +202,48 @@ export default function GroceryPage() {
           </>
         )}
       </div>
+
+      {pickerOpen && (
+        <LocationPicker onPick={applyLocation} onClose={() => setPickerOpen(false)} />
+      )}
     </div>
   );
 }
 
 /* ── Sticky header ──
-   The two things a customer checks constantly are how long it will take and
-   which address it is coming to, so those are the header rather than a logo. */
+   Zomato-style: the delivery address is the headline and the whole bar taps
+   through to the location picker; the ETA rides as a small line beneath it. */
 function Header({ gate, loc, onChange }: { gate: Gate; loc: DdgoLocation | null; onChange: () => void }) {
   const store = gate.state === 'ok' || gate.state === 'closed' ? gate.store : null;
   return (
     <div className="sticky top-0 z-30 bg-white border-b border-gray-100 shadow-[0_1px_3px_rgba(16,24,40,.04)]">
       <div className="max-w-[1200px] mx-auto px-4 py-2.5 flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          {store && store.isOpen ? (
-            <>
-              <p className="text-[17px] font-extrabold text-gray-900 leading-tight">
-                Delivery in {store.etaMins} minutes
-              </p>
-              <p className="text-[12px] text-gray-500 truncate mt-0.5">
-                From {store.name}
-              </p>
-            </>
-          ) : store ? (
-            <>
-              <p className="text-[17px] font-extrabold text-gray-900 leading-tight">Currently closed</p>
-              <p className="text-[12px] text-gray-500 truncate mt-0.5">{store.name}</p>
-            </>
-          ) : (
-            <>
-              <p className="text-[17px] font-extrabold text-gray-900 leading-tight">DamnDeal Go</p>
-              <p className="text-[12px] text-gray-500 mt-0.5">Groceries in minutes</p>
-            </>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-        <Link
-          href="/grocery/orders"
-          prefetch
-          className="w-9 h-9 rounded-xl border border-gray-200 grid place-items-center text-gray-500 hover:border-[#0D7A30] hover:text-[#0D7A30] transition"
-          title="Your orders"
-        >
-          <Package size={16} />
-        </Link>
-        {loc && (
-          <button
-            onClick={onChange}
-            className="shrink-0 flex items-center gap-1.5 border border-gray-200 hover:border-[#0D7A30] rounded-xl px-3 py-2 transition text-left"
-          >
-            <MapPin size={15} className="text-[#0D7A30] shrink-0" />
-            <span className="min-w-0">
-              <span className="block text-[9.5px] font-bold uppercase tracking-wide text-gray-400 leading-none">
-                Deliver to
-              </span>
-              <span className="block text-[12.5px] font-semibold text-gray-800 truncate max-w-[120px] leading-tight mt-0.5">
-                {loc.label}
-              </span>
+        <button onClick={onChange} className="min-w-0 flex items-start gap-1.5 text-left">
+          <MapPin size={18} className="text-[#0D7A30] shrink-0 mt-0.5" />
+          <span className="min-w-0">
+            <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-gray-400">
+              Deliver to <ChevronRight size={11} className="rotate-90" />
             </span>
-            <ChevronRight size={14} className="text-gray-300 shrink-0" />
-          </button>
-        )}
-        </div>
+            <span className="block text-[14.5px] font-extrabold text-gray-900 truncate max-w-[200px] sm:max-w-[360px] leading-tight">
+              {loc ? loc.label : 'Select location'}
+            </span>
+            {store && (
+              <span className="block text-[11.5px] text-gray-500 mt-0.5">
+                {store.isOpen ? `Delivery in ${store.etaMins} mins · ${store.name}` : `Closed · ${store.name}`}
+              </span>
+            )}
+          </span>
+        </button>
+
+        <span className="shrink-0 w-9 h-9 rounded-full bg-[#0D7A30]/10 grid place-items-center">
+          <Zap size={17} className="text-[#0D7A30]" fill="#0D7A30" />
+        </span>
       </div>
     </div>
   );
 }
 
-function LocationGate({ onUseLocation }: { onUseLocation: () => void }) {
+function LocationGate({ onUseLocation, onSearch }: { onUseLocation: () => void; onSearch: () => void }) {
   return (
     <div className="max-w-md mx-auto text-center py-16">
       <div className="w-16 h-16 rounded-2xl bg-[#0D7A30]/10 grid place-items-center mx-auto mb-4">
@@ -285,8 +259,14 @@ function LocationGate({ onUseLocation }: { onUseLocation: () => void }) {
       >
         <Navigation size={18} /> Use my current location
       </button>
+      <button
+        onClick={onSearch}
+        className="w-full py-3 mt-2.5 rounded-xl border border-gray-200 text-gray-700 font-bold text-[14px] flex items-center justify-center gap-2 hover:border-[#0D7A30] transition"
+      >
+        <Search size={16} /> Search for your area
+      </button>
       <p className="text-[11.5px] text-gray-400 mt-3">
-        We only read your location when you tap this — never in the background.
+        Location is only read when you tap — never in the background.
       </p>
     </div>
   );
