@@ -30,9 +30,16 @@ export default function PlatformTabs() {
   const ddgoLogo = (config.ddgo_logo_url as string) || '/assets/ddgo-logo.png';
   const src = (u: string) => (u.startsWith('/') || u.startsWith('http') ? u : imgUrl(u));
 
+  // The strip carries the brand header colour, so the tabs and the purple
+  // search bar under them read as one header rather than a white gap on top.
+  const headerBg =
+    (config.app_bar_color_light as string) ||
+    (config.brand_primary_color as string) ||
+    '#7C3AED';
+
   return (
-    <div className="bg-white border-b border-gray-100">
-      <div className="max-w-[1400px] mx-auto px-2.5 py-2 flex gap-2.5">
+    <div style={{ backgroundColor: headerBg }}>
+      <div className="max-w-[1400px] mx-auto px-2.5 pt-2 pb-2.5 flex gap-2.5 safe-top">
         <TabCard
           href="/" active={!onGo} sub="Shopping"
           ring="#8000FF" tint="#F6ECFF"
