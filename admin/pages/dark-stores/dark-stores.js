@@ -106,6 +106,40 @@
       +   '</div>'
       + '</div>'
 
+      /* ── Shelf: what this store actually carries ── */
+      + '<div class="modal-overlay" id="shelf-modal">'
+      +   '<div class="modal" style="max-width:900px">'
+      +     '<div class="modal-header"><h3 id="shelf-title">Stock</h3>'
+      +       '<button class="modal-close" onclick="closeModal(\'shelf-modal\')">&times;</button></div>'
+      +     '<div class="modal-body" style="max-height:70vh;overflow:auto">'
+      +       '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">'
+      +         '<input class="form-control" id="sh_q" placeholder="Search this shelf..." style="flex:1;min-width:180px">'
+      +         '<label style="font-size:12.5px;display:flex;align-items:center;gap:5px">'
+      +           '<input type="checkbox" id="sh_low"> Only low stock</label>'
+      +         '<button class="btn btn-primary" id="btnAddProducts">+ Add products</button>'
+      +       '</div>'
+      +       '<div id="sh_summary" style="font-size:12.5px;color:var(--text-light);margin-bottom:10px"></div>'
+      +       '<div id="sh_list"></div>'
+      +     '</div>'
+      +   '</div>'
+      + '</div>'
+
+      /* ── Picker: DDGo products this store does not carry yet ── */
+      + '<div class="modal-overlay" id="pick-modal">'
+      +   '<div class="modal" style="max-width:760px">'
+      +     '<div class="modal-header"><h3>Add products to this store</h3>'
+      +       '<button class="modal-close" onclick="closeModal(\'pick-modal\')">&times;</button></div>'
+      +     '<div class="modal-body" style="max-height:65vh;overflow:auto">'
+      +       '<input class="form-control" id="pk_q" placeholder="Search Quick Commerce products..." style="margin-bottom:12px">'
+      +       '<div id="pk_list"></div>'
+      +     '</div>'
+      +     '<div class="modal-footer">'
+      +       '<button class="btn btn-outline" onclick="closeModal(\'pick-modal\')">Cancel</button>'
+      +       '<button class="btn btn-primary" id="btnAddSelected">Add selected</button>'
+      +     '</div>'
+      +   '</div>'
+      + '</div>'
+
       /* ── Coverage tester ── */
       + '<div class="modal-overlay" id="cov-modal">'
       +   '<div class="modal">'
@@ -161,6 +195,7 @@
               + '<td style="font-size:12px">'+((s.regions||[]).join(', ')||'—')+'</td>'
               + '<td>'+statusPill(s)+'</td>'
               + '<td style="text-align:right;white-space:nowrap">'
+                + '<button class="btn btn-sm btn-primary" data-shelf="'+s._id+'">Stock</button> '
                 + '<button class="btn btn-sm btn-outline" data-edit="'+s._id+'">Edit</button> '
                 + '<button class="btn btn-sm btn-danger" data-del="'+s._id+'">Delete</button>'
               + '</td>'
@@ -173,6 +208,9 @@
     });
     main.querySelectorAll('[data-del]').forEach(function(b){
       b.onclick = function(){ del(b.dataset.del); };
+    });
+    main.querySelectorAll('[data-shelf]').forEach(function(b){
+      b.onclick = function(){ openShelf(stores.find(function(s){ return s._id === b.dataset.shelf; })); };
     });
   }
 
@@ -358,6 +396,170 @@
     }
   }
 
+  /* ── Shelf ──
+     Stocking is the daily job, so this is built around typing a number and
+     moving on: the stock box saves on blur, nothing needs a Save button, and
+     the row turns amber the moment it drops to the low-stock mark. */
+  let shelfStore = null;
+
+  function openShelf(store){
+    if (!store) return;
+    shelfStore = store;
+    document.getElementById('shelf-title').textContent = 'Stock — ' + store.name;
+    document.getElementById('sh_q').value = '';
+    document.getElementById('sh_low').checked = false;
+    openModal('shelf-modal');
+    loadShelf();
+  }
+
+  async function loadShelf(){
+    if (!shelfStore) return;
+    const box = document.getElementById('sh_list');
+    box.innerHTML = '<div class="text-center" style="padding:30px"><div class="spinner"></div></div>';
+    const q = document.getElementById('sh_q').value.trim();
+    const low = document.getElementById('sh_low').checked;
+    try {
+      const r = await API.get('/admin/dark-stores/' + shelfStore._id + '/inventory'
+        + '?q=' + encodeURIComponent(q) + (low ? '&low=true' : ''));
+
+      document.getElementById('sh_summary').innerHTML = r.summary.total === 0 ? ''
+        : '<b>' + r.summary.total + '</b> products &middot; '
+          + '<span style="color:#065F46">' + r.summary.inStock + ' in stock</span> &middot; '
+          + '<span style="color:#92400E">' + r.summary.low + ' low</span> &middot; '
+          + '<span style="color:#B91C1C">' + r.summary.out + ' out</span>';
+
+      if (!r.items.length){
+        box.innerHTML = '<div style="padding:36px;text-align:center;color:var(--text-light)">'
+          + '<div style="font-size:30px;margin-bottom:8px">&#128230;</div>'
+          + '<div style="font-weight:600">' + (q || low ? 'Kuch nahi mila' : 'Is store me abhi kuch nahi rakha') + '</div>'
+          + (q || low ? '' : '<div style="font-size:13px;margin-top:4px">"+ Add products" se shuru karo. Jo product yahan nahi hai, wo is store pe customer ko dikhega hi nahi.</div>')
+          + '</div>';
+        return;
+      }
+
+      box.innerHTML = '<table class="table" style="margin:0"><thead><tr>'
+        + '<th>Product</th><th style="width:110px">Stock</th><th style="width:120px">Price</th>'
+        + '<th style="width:90px">Live</th><th style="width:60px"></th>'
+        + '</tr></thead><tbody>'
+        + r.items.map(function(i){
+            return '<tr' + (i.isLow ? ' style="background:#FFFBEB"' : '') + '>'
+              + '<td><div style="font-weight:600">' + esc(i.name) + '</div>'
+                + '<div style="font-size:11px;color:var(--text-light)">'
+                + (i.unit ? esc(i.unit) + ' &middot; ' : '')
+                + (i.productActive ? '' : '<span style="color:#B91C1C">product disabled</span> &middot; ')
+                + (i.stock === 0 ? '<span style="color:#B91C1C">out of stock</span>'
+                   : i.isLow ? '<span style="color:#92400E">low (' + i.lowStockAt + ' pe warning)</span>' : 'ok')
+                + '</div></td>'
+              + '<td><input class="form-control sh-stock" data-p="' + i.product + '" type="number" min="0" value="' + i.stock + '" style="padding:5px 8px"></td>'
+              + '<td><input class="form-control sh-price" data-p="' + i.product + '" type="number" min="0" value="' + i.sellingPrice + '" style="padding:5px 8px"'
+                + ' title="' + (i.hasPriceOverride ? 'Is store ka apna price' : 'Catalogue price - badloge to sirf is store pe lagega') + '"></td>'
+              + '<td><input type="checkbox" class="sh-live" data-p="' + i.product + '"' + (i.isActive ? ' checked' : '') + '></td>'
+              + '<td style="text-align:right"><button class="btn btn-sm btn-danger sh-del" data-p="' + i.product + '" title="Is store se hatao">&times;</button></td>'
+              + '</tr>';
+          }).join('')
+        + '</tbody></table>';
+
+      // Save on blur — an operator counting crates should not hunt for a button.
+      box.querySelectorAll('.sh-stock').forEach(function(el){
+        el.onchange = function(){ saveShelf(el.dataset.p, { stock: el.value }); };
+      });
+      box.querySelectorAll('.sh-price').forEach(function(el){
+        el.onchange = function(){ saveShelf(el.dataset.p, { sellingPrice: el.value }); };
+      });
+      box.querySelectorAll('.sh-live').forEach(function(el){
+        el.onchange = function(){ saveShelf(el.dataset.p, { isActive: el.checked }); };
+      });
+      box.querySelectorAll('.sh-del').forEach(function(el){
+        el.onclick = function(){ removeFromShelf(el.dataset.p); };
+      });
+    } catch(e){
+      box.innerHTML = '<div style="padding:20px;color:#B91C1C">' + esc(e.message) + '</div>';
+    }
+  }
+
+  async function saveShelf(productId, patch){
+    try {
+      await API.put('/admin/dark-stores/' + shelfStore._id + '/inventory',
+        Object.assign({ product: productId }, patch));
+      showToast('Saved', 'success');
+      loadShelf();
+    } catch(e){
+      showToast(e.message, 'error');
+      loadShelf();   // put the field back to what the server actually holds
+    }
+  }
+
+  async function removeFromShelf(productId){
+    if (!confirm('Is store se hata dein?\n\nStock ka record chala jayega. Sirf bech-na band karna ho to "Live" uncheck karo.')) return;
+    try {
+      await API.delete('/admin/dark-stores/' + shelfStore._id + '/inventory/' + productId);
+      showToast('Removed', 'success');
+      loadShelf();
+    } catch(e){ showToast(e.message, 'error'); }
+  }
+
+  /* ── Picker ── */
+  async function loadPicker(){
+    const box = document.getElementById('pk_list');
+    box.innerHTML = '<div class="text-center" style="padding:30px"><div class="spinner"></div></div>';
+    const q = document.getElementById('pk_q').value.trim();
+    try {
+      const r = await API.get('/admin/dark-stores/' + shelfStore._id + '/stockable?q=' + encodeURIComponent(q));
+      if (!r.products.length){
+        box.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-light);font-size:13px">'
+          + (q ? 'Kuch nahi mila.' : 'Saare Quick Commerce products pehle se is store me hain.<br>Naye product Products page pe "Quick Commerce" tab se banao.')
+          + '</div>';
+        return;
+      }
+      box.innerHTML = '<table class="table" style="margin:0"><thead><tr>'
+        + '<th style="width:40px"></th><th>Product</th><th style="width:110px">Stock</th><th style="width:120px">Price</th>'
+        + '</tr></thead><tbody>'
+        + r.products.map(function(p){
+            return '<tr>'
+              + '<td><input type="checkbox" class="pk-on" data-p="' + p._id + '"></td>'
+              + '<td><div style="font-weight:600">' + esc(p.name) + '</div>'
+                + '<div style="font-size:11px;color:var(--text-light)">catalogue ' + p.sellingPrice
+                + (p.isActive ? '' : ' &middot; <span style="color:#B91C1C">disabled</span>') + '</div></td>'
+              + '<td><input class="form-control pk-stock" data-p="' + p._id + '" type="number" min="0" value="0" style="padding:5px 8px"></td>'
+              + '<td><input class="form-control pk-price" data-p="' + p._id + '" type="number" min="0" value="0" placeholder="' + p.sellingPrice + '" style="padding:5px 8px" title="Khaali/0 = catalogue price"></td>'
+              + '</tr>';
+          }).join('')
+        + '</tbody></table>';
+
+      // Typing a stock number is the intent to stock it — no need to also tick.
+      box.querySelectorAll('.pk-stock').forEach(function(el){
+        el.onchange = function(){
+          const cb = box.querySelector('.pk-on[data-p="' + el.dataset.p + '"]');
+          if (cb && parseFloat(el.value) > 0) cb.checked = true;
+        };
+      });
+    } catch(e){
+      box.innerHTML = '<div style="padding:20px;color:#B91C1C">' + esc(e.message) + '</div>';
+    }
+  }
+
+  async function addSelected(){
+    const box = document.getElementById('pk_list');
+    const items = [];
+    box.querySelectorAll('.pk-on:checked').forEach(function(cb){
+      const id = cb.dataset.p;
+      const st = box.querySelector('.pk-stock[data-p="' + id + '"]');
+      const pr = box.querySelector('.pk-price[data-p="' + id + '"]');
+      items.push({ product: id, stock: st ? st.value : 0, sellingPrice: pr && pr.value ? pr.value : 0 });
+    });
+    if (!items.length){ showToast('Pehle koi product select karo', 'error'); return; }
+
+    const btn = document.getElementById('btnAddSelected');
+    btn.disabled = true;
+    try {
+      const r = await API.post('/admin/dark-stores/' + shelfStore._id + '/inventory/bulk', { items: items });
+      showToast(r.added + ' added, ' + r.updated + ' updated' + (r.skipped ? ', ' + r.skipped + ' skipped' : ''), 'success');
+      closeModal('pick-modal');
+      loadShelf();
+    } catch(e){ showToast(e.message, 'error'); }
+    btn.disabled = false;
+  }
+
   function setTab(name){
     document.querySelectorAll('.ds-tab').forEach(function(b){
       b.classList.toggle('on', b.dataset.tab === name);
@@ -381,6 +583,22 @@
   document.querySelectorAll('.ds-tab').forEach(function(b){
     b.onclick = function(){ setTab(b.dataset.tab); };
   });
+
+  var shDebounce;
+  document.getElementById('sh_q').oninput = function(){
+    clearTimeout(shDebounce); shDebounce = setTimeout(loadShelf, 300);
+  };
+  document.getElementById('sh_low').onchange = loadShelf;
+  document.getElementById('btnAddProducts').onclick = function(){
+    document.getElementById('pk_q').value = '';
+    openModal('pick-modal');
+    loadPicker();
+  };
+  var pkDebounce;
+  document.getElementById('pk_q').oninput = function(){
+    clearTimeout(pkDebounce); pkDebounce = setTimeout(loadPicker, 300);
+  };
+  document.getElementById('btnAddSelected').onclick = addSelected;
 
   setTab('stores');
 })();
