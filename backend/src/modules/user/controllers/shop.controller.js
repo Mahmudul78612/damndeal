@@ -293,3 +293,169 @@ async function requestArea(req, res) {
 }
 
 module.exports.requestArea = requestArea;
+
+
+/* ── DDGo storefront: the shops around you ──────────────────────────────────
+   Quick commerce is browsed shop-first, the way Zomato is: you pick who is
+   delivering before you pick what. A flat product list cannot express that one
+   shop is open and four minutes away while another is shut, and it hides which
+   basket a price belongs to. */
+
+/** Public-safe view of a store, with how many things it can actually sell. */
+async function decorateStores(stores) {
+  const StoreInventory = require("../../../models/StoreInventory");
+  const DarkStore = require("../../../models/DarkStore");
+
+  return Promise.all(stores.map(async (st) => {
+    let itemCount = 0;
+    let logo = "";
+
+    if (st.type === "darkstore") {
+      itemCount = await StoreInventory.countDocuments({
+        store: st.id, isActive: true, stock: { $gt: 0 },
+      });
+      const d = await DarkStore.findById(st.id).select("address").lean();
+      st.address = d?.address || st.address;
+    } else {
+      itemCount = await Product.countDocuments({
+        partner: st.partner, platform: "ddgo",
+        isActive: true, approvalStatus: "approved", stock: { $gt: 0 },
+      });
+      const kyc = await PartnerKyc.findOne({ partner: st.partner }).select("photo").lean();
+      logo = kyc?.photo || "";
+    }
+
+    return {
+      id: st.id,
+      type: st.type,
+      name: st.name,
+      logo,
+      city: st.city,
+      address: st.address,
+      distanceKm: st.distanceKm,
+      etaMins: st.etaMins,
+      isOpen: st.isOpen,
+      itemCount,
+      minOrderAmount: st.minOrderAmount,
+      deliveryFee: st.deliveryFee,
+      freeDeliveryAbove: st.freeDeliveryAbove,
+    };
+  }));
+}
+
+/* GET /api/user/ddgo/stores?lat=&lng=
+   Every shop that can reach this address, nearest first. Closed shops are
+   included and flagged rather than hidden: "opens at 8" is useful, silently
+   vanishing is not. Shops with nothing on the shelf are dropped, because a
+   customer cannot do anything with an empty one. */
+async function ddgoStores(req, res) {
+  const lat = parseFloat(req.query.lat);
+  const lng = parseFloat(req.query.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return res.status(400).json({ success: false, message: "lat and lng are required" });
+  }
+  const region = String(req.headers["x-region"] || "IN").toUpperCase() === "US" ? "US" : "IN";
+  const { storesCovering } = require("../../../services/serviceability.service");
+
+  const raw = await storesCovering({ lat, lng, region, includeClosed: true });
+  const decorated = (await decorateStores(raw)).filter((s) => s.itemCount > 0);
+
+  // Open shops first, then by distance — a shut shop two streets away is worth
+  // less right now than an open one a kilometre off.
+  decorated.sort((a, b) => (a.isOpen === b.isOpen ? a.distanceKm - b.distanceKm : a.isOpen ? -1 : 1));
+
+  return res.json({
+    success: true,
+    serviceable: decorated.some((s) => s.isOpen),
+    stores: decorated,
+  });
+}
+
+/* GET /api/user/ddgo/stores/:id?lat=&lng=&category=&page=&limit=
+   One shop and what it is selling right now.
+
+   The location is re-checked here rather than trusted from the listing: a
+   customer can arrive on this page from a link, a bookmark or a stale tab, and
+   a shop they cannot be delivered from must not look orderable. */
+async function ddgoStoreDetail(req, res) {
+  const lat = parseFloat(req.query.lat);
+  const lng = parseFloat(req.query.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return res.status(400).json({ success: false, message: "lat and lng are required" });
+  }
+  const region = String(req.headers["x-region"] || "IN").toUpperCase() === "US" ? "US" : "IN";
+  const { storesCovering } = require("../../../services/serviceability.service");
+
+  const covering = await storesCovering({ lat, lng, region, includeClosed: true });
+  const match = covering.find((s) => String(s.id) === String(req.params.id));
+  if (!match) {
+    return res.status(404).json({
+      success: false,
+      code: "OUT_OF_RANGE",
+      message: "This store does not deliver to your address.",
+    });
+  }
+
+  const [store] = await decorateStores([match]);
+
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 24));
+  const skip = (page - 1) * limit;
+
+  let products = [];
+  let total = 0;
+
+  if (match.type === "darkstore") {
+    const StoreInventory = require("../../../models/StoreInventory");
+    const rows = await StoreInventory.find({ store: match.id, isActive: true, stock: { $gt: 0 } })
+      .populate({
+        path: "product",
+        select: "name images sellingPrice mrp unit category isActive approvalStatus",
+        populate: { path: "category", select: "name slug" },
+      })
+      .lean();
+
+    // A shelf row whose product was disabled or unapproved must not be sold.
+    let live = rows.filter((r) => r.product && r.product.isActive && r.product.approvalStatus === "approved");
+    if (req.query.category) {
+      live = live.filter((r) => String(r.product.category?._id || r.product.category) === String(req.query.category));
+    }
+    total = live.length;
+    products = live.slice(skip, skip + limit).map((r) => ({
+      _id: r.product._id,
+      name: r.product.name,
+      images: r.product.images,
+      unit: r.product.unit,
+      category: r.product.category,
+      // The shelf decides the price and the count; 0 means "use the catalogue".
+      sellingPrice: r.sellingPrice > 0 ? r.sellingPrice : r.product.sellingPrice,
+      mrp: r.mrp > 0 ? r.mrp : r.product.mrp,
+      stock: r.stock,
+    }));
+  } else {
+    const filter = {
+      partner: match.partner, platform: "ddgo",
+      isActive: true, approvalStatus: "approved", stock: { $gt: 0 },
+    };
+    if (req.query.category) filter.category = req.query.category;
+    const [list, count] = await Promise.all([
+      Product.find(filter)
+        .select("name images sellingPrice mrp unit stock category")
+        .populate("category", "name slug")
+        .sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      Product.countDocuments(filter),
+    ]);
+    products = list;
+    total = count;
+  }
+
+  return res.json({
+    success: true,
+    store,
+    products,
+    pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+  });
+}
+
+module.exports.ddgoStores = ddgoStores;
+module.exports.ddgoStoreDetail = ddgoStoreDetail;

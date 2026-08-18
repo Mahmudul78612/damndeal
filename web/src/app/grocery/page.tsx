@@ -5,10 +5,8 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { api, imgUrl } from '@/lib/api';
-import ProductCard from '@/components/ProductCard';
-import { Category, Product } from '@/lib/types';
 import {
-  MapPin, Navigation, Clock, Search, ChevronRight, Store, LoaderCircle, BellRing,
+  MapPin, Navigation, Clock, ChevronRight, Store, LoaderCircle, BellRing, Bike, ShoppingBasket,
 } from 'lucide-react';
 import {
   readLocation, saveLocation, clearLocation, requestBrowserLocation, DdgoLocation,
@@ -38,6 +36,22 @@ interface ServiceStore {
   freeDeliveryAbove: number;
 }
 
+interface NearbyStore {
+  id: string;
+  type: 'darkstore' | 'partner';
+  name: string;
+  logo?: string;
+  city?: string;
+  address?: string;
+  distanceKm: number;
+  etaMins: number;
+  isOpen: boolean;
+  itemCount: number;
+  minOrderAmount: number;
+  deliveryFee: number;
+  freeDeliveryAbove: number;
+}
+
 /** How many lines are in the saved cart, without waiting for the context. */
 function storedCartCount(): number {
   if (typeof window === 'undefined') return 0;
@@ -59,8 +73,7 @@ type Gate =
 export default function GroceryPage() {
   const [loc, setLoc] = useState<DdgoLocation | null>(null);
   const [gate, setGate] = useState<Gate>({ state: 'asking' });
-  const [cats, setCats] = useState<Category[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [stores, setStores] = useState<NearbyStore[]>([]);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   // Set when the pin moved to a different store while a cart was still open.
   const [staleCart, setStaleCart] = useState(false);
@@ -94,22 +107,16 @@ export default function GroceryPage() {
     if (saved) { setLoc(saved); check(saved); }
   }, [check]);
 
-  // The catalogue is fetched only once delivery is possible, and it is fetched
-  // WITH the pin so the server can drop anything unreachable rather than
-  // showing it and refusing later.
+  // Shops, not products. Quick commerce is browsed shop-first: you pick who is
+  // delivering before you pick what, because the price and the wait both belong
+  // to whichever shop is packing it.
   useEffect(() => {
     if (gate.state !== 'ok' && gate.state !== 'closed') return;
     if (!loc) return;
     setLoadingCatalog(true);
-    Promise.all([
-      api.get('/categories?platform=ddgo'),
-      api.get(`/user/products?platform=ddgo&limit=24&lat=${loc.lat}&lng=${loc.lng}`),
-    ])
-      .then(([c, p]) => {
-        setCats(c.categories || []);
-        setProducts(p.products || []);
-      })
-      .catch(() => {})
+    api.get(`/user/ddgo/stores?lat=${loc.lat}&lng=${loc.lng}`)
+      .then((r) => setStores(r.stores || []))
+      .catch(() => setStores([]))
       .finally(() => setLoadingCatalog(false));
   }, [gate.state, loc]);
 
@@ -130,8 +137,7 @@ export default function GroceryPage() {
     clearLocation();
     clearServingStore();
     setLoc(null);
-    setProducts([]);
-    setCats([]);
+    setStores([]);
     setGate({ state: 'asking' });
   };
 
@@ -168,22 +174,24 @@ export default function GroceryPage() {
               </div>
             )}
 
-            {cats.length > 0 && <Categories cats={cats} />}
-
-            {products.length > 0 && (
-              <h2 className="text-[17px] font-bold text-gray-900 mt-6 mb-3">Available near you</h2>
-            )}
-
             {loadingCatalog ? (
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-6">
-                {Array.from({ length: 10 }).map((_, i) => (
-                  <div key={i} className="h-56 rounded-xl bg-gray-100 animate-pulse" />
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-24 rounded-2xl bg-gray-100 animate-pulse" />
                 ))}
               </div>
-            ) : products.length ? (
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                {products.map((p) => <ProductCard key={p._id} product={p} />)}
-              </div>
+            ) : stores.length ? (
+              <>
+                <h2 className="text-[17px] font-bold text-gray-900 mb-1">
+                  {stores.length} {stores.length === 1 ? 'store' : 'stores'} near you
+                </h2>
+                <p className="text-[12.5px] text-gray-500 mb-4">
+                  Pick a store to see what it has in stock right now.
+                </p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {stores.map((st) => <StoreCard key={st.id} s={st} />)}
+                </div>
+              </>
             ) : (
               <EmptyCatalog />
             )}
@@ -324,37 +332,59 @@ function OutOfArea({ message, loc, onRetry }: { message: string; loc: DdgoLocati
   );
 }
 
-function Categories({ cats }: { cats: Category[] }) {
+function StoreCard({ s }: { s: NearbyStore }) {
   return (
-    <>
-      <h2 className="text-[17px] font-bold text-gray-900 mb-3">Shop by category</h2>
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-8 gap-3">
-        {cats.map((c) => (
-          <Link
-            key={c._id}
-            href={`/categories/${c._id}`}
-            className="bg-white rounded-xl border border-gray-100 p-2.5 text-center hover:shadow-md transition"
-          >
-            <div className="aspect-square rounded-lg overflow-hidden bg-gray-50 mb-1.5 grid place-items-center">
-              {(c.icon || c.image) ? (
-                <Image src={imgUrl(c.icon || c.image || '')} alt={c.name} width={72} height={72} className="object-contain w-full h-full" />
-              ) : <span className="text-2xl">🛒</span>}
-            </div>
-            <p className="text-[11.5px] font-semibold text-gray-700 leading-tight line-clamp-2">{c.name}</p>
-          </Link>
-        ))}
+    <Link
+      href={`/grocery/s/${s.id}`}
+      className={`flex gap-3 items-center bg-white border border-gray-200 rounded-2xl p-3 transition hover:shadow-md ${
+        s.isOpen ? '' : 'opacity-70'
+      }`}
+    >
+      <div className="w-16 h-16 rounded-xl bg-gray-100 overflow-hidden shrink-0 grid place-items-center">
+        {s.logo ? (
+          <Image src={imgUrl(s.logo)} alt={s.name} width={64} height={64} className="object-cover w-full h-full" />
+        ) : (
+          <Store size={24} className="text-gray-300" />
+        )}
       </div>
-    </>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="font-bold text-[14.5px] text-gray-900 truncate">{s.name}</p>
+          {!s.isOpen && (
+            <span className="shrink-0 text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+              Closed
+            </span>
+          )}
+        </div>
+        <p className="text-[12px] text-gray-500 truncate mt-0.5">
+          {s.itemCount} {s.itemCount === 1 ? 'item' : 'items'}
+          {s.city ? ` · ${s.city}` : ''}
+        </p>
+        <div className="flex items-center gap-3 mt-1.5 text-[12px] text-gray-600">
+          <span className="flex items-center gap-1">
+            <Clock size={12} className={s.isOpen ? 'text-[#0D7A30]' : 'text-gray-400'} />
+            {s.isOpen ? `${s.etaMins} mins` : 'Opens later'}
+          </span>
+          <span className="flex items-center gap-1">
+            <Bike size={12} className="text-gray-400" /> {s.distanceKm} km
+          </span>
+        </div>
+      </div>
+
+      <ChevronRight size={18} className="text-gray-300 shrink-0" />
+    </Link>
   );
 }
 
 function EmptyCatalog() {
   return (
     <div className="py-16 text-center text-gray-400">
-      <Search size={28} className="mx-auto mb-3" />
-      <p className="font-semibold text-gray-600">Nothing on the shelf yet</p>
+      <ShoppingBasket size={28} className="mx-auto mb-3" />
+      <p className="font-semibold text-gray-600">No store is stocked here yet</p>
       <p className="text-[13px] mt-1">
-        Your store is set up but has no items stocked. Check back shortly.
+        We reach your address, but nobody nearby has put anything on the shelf.
+        Check back shortly.
       </p>
     </div>
   );

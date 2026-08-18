@@ -32,6 +32,8 @@ router.get("/app-categories-page", home.getAppCategoriesPage);
 const desktopHome = require("./controllers/desktopHome.controller");
 router.get("/desktop-home", desktopHome.getDesktopHome);
 router.get("/serviceability", shop.getServiceability);
+router.get("/ddgo/stores", shop.ddgoStores);
+router.get("/ddgo/stores/:id", shop.ddgoStoreDetail);
 router.post("/serviceability/notify", shop.requestArea);
 router.get("/shops", shop.getShops);
 router.get("/shops/:id", shop.getShop);
