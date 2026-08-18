@@ -23,6 +23,11 @@ export default function DdgoBottomNav() {
   const path = usePathname() || '';
   const { itemCount } = useDdgoCart();
 
+  // Store and product pages are full-screen with their own header and back
+  // button (Zomato-style); the cart page has its own checkout bar. The tab bar
+  // would only crowd them.
+  if (path.startsWith('/grocery/s/') || path.startsWith('/grocery/cart')) return null;
+
   return (
     <nav className="fixed bottom-0 inset-x-0 z-50 bg-white border-t border-gray-100 md:hidden safe-bottom">
       <div className="flex items-center justify-around h-14 max-w-[600px] mx-auto">

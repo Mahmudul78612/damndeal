@@ -26,7 +26,11 @@ export default function PlatformTabs() {
 
   if (String(config.ddgo_enabled ?? '') !== 'true') return null;
 
-  const onGo = pathname.startsWith('/grocery');
+  // The switch belongs on the two home screens only. On a category, product,
+  // store or cart page it is noise — the customer is already inside one side.
+  const path = pathname.replace(/\/$/, '') || '/';
+  const onGo = path === '/grocery';
+  if (path !== '/' && path !== '/grocery') return null;
   const ddgoLogo = (config.ddgo_logo_url as string) || '/assets/ddgo-logo.png';
   const src = (u: string) => (u.startsWith('/') || u.startsWith('http') ? u : imgUrl(u));
 

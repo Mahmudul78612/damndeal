@@ -21,10 +21,20 @@ export default function DdgoCartBar() {
   const pathname = usePathname() || '';
 
   if (!cart.itemCount) return null;
-  if (pathname.startsWith('/grocery/cart') || pathname.startsWith('/checkout')) return null;
+  // Hidden where the page already carries a bottom action: the basket page,
+  // checkout, and the product detail (its own Add bar).
+  if (
+    pathname.startsWith('/grocery/cart') ||
+    pathname.startsWith('/checkout') ||
+    /\/grocery\/s\/[^/]+\/p\//.test(pathname)
+  ) return null;
+
+  // The tab bar only shows on the list pages, so lift the pill above it only
+  // there; on a store page (no tab bar) the pill drops to the bottom edge.
+  const overNav = !pathname.startsWith('/grocery/s/');
 
   return (
-    <div className="fixed inset-x-0 z-40 px-3 pointer-events-none bottom-16 pb-2 md:bottom-0 md:pb-4">
+    <div className={`fixed inset-x-0 z-40 px-3 pointer-events-none pb-2 md:bottom-0 md:pb-4 ${overNav ? 'bottom-16' : 'bottom-0'}`}>
       <div className="max-w-[1200px] mx-auto pointer-events-auto">
         <div className="bg-[#0D7A30] text-white rounded-2xl shadow-[0_8px_28px_rgba(13,122,48,.35)] px-4 py-3 flex items-center justify-between gap-3">
           <div className="min-w-0">
