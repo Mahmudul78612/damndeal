@@ -43,7 +43,12 @@ export default function PlatformTabs() {
 
   return (
     <div style={{ backgroundColor: headerBg }}>
-      <div className="max-w-[1400px] mx-auto px-2.5 pt-2 pb-2.5 flex gap-2.5 safe-top">
+      {/* The app adds its own native status-bar spacer on every path EXCEPT
+          "/", so the in-app safe-top compensation may only apply on "/" —
+          on /grocery it stacked on the native spacer and produced a thick
+          empty band above the tabs. Plain browsers are unaffected either
+          way (their inset is 0). */}
+      <div className={`max-w-[1400px] mx-auto px-2.5 pt-2 pb-2.5 flex gap-2.5 ${onGo ? '' : 'safe-top'}`}>
         <TabCard
           href="/" active={!onGo} sub="Shopping"
           ring="#8000FF" tint="#F6ECFF"
