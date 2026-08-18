@@ -15,6 +15,16 @@ const deliveryBoySchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    /* Home store for a DDGo rider. Quick commerce riders work a shift out of
+       one dark store rather than roaming the city, so assignment starts from
+       the store the order was packed at. Null keeps the old behaviour: a
+       floating rider available to any order. */
+    store: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "DarkStore",
+      default: null,
+      index: true,
+    },
     name: {
       type: String,
       required: true,

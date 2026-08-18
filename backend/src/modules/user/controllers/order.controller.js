@@ -314,9 +314,34 @@ async function placeOrder(req, res) {
 
   // Region/currency from the request (damndeal.com => US/USD, else IN/INR)
   const orderRegion = req.region === "US" ? "US" : "IN";
+
+  /* Pin the fulfilling store onto the order.
+     Resolved once, here, and never recomputed: a store's radius or hours can
+     change tomorrow, but this order was packed by whoever covered the address
+     tonight, and the queue, the rider and the reporting all have to keep
+     pointing at them. Only our own stores are recorded - a partner-shop order
+     is already answered by `partner`. */
+  let fulfillingStore = null;
+  if (platform === "ddgo" && Number.isFinite(address.lat) && Number.isFinite(address.lng)) {
+    try {
+      const { storesCovering } = require("../../../services/serviceability.service");
+      const covering = await storesCovering({
+        lat: address.lat, lng: address.lng, region: orderRegion, includeClosed: true,
+      });
+      const own = covering.find((c) => c.type === "darkstore");
+      if (own) fulfillingStore = own.id;
+    } catch (e) {
+      // A resolver failure must not block a paid order; it only costs the
+      // store attribution, which an admin can set later.
+      console.error("[ORDER] store resolve failed:", e.message);
+    }
+  }
+
   const order = await Order.create({
     orderNumber: generateOrderNumber(),
     user: userId, partner: partnerId,
+    platform: platform === "ddgo" ? "ddgo" : "damndeal",
+    store: fulfillingStore,
     region: orderRegion,
     currency: orderRegion === "US" ? "USD" : "INR",
     taxAmount: salesTaxAmount,

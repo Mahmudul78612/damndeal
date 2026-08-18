@@ -12,7 +12,9 @@ import {
 } from 'lucide-react';
 import {
   readLocation, saveLocation, clearLocation, requestBrowserLocation, DdgoLocation,
+  readServingStore, saveServingStore, clearServingStore,
 } from '@/lib/ddgoLocation';
+import { useCart } from '@/context/CartContext';
 
 /**
  * DDGo — the quick commerce storefront.
@@ -36,6 +38,17 @@ interface ServiceStore {
   freeDeliveryAbove: number;
 }
 
+/** How many lines are in the saved cart, without waiting for the context. */
+function storedCartCount(): number {
+  if (typeof window === 'undefined') return 0;
+  try {
+    const raw = JSON.parse(localStorage.getItem('dd_cart') || '[]');
+    return Array.isArray(raw) ? raw.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
 type Gate =
   | { state: 'asking' }
   | { state: 'checking' }
@@ -49,12 +62,22 @@ export default function GroceryPage() {
   const [cats, setCats] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
+  // Set when the pin moved to a different store while a cart was still open.
+  const [staleCart, setStaleCart] = useState(false);
+  const cart = useCart();
 
   const check = useCallback(async (l: DdgoLocation) => {
     setGate({ state: 'checking' });
     try {
       const r = await api.get(`/user/serviceability?lat=${l.lat}&lng=${l.lng}`);
       if (r.serviceable && r.store) {
+        // A cart built at another store cannot be packed here.
+        // The count is read from storage rather than the cart context: this
+        // runs on mount, before the context has hydrated, so the context would
+        // still report an empty cart and the warning would never appear.
+        const previous = readServingStore();
+        setStaleCart(!!previous && previous !== r.store.id && storedCartCount() > 0);
+        saveServingStore(r.store.id);
         setGate({ state: 'ok', store: r.store });
       } else if (r.reason === 'closed' && r.store) {
         setGate({ state: 'closed', store: r.store, message: r.message });
@@ -105,6 +128,7 @@ export default function GroceryPage() {
 
   const changeLocation = () => {
     clearLocation();
+    clearServingStore();
     setLoc(null);
     setProducts([]);
     setCats([]);
@@ -122,6 +146,21 @@ export default function GroceryPage() {
 
         {(gate.state === 'ok' || gate.state === 'closed') && (
           <>
+            {staleCart && (
+              <div className="mb-4 rounded-xl bg-blue-50 border border-blue-200 px-4 py-3 text-[13px] text-blue-900 flex items-start justify-between gap-3">
+                <span>
+                  Your cart was filled at a different store, which cannot deliver here.
+                  Start it again for this address.
+                </span>
+                <button
+                  onClick={() => { cart.clear(); setStaleCart(false); }}
+                  className="shrink-0 font-bold underline hover:no-underline"
+                >
+                  Clear cart
+                </button>
+              </div>
+            )}
+
             {gate.state === 'closed' && (
               <div className="mb-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-[13px] text-amber-800 flex items-start gap-2">
                 <Clock size={16} className="shrink-0 mt-0.5" />

@@ -65,6 +65,27 @@ const orderSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    /* Which storefront this order came from. Fees were already calculated
+       per platform, but the answer was never stored, so DDGo and damndeal
+       orders were indistinguishable afterwards - no separate queue, no
+       separate reporting. */
+    platform: {
+      type: String,
+      enum: ["ddgo", "damndeal"],
+      default: "damndeal",
+      index: true,
+    },
+    /* Which fulfilment point is picking this order.
+       Set for DDGo orders from the delivery address at the moment the order
+       is placed, because a store's radius can change later and an order must
+       stay attached to whoever actually packed it. Null for a partner-shop
+       order, where `partner` already answers the question. */
+    store: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "DarkStore",
+      default: null,
+      index: true,
+    },
     customer: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Customer",

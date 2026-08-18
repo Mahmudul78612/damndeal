@@ -38,6 +38,14 @@
       +     '<button class="btn btn-primary" id="btnNew">+ New Store</button>'
       +   '</div>'
       + '</div>'
+      + '<div style="display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:16px">'
+      +   '<button class="ds-tab" data-tab="stores">Stores</button>'
+      +   '<button class="ds-tab" data-tab="demand">Where people ask</button>'
+      +   '<button class="ds-tab" data-tab="perf">Performance</button>'
+      + '</div>'
+      + '<style>.ds-tab{background:none;border:none;padding:9px 14px;font-size:13px;font-weight:600;'
+      + 'color:var(--text-light);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}'
+      + '.ds-tab.on{color:#7C3AED;border-bottom-color:#7C3AED}</style>'
       + '<div id="store-list"></div>'
 
       /* ── Store form ── */
@@ -270,6 +278,98 @@
     renderList();
   }
 
+  /* Where customers asked and got turned away, clustered to roughly a
+     neighbourhood. This is the only honest input to "open a store where?" —
+     everything else is a guess. */
+  async function loadDemand(){
+    const box = document.getElementById('store-list');
+    box.innerHTML = '<div class="text-center" style="padding:40px"><div class="spinner"></div></div>';
+    try {
+      const r = await API.get('/admin/dark-stores/demand?days=90');
+      box.innerHTML = !(r.clusters || []).length
+        ? '<div class="card" style="padding:40px;text-align:center;color:var(--text-light)">'
+          + '<div style="font-size:32px;margin-bottom:8px">&#128205;</div>'
+          + '<div style="font-weight:600">No out-of-area requests yet</div>'
+          + '<div style="font-size:13px;margin-top:4px">Jab koi aisa customer aayega jise hum cover nahi karte, uska pin yahan aayega.</div>'
+          + '</div>'
+        : '<div class="card" style="padding:0;overflow-x:auto">'
+          + '<div style="padding:12px 16px;font-size:12.5px;color:var(--text-light);border-bottom:1px solid var(--border)">'
+          + 'Last ' + r.days + ' days &middot; ' + r.total + ' requests. Sabse upar wale area me store kholna sabse zyada faayda dega.'
+          + '</div>'
+          + '<table class="table" style="margin:0"><thead><tr>'
+          + '<th>Area</th><th>Requests</th><th>Left a phone</th><th>Last asked</th><th></th>'
+          + '</tr></thead><tbody>'
+          + r.clusters.map(function(c){
+              return '<tr>'
+                + '<td><b>' + esc(c.city || 'Unknown') + '</b>'
+                  + '<div style="font-size:11px;color:var(--text-light)">' + c.lat + ', ' + c.lng
+                  + (c.pincode ? ' &middot; ' + esc(c.pincode) : '') + '</div></td>'
+                + '<td><b>' + c.requests + '</b></td>'
+                + '<td>' + c.withPhone + '</td>'
+                + '<td style="font-size:12px">' + new Date(c.lastAt).toLocaleDateString() + '</td>'
+                + '<td style="text-align:right"><a class="btn btn-sm btn-outline" target="_blank" rel="noopener"'
+                  + ' href="https://www.google.com/maps?q=' + c.lat + ',' + c.lng + '">Map</a></td>'
+                + '</tr>';
+            }).join('')
+          + '</tbody></table></div>';
+    } catch(e){
+      box.innerHTML = '<div class="card" style="padding:24px;color:#B91C1C">' + esc(e.message) + '</div>';
+    }
+  }
+
+  async function loadPerf(){
+    const box = document.getElementById('store-list');
+    box.innerHTML = '<div class="text-center" style="padding:40px"><div class="spinner"></div></div>';
+    try {
+      const r = await API.get('/admin/dark-stores/performance?days=30');
+      var rows = (r.stores || []).map(function(s){
+        return '<tr>'
+          + '<td><b>' + esc(s.name) + '</b>'
+            + (s.code ? '<div style="font-size:11px;color:var(--text-light)"><code>' + esc(s.code) + '</code></div>' : '')
+          + '</td>'
+          + '<td>' + s.orders + '</td>'
+          + '<td>' + s.delivered + '</td>'
+          + '<td>' + s.cancelled + '</td>'
+          + '<td><b>' + s.fulfilmentRate + '%</b></td>'
+          + '<td>' + s.avgDistanceKm + ' km</td>'
+          + '<td><b>' + s.revenue.toLocaleString() + '</b></td>'
+          + '</tr>';
+      }).join('');
+
+      box.innerHTML = '<div class="card" style="padding:0;overflow-x:auto">'
+        + '<div style="padding:12px 16px;font-size:12.5px;color:var(--text-light);border-bottom:1px solid var(--border)">'
+        + 'DDGo orders, last ' + r.days + ' days'
+        + '</div>'
+        + (rows
+          ? '<table class="table" style="margin:0"><thead><tr>'
+            + '<th>Store</th><th>Orders</th><th>Delivered</th><th>Cancelled</th><th>Fulfilment</th><th>Avg distance</th><th>Revenue</th>'
+            + '</tr></thead><tbody>' + rows + '</tbody></table>'
+          : '<div style="padding:40px;text-align:center;color:var(--text-light);font-size:13px">Abhi koi DDGo order nahi hua.</div>')
+        + '</div>'
+        + ((r.idle || []).length
+          ? '<div class="card" style="margin-top:12px;padding:14px 16px">'
+            + '<div style="font-weight:600;font-size:13px;margin-bottom:6px">Ek bhi order nahi mila (' + r.idle.length + ')</div>'
+            + '<div style="font-size:12.5px;color:var(--text-light)">'
+            + r.idle.map(function(s){ return esc(s.name) + (s.city ? ' - ' + esc(s.city) : ''); }).join(' &middot; ')
+            + '</div></div>'
+          : '');
+    } catch(e){
+      box.innerHTML = '<div class="card" style="padding:24px;color:#B91C1C">' + esc(e.message) + '</div>';
+    }
+  }
+
+  function setTab(name){
+    document.querySelectorAll('.ds-tab').forEach(function(b){
+      b.classList.toggle('on', b.dataset.tab === name);
+    });
+    var onStores = name === 'stores';
+    document.getElementById('btnNew').style.display = onStores ? '' : 'none';
+    document.getElementById('btnCoverage').style.display = onStores ? '' : 'none';
+    if (onStores) load();
+    else if (name === 'demand') loadDemand();
+    else loadPerf();
+  }
+
   main.innerHTML = shell();
   document.getElementById('btnNew').onclick = function(){ openForm({}); };
   document.getElementById('btnSaveStore').onclick = save;
@@ -278,6 +378,9 @@
     openModal('cov-modal');
   };
   document.getElementById('btnCheckCov').onclick = checkCoverage;
+  document.querySelectorAll('.ds-tab').forEach(function(b){
+    b.onclick = function(){ setTab(b.dataset.tab); };
+  });
 
-  load();
+  setTab('stores');
 })();

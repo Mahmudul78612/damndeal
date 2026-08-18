@@ -112,10 +112,29 @@ PHASE 2 — Browse-time gating                          [HO GAYA]
  khada karke products daalne padenge, tabhi /grocery pe kuch
  dikhega.
 
-PHASE 3 — Orders through stores
- 3.1  Order pe store ref, per-store order queue
- 3.2  Delivery boy store se attached
- 3.3  Store-wise reporting
+----------------------------------------------------------------
+PHASE 3 — Orders through stores                       [HO GAYA]
+----------------------------------------------------------------
+ 3.1  [x] Order pe `platform` + `store` ref. Order place hote
+          waqt address se store resolve hota hai aur wahi chipak
+          jaata hai — baad me radius badle to bhi order usi
+          store ka rahega jisne pack kiya tha.
+ 3.2  [x] Delivery boy ko store se attach karne ka option
+          (PUT /admin/delivery-boys/:id/store). null = floating
+          rider, pehle jaisa.
+ 3.3  [x] Store-wise reporting — orders, revenue, delivered,
+          cancelled, fulfilment %, avg distance. Jin stores pe
+          ek bhi order nahi aaya, wo alag se dikhte hain.
+ 2.4  [x] Cart store pe pinned. Location badalne se doosra store
+          aaya aur cart bhara hua hai to warning + clear.
+
+ NOTE: Order model me `platform` field tha hi nahi. Fees to
+ platform ke hisaab se ban rahi thi, par jawab kabhi save nahi
+ hota tha — matlab DDGo aur damndeal orders baad me alag
+ pehchane hi nahi jaate the. Ab dono filter ho sakte hain.
+
+ Admin → DDGo Stores pe ab 3 tabs hain:
+   Stores · Where people ask · Performance
 
 PHASE 4 — Per-store inventory
  4.1  StoreInventory (store × product): stock, price override

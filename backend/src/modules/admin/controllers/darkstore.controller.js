@@ -235,4 +235,64 @@ async function demand(req, res) {
   });
 }
 
-module.exports = { list, getOne, create, update, remove, coverage, demand };
+
+/* GET /admin/dark-stores/performance?days=30
+   One row per store: what it sold, how much it made, and how fast it moved.
+
+   Orders carry the store they were packed at, so this reads them directly
+   rather than inferring from the customer's address - a store's radius may
+   have changed since, but the order's attribution has not. */
+async function performance(req, res) {
+  const Order = require("../../../models/Order");
+  const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
+  const since = new Date(Date.now() - days * 86400000);
+  const region = R(req);
+
+  const rows = await Order.aggregate([
+    { $match: { platform: "ddgo", createdAt: { $gte: since }, region } },
+    {
+      $group: {
+        _id: "$store",
+        orders: { $sum: 1 },
+        revenue: { $sum: "$grandTotal" },
+        delivered: { $sum: { $cond: [{ $eq: ["$status", "delivered"] }, 1, 0] } },
+        cancelled: { $sum: { $cond: [{ $eq: ["$status", "cancelled"] }, 1, 0] } },
+        avgDistanceKm: { $avg: "$distanceKm" },
+      },
+    },
+    { $sort: { orders: -1 } },
+  ]);
+
+  const stores = await DarkStore.find({ regions: region }).select("name code city").lean();
+  const byId = Object.fromEntries(stores.map((s) => [String(s._id), s]));
+
+  return res.json({
+    success: true,
+    days,
+    stores: rows.map((r) => {
+      const s = r._id ? byId[String(r._id)] : null;
+      return {
+        storeId: r._id ? String(r._id) : null,
+        // An order with no store is a real operational problem (nobody was
+        // covering that address when it was placed), so it is surfaced rather
+        // than dropped from the report.
+        name: s ? s.name : (r._id ? "(deleted store)" : "Unassigned"),
+        code: s ? s.code : "",
+        city: s ? s.city : "",
+        orders: r.orders,
+        revenue: Math.round((r.revenue || 0) * 100) / 100,
+        delivered: r.delivered,
+        cancelled: r.cancelled,
+        fulfilmentRate: r.orders ? Math.round((r.delivered / r.orders) * 100) : 0,
+        avgDistanceKm: Math.round((r.avgDistanceKm || 0) * 10) / 10,
+      };
+    }),
+    // Stores that took nothing at all are the ones worth looking at, and a
+    // report that only lists busy stores hides them.
+    idle: stores
+      .filter((s) => !rows.some((r) => String(r._id) === String(s._id)))
+      .map((s) => ({ storeId: String(s._id), name: s.name, code: s.code, city: s.city })),
+  });
+}
+
+module.exports = { list, getOne, create, update, remove, coverage, demand, performance };

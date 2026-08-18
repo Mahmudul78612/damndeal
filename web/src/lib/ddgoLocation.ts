@@ -22,6 +22,28 @@ export interface DdgoLocation {
   savedAt: number;
 }
 
+/* The store the current cart was built against.
+   A cart is a promise that one shop can pack all of it. Move the pin far
+   enough and a different store answers, which quietly turns that promise
+   false - so the store is remembered and the mismatch is shown rather than
+   discovered at checkout. */
+const STORE_KEY = 'dd_ddgo_store';
+
+export function readServingStore(): string | null {
+  if (typeof window === 'undefined') return null;
+  try { return localStorage.getItem(STORE_KEY); } catch { return null; }
+}
+
+export function saveServingStore(storeId: string) {
+  if (typeof window === 'undefined') return;
+  try { localStorage.setItem(STORE_KEY, storeId); } catch { /* ignore */ }
+}
+
+export function clearServingStore() {
+  if (typeof window === 'undefined') return;
+  try { localStorage.removeItem(STORE_KEY); } catch { /* ignore */ }
+}
+
 export function readLocation(): DdgoLocation | null {
   if (typeof window === 'undefined') return null;
   try {

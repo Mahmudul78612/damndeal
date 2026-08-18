@@ -3,14 +3,18 @@ const DeliveryBoy = require("../../../models/DeliveryBoy");
 
 // GET /admin/delivery-boys
 async function listDeliveryBoys(req, res) {
-  const { page = 1, limit = 20, isVerified, isOnline } = req.query;
+  const { page = 1, limit = 20, isVerified, isOnline, store } = req.query;
   const filter = {};
   if (isVerified !== undefined) filter.isVerified = isVerified === "true";
   if (isOnline !== undefined) filter.isOnline = isOnline === "true";
+  // "unassigned" is a real thing to look for, so an empty string cannot mean
+  // "no filter" here.
+  if (store === "none") filter.store = null;
+  else if (store) filter.store = store;
 
   const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
   const [boys, total] = await Promise.all([
-    DeliveryBoy.find(filter).populate("user", "phone isActive lastLogin")
+    DeliveryBoy.find(filter).populate("user", "phone isActive lastLogin").populate("store", "name code city")
       .sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit, 10)),
     DeliveryBoy.countDocuments(filter),
   ]);
@@ -45,4 +49,24 @@ async function toggleDeliveryBoy(req, res) {
   return res.json({ success: true, isActive: user.isActive });
 }
 
-module.exports = { listDeliveryBoys, verifyDeliveryBoy, toggleDeliveryBoy };
+
+/* PUT /admin/delivery-boys/:id/store  { store: <id|null> }
+   A DDGo rider works a shift out of one dark store, so assignment can start
+   from the store that packed the order instead of scanning every rider in the
+   city. Sending null puts them back in the floating pool. */
+async function assignStore(req, res) {
+  const boy = await DeliveryBoy.findById(req.params.id);
+  if (!boy) return res.status(404).json({ success: false, message: "Delivery boy not found" });
+
+  const storeId = req.body.store || null;
+  if (storeId) {
+    const DarkStore = require("../../../models/DarkStore");
+    const exists = await DarkStore.exists({ _id: storeId });
+    if (!exists) return res.status(400).json({ success: false, message: "That store does not exist" });
+  }
+  boy.store = storeId;
+  await boy.save();
+  return res.json({ success: true, deliveryBoy: boy });
+}
+
+module.exports = { listDeliveryBoys, verifyDeliveryBoy, toggleDeliveryBoy, assignStore };

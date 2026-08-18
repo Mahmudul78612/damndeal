@@ -25,11 +25,18 @@ async function restoreOrderStock(order) {
 
 // GET /admin/orders
 async function listOrders(req, res) {
-  const { page = 1, limit = 20, status, partner, from, to, source, tab = "all" } = req.query;
+  const { page = 1, limit = 20, status, partner, from, to, source, tab = "all", platform, store } = req.query;
   const filter = {};
   if (status) filter.status = status;
   if (partner) filter.partner = partner;
   if (source) filter.source = source;
+  // Quick commerce runs a different operation from the marketplace - its own
+  // queue, its own riders - so it needs its own view of the order list.
+  if (platform === "ddgo" || platform === "damndeal") filter.platform = platform;
+  // "none" means orders no store was resolved for, which is what an operator
+  // has to go looking for; an empty string still means "no filter".
+  if (store === "none") filter.store = null;
+  else if (store) filter.store = store;
 
   // Region scope: ?region=all shows both; else current admin region (x-region).
   const regionQ = req.query.region ? String(req.query.region).toUpperCase() : (req.region || "IN");
@@ -59,7 +66,7 @@ async function listOrders(req, res) {
   const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
   const [orders, total] = await Promise.all([
     Order.find(filter)
-      .populate("partner", "name phone")
+      .populate("partner", "name phone").populate("store", "name code city")
       .populate("user", "name phone")
       .populate("deliveryBoy", "name phone")
       .populate("items.product", "images")
@@ -76,7 +83,7 @@ async function listOrders(req, res) {
 // GET /admin/orders/:id
 async function getOrder(req, res) {
   const order = await Order.findById(req.params.id)
-    .populate("partner", "name phone")
+    .populate("partner", "name phone").populate("store", "name code city")
     .populate("user", "name phone")
     .populate("deliveryBoy", "name phone")
     .populate("customer", "name phone")
